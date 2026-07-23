@@ -1,0 +1,201 @@
+@import "tailwindcss";
+
+:root {
+  --bg0: #0b0e13;
+  --bg1: #131820;
+  --bg2: #1a212c;
+  --bg3: #232d3b;
+  --border: #2b3646;
+  --border2: #3a4a5e;
+  --accent: #f0a832;
+  --accent2: #ffc35c;
+  --accent-dim: #6e4d13;
+  --text: #eef2f7;
+  --text2: #a6b5c7;
+  --text3: #74869c;
+  --green: #3ad880;
+  --red: #f37070;
+  --orange: #f08840;
+  --blue: #58a6e8;
+}
+
+html {
+  background: var(--bg0);
+}
+
+body {
+  background: var(--bg0);
+  color: var(--text);
+  font-family: var(--font-body), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, h2, h3, .display {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.card {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border2);
+  background: var(--bg2);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: filter 0.1s;
+}
+.btn:hover { filter: brightness(1.15); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #201503;
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.btn-sm { min-height: 36px; padding: 0.25rem 0.7rem; font-size: 0.85rem; }
+
+.input, .select, .textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg2);
+  color: var(--text);
+  font-size: 1rem;
+}
+.textarea { min-height: 90px; }
+.input:focus, .select:focus, .textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.input::placeholder, .textarea::placeholder { color: var(--text3); }
+
+.label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chip {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.chip-unpaid { background: #3d1b1b; color: var(--red); }
+.chip-partial { background: #3d2f14; color: var(--accent2); }
+.chip-paid { background: #143d26; color: var(--green); }
+
+.stat-tile {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+}
+.stat-tile .stat-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text3);
+}
+.stat-tile .stat-value {
+  font-family: var(--font-display), sans-serif;
+  font-size: 1.45rem;
+  margin-top: 0.15rem;
+}
+
+.money { font-variant-numeric: tabular-nums; }
+
+/* The printable report is a light document even inside the dark app. */
+.report-root {
+  background: #ffffff;
+  color: #111827;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.45;
+}
+.report-root h1, .report-root h2, .report-root h3 {
+  font-family: Georgia, 'Times New Roman', serif;
+  letter-spacing: 0;
+}
+.report-rule {
+  border: none;
+  border-top: 2px solid #111827;
+  margin: 0.4rem 0 1rem;
+}
+.report-job {
+  break-inside: avoid;
+  margin-bottom: 1.5rem;
+}
+.report-meta {
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+.report-table th {
+  text-align: left;
+  border-bottom: 1px solid #9ca3af;
+  padding: 0.2rem 0.4rem;
+  font-weight: 600;
+  color: #374151;
+}
+.report-table td {
+  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+.report-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.report-totals td {
+  border-bottom: none;
+  padding: 0.15rem 0.4rem;
+}
+.report-totals .total-row td {
+  font-weight: 700;
+  border-top: 1px solid #9ca3af;
+}
+
+@media print {
+  body { background: #ffffff; }
+  .no-print { display: none !important; }
+  .report-root { padding: 0 !important; }
+  @page { size: letter; margin: 0.75in; }
+}
