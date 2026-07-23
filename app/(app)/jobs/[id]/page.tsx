@@ -45,6 +45,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [editingLineId, setEditingLineId] = useState<string | null>(null)
   const [draft, setDraft] = useState<LineDraft>(emptyDraft)
   const [addedFlash, setAddedFlash] = useState<string | null>(null)
+  const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set())
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
   const [editingOverride, setEditingOverride] = useState(false)
@@ -371,40 +372,57 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       {receipts.length > 0 && (
         <div className="card space-y-2">
           <div className="label">Receipts</div>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-            {receipts.map((r) => (
-              <div key={r.id} className="relative">
-                <a href={receiptUrls[r.id]} target="_blank" rel="noreferrer">
-                  {receiptUrls[r.id] ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={receiptUrls[r.id]}
-                      alt={`Receipt ${r.store ?? ''}`}
-                      className="h-24 w-full rounded-lg border object-cover"
-                      style={{ borderColor: 'var(--border)' }}
-                    />
-                  ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {receipts.map((r) => {
+              const pdf = /\.pdf$/i.test(r.storage_path)
+              const showImage = receiptUrls[r.id] && !pdf && !failedThumbs.has(r.id)
+              return (
+                <div key={r.id} className="relative">
+                  <a href={receiptUrls[r.id]} target="_blank" rel="noreferrer">
+                    {showImage ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={receiptUrls[r.id]}
+                        alt=""
+                        className="h-24 w-full rounded-t-lg border border-b-0 object-cover"
+                        style={{ borderColor: 'var(--border)' }}
+                        onError={() => setFailedThumbs((prev) => new Set(prev).add(r.id))}
+                      />
+                    ) : (
+                      // PDFs and formats the browser can't render (e.g. HEIC
+                      // photos) get a clean placeholder; the file still opens.
+                      <div
+                        className="flex h-24 items-center justify-center rounded-t-lg border border-b-0 text-3xl"
+                        style={{ borderColor: 'var(--border)', background: 'var(--bg2)' }}
+                      >
+                        {pdf ? '📄' : '🧾'}
+                      </div>
+                    )}
                     <div
-                      className="flex h-24 items-center justify-center rounded-lg border text-2xl"
-                      style={{ borderColor: 'var(--border)' }}
+                      className="rounded-b-lg border p-1.5"
+                      style={{ borderColor: 'var(--border)', background: 'var(--bg2)' }}
                     >
-                      🧾
+                      <div className="truncate text-sm font-semibold">
+                        {r.store ?? (pdf ? 'PDF receipt' : 'Receipt')}
+                      </div>
+                      <div className="truncate text-xs" style={{ color: 'var(--text3)' }}>
+                        {[r.purchase_date, formatCents(r.receipt_total_cents)]
+                          .filter((x) => x && x !== '—')
+                          .join(' · ') || r.extraction_status}
+                      </div>
                     </div>
-                  )}
-                </a>
-                <div className="mt-0.5 truncate text-xs" style={{ color: 'var(--text3)' }}>
-                  {r.store ?? r.extraction_status} {formatCents(r.receipt_total_cents)}
+                  </a>
+                  <button
+                    className="absolute right-1 top-1 rounded-full px-1.5 text-xs"
+                    style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--red)' }}
+                    onClick={() => deleteReceipt(r)}
+                    aria-label="Delete receipt"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <button
-                  className="absolute right-1 top-1 rounded-full px-1.5 text-xs"
-                  style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--red)' }}
-                  onClick={() => deleteReceipt(r)}
-                  aria-label="Delete receipt"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

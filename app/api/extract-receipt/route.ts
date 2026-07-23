@@ -116,16 +116,27 @@ export async function POST(request: Request) {
     return Response.json({ error: 'could not download image' }, { status: 422 })
   }
 
-  const mediaType = mediaTypeFor(receipt.storage_path, blob.type)
-  if (!mediaType) {
-    await markFailed(`unsupported image type: ${blob.type}`)
-    return Response.json({ error: 'unsupported image type' }, { status: 422 })
+  // PDFs are first-class: Claude reads them natively as documents.
+  const isPdf = /\.pdf$/i.test(receipt.storage_path) || blob.type === 'application/pdf'
+  const mediaType = isPdf ? null : mediaTypeFor(receipt.storage_path, blob.type)
+  if (!isPdf && !mediaType) {
+    await markFailed(`unsupported file type: ${blob.type}`)
+    return Response.json({ error: 'unsupported file type' }, { status: 422 })
   }
 
-  const imageData = Buffer.from(await blob.arrayBuffer()).toString('base64')
+  const fileData = Buffer.from(await blob.arrayBuffer()).toString('base64')
 
   try {
     const client = new Anthropic({ apiKey })
+    const fileBlock = isPdf
+      ? {
+          type: 'document' as const,
+          source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: fileData },
+        }
+      : {
+          type: 'image' as const,
+          source: { type: 'base64' as const, media_type: mediaType!, data: fileData },
+        }
     const params = {
       model: MODEL,
       max_tokens: 4096,
@@ -133,10 +144,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: 'user' as const,
-          content: [
-            { type: 'image' as const, source: { type: 'base64' as const, media_type: mediaType, data: imageData } },
-            { type: 'text' as const, text: PROMPT },
-          ],
+          content: [fileBlock, { type: 'text' as const, text: PROMPT }],
         },
       ],
     }

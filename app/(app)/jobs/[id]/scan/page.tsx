@@ -17,6 +17,33 @@ interface ReviewLine {
 
 type Phase = 'pick' | 'working' | 'review'
 
+const RENDERABLE = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+
+/**
+ * Normalize the picked file for storage + AI reading. PDFs pass through
+ * (Claude reads them natively). iPhone HEIC photos get converted to JPEG
+ * on-device — Safari can decode its own HEIC — so they render everywhere
+ * and the extractor accepts them. If the browser can't decode the format,
+ * the original uploads as-is (still viewable/downloadable, entry is manual).
+ */
+async function prepareUpload(file: File): Promise<{ file: File; kind: 'image' | 'pdf' | 'file' }> {
+  if (file.type === 'application/pdf' || /\.pdf$/i.test(file.name)) return { file, kind: 'pdf' }
+  if (RENDERABLE.includes(file.type)) return { file, kind: 'image' }
+  try {
+    const bitmap = await createImageBitmap(file)
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0)
+    const blob: Blob | null = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.87))
+    if (!blob) throw new Error('conversion produced no data')
+    const name = file.name.replace(/\.[^.]+$/, '') + '.jpg'
+    return { file: new File([blob], name, { type: 'image/jpeg' }), kind: 'image' }
+  } catch {
+    return { file, kind: 'file' }
+  }
+}
+
 /**
  * Receipt scan flow: photo → upload → AI extraction → mandatory review screen.
  * AI output is never written to the database unreviewed. If there's no API key,
@@ -31,6 +58,8 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
   const [statusMsg, setStatusMsg] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [photoKind, setPhotoKind] = useState<'image' | 'pdf' | 'file'>('image')
+  const [fileName, setFileName] = useState('')
   const [receiptId, setReceiptId] = useState<string | null>(null)
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
   const [extracted, setExtracted] = useState(false)
@@ -71,16 +100,20 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
   const printedTotalCents = parseMoney(receiptTotal)
   const mismatch = printedTotalCents != null && Math.abs(printedTotalCents - runningTotalCents) > 0
 
-  async function onPickFile(file: File) {
+  async function onPickFile(picked: File) {
     setPhase('working')
     setNotice(null)
-    setPhotoUrl(URL.createObjectURL(file))
+    setStatusMsg('Preparing file…')
+    const { file, kind } = await prepareUpload(picked)
+    setPhotoKind(kind)
+    setFileName(file.name)
+    setPhotoUrl(kind === 'image' ? URL.createObjectURL(file) : null)
     try {
-      setStatusMsg('Uploading photo…')
+      setStatusMsg('Uploading…')
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
       const path = `${jobId}/${crypto.randomUUID()}.${ext}`
       const { error: upErr } = await supabase.storage.from('receipts').upload(path, file, {
-        contentType: file.type || 'image/jpeg',
+        contentType: file.type || 'application/octet-stream',
       })
       if (upErr) throw upErr
 
@@ -193,10 +226,10 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
             then you review everything before it’s saved.
           </p>
           <label className="btn btn-primary w-full cursor-pointer">
-            📷 Take / choose photo
+            📷 Photo or PDF
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf,.pdf,.heic,.heif"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0]
@@ -211,9 +244,16 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
         <div className="card space-y-3 text-center">
           <div className="animate-pulse text-4xl">🔍</div>
           <p style={{ color: 'var(--text2)' }}>{statusMsg}</p>
-          {photoUrl && (
+          {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt="Receipt" className="mx-auto max-h-72 rounded-lg" />
+          ) : (
+            fileName && (
+              <p className="text-3xl">
+                {photoKind === 'pdf' ? '📄' : '🧾'}{' '}
+                <span className="align-middle text-sm" style={{ color: 'var(--text3)' }}>{fileName}</span>
+              </p>
+            )
           )}
         </div>
       )}
@@ -346,13 +386,18 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
 
-          {photoUrl && (
-            <div className="card self-start">
-              <div className="label">Photo</div>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+          <div className="card self-start">
+            <div className="label">{photoKind === 'pdf' ? 'PDF receipt' : 'Photo'}</div>
+            {photoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img src={photoUrl} alt="Receipt" className="w-full rounded-lg" />
-            </div>
-          )}
+            ) : (
+              <p className="text-center text-4xl">
+                {photoKind === 'pdf' ? '📄' : '🧾'}
+                <span className="mt-1 block text-xs" style={{ color: 'var(--text3)' }}>{fileName}</span>
+              </p>
+            )}
+          </div>
         </div>
       )}
     </div>
