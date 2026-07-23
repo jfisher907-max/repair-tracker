@@ -287,9 +287,11 @@ function Report() {
               <> · grand total <b>{formatCents(grandTotal)}</b></>
             )}
           </p>
-          <p className="mt-1" style={{ color: '#4b5563' }}>
-            Thank you for trusting us with your vehicle. Keep this history with your records —
-            it helps at resale time and with future service.
+          <p
+            className="mt-5 text-center italic"
+            style={{ color: '#111827', fontSize: '1.15rem' }}
+          >
+            Thank you for trusting us with your vehicle.
           </p>
         </footer>
       </div>
