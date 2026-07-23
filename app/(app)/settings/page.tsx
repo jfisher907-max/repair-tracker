@@ -61,7 +61,8 @@ export default function SettingsPage() {
     const { error } = await supabase
       .from('settings')
       .update({
-        business_name: businessName.trim() || 'My Repair Shop',
+        // Blank is allowed — the report header adapts until a name is picked.
+        business_name: businessName.trim(),
         default_labor_rate_cents: parseMoney(laborRate) ?? 0,
         store_suggestions: stores
           .split('\n')
@@ -124,7 +125,12 @@ export default function SettingsPage() {
       <div className="card space-y-3">
         <div>
           <label className="label">Business name (shows on customer reports)</label>
-          <input className="input" value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
+          <input
+            className="input"
+            placeholder="Blank is fine — add it when you've picked one"
+            value={businessName}
+            onChange={(e) => setBusinessName(e.target.value)}
+          />
         </div>
         <div>
           <label className="label">Default labor rate ($/hr)</label>

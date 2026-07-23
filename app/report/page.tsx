@@ -189,8 +189,15 @@ function Report() {
       {/* The document */}
       <div className="report-root mx-auto max-w-[8.5in] px-8 py-10">
         <header>
-          <h1 className="text-3xl font-bold">{businessName || 'Repair History'}</h1>
-          <div className="mt-1 text-lg" style={{ color: '#374151' }}>Vehicle Repair History</div>
+          {/* No business name yet: the document title carries the header alone. */}
+          {businessName ? (
+            <>
+              <h1 className="text-3xl font-bold">{businessName}</h1>
+              <div className="mt-1 text-lg" style={{ color: '#374151' }}>Vehicle Repair History</div>
+            </>
+          ) : (
+            <h1 className="text-3xl font-bold">Vehicle Repair History</h1>
+          )}
           <hr className="report-rule" />
           <div className="report-meta grid grid-cols-2 gap-x-8 gap-y-0.5 sm:grid-cols-4">
             <div><b>Customer:</b> {customer?.name ?? '—'}</div>
