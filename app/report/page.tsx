@@ -246,8 +246,10 @@ function Report() {
                           <td className="num">{Number(l.qty)}</td>
                           {showLinePrices && (
                             <>
-                              <td className="num">{formatCents(l.unit_cost_cents)}</td>
-                              <td className="num">{formatCents(l.line_total_cents)}</td>
+                              {/* Customer-facing prices are the CHARGE basis —
+                                  Jake's cost never prints, even per line. */}
+                              <td className="num">{formatCents(l.unit_charge_cents ?? l.unit_cost_cents)}</td>
+                              <td className="num">{formatCents(l.line_charge_total_cents)}</td>
                             </>
                           )}
                         </tr>

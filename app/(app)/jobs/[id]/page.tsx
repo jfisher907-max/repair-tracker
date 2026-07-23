@@ -23,10 +23,11 @@ interface LineDraft {
   description: string
   qty: string
   unit_cost: string
+  unit_charge: string
 }
 
 const emptyDraft: LineDraft = {
-  purchase_date: '', store: '', part_number: '', description: '', qty: '1', unit_cost: '',
+  purchase_date: '', store: '', part_number: '', description: '', qty: '1', unit_cost: '', unit_charge: '',
 }
 
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -116,6 +117,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       description: draft.description.trim(),
       qty: draft.qty ? Number(draft.qty) : 1,
       unit_cost_cents: parseMoney(draft.unit_cost) ?? 0,
+      unit_charge_cents: draft.unit_charge.trim() === '' ? null : parseMoney(draft.unit_charge),
     }
     const result = editingLineId
       ? await supabase.from('part_lines').update(payload).eq('id', editingLineId)
@@ -174,6 +176,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       description: l.description,
       qty: String(l.qty),
       unit_cost: centsToInput(l.unit_cost_cents),
+      unit_charge: l.unit_charge_cents != null ? centsToInput(l.unit_charge_cents) : '',
     })
   }
 
@@ -272,10 +275,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </div>
             <div className="flex items-center gap-2">
               <div className="text-right">
-                <div className="money font-medium">{formatCents(l.line_total_cents)}</div>
+                <div className="money font-medium">{formatCents(l.line_charge_total_cents)}</div>
                 <div className="text-xs" style={{ color: 'var(--text3)' }}>
-                  {Number(l.qty)} × {formatCents(l.unit_cost_cents)}
+                  {Number(l.qty)} × {formatCents(l.unit_charge_cents ?? l.unit_cost_cents)}
                 </div>
+                {l.unit_charge_cents != null && l.unit_charge_cents !== l.unit_cost_cents && (
+                  <div className="text-xs" style={{ color: 'var(--accent2)' }}>
+                    cost {formatCents(l.line_total_cents)}
+                  </div>
+                )}
               </div>
               <button className="btn btn-sm" onClick={() => startEditLine(l)}>✎</button>
               <button className="btn btn-sm btn-danger" onClick={() => deleteLine(l.id)}>✕</button>
@@ -332,6 +340,16 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   placeholder="Negative for returns"
                   value={draft.unit_cost}
                   onChange={(e) => setDraft({ ...draft, unit_cost: e.target.value })}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="label">Charge customer ($ per unit)</label>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  placeholder="Blank = same as cost"
+                  value={draft.unit_charge}
+                  onChange={(e) => setDraft({ ...draft, unit_charge: e.target.value })}
                 />
               </div>
               <div className="col-span-2">
@@ -456,7 +474,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <input
               className="input !min-h-[38px]"
               inputMode="decimal"
-              placeholder="Blank = charge actual parts cost"
+              placeholder="Blank = sum of the line charges"
               value={overrideInput}
               onChange={(e) => setOverrideInput(e.target.value)}
             />

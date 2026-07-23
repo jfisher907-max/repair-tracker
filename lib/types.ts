@@ -58,6 +58,10 @@ export interface PartLine {
   qty: number
   unit_cost_cents: number
   line_total_cents: number
+  /** Per-unit customer price; null = charge at cost. */
+  unit_charge_cents: number | null
+  /** Generated: qty × (unit_charge ?? unit_cost). What the customer pays for this line. */
+  line_charge_total_cents: number
   notes: string | null
   created_at: string
   updated_at: string

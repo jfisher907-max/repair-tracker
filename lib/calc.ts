@@ -12,11 +12,15 @@ export interface ComputedTotals {
 
 export function computeTotals(
   job: Pick<Job, 'labor_hours' | 'labor_rate_cents' | 'parts_charged_override_cents'>,
-  lines: Pick<PartLine, 'line_total_cents'>[],
+  lines: Pick<PartLine, 'line_total_cents' | 'line_charge_total_cents'>[],
 ): ComputedTotals {
   const labor = Math.round(Number(job.labor_hours) * job.labor_rate_cents)
   const partsCost = lines.reduce((sum, l) => sum + l.line_total_cents, 0)
-  const partsCharged = job.parts_charged_override_cents ?? partsCost
+  const lineCharges = lines.reduce(
+    (sum, l) => sum + (l.line_charge_total_cents ?? l.line_total_cents),
+    0,
+  )
+  const partsCharged = job.parts_charged_override_cents ?? lineCharges
   const total = labor + partsCharged
   return {
     labor_charge_cents: labor,
