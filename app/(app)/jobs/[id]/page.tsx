@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
@@ -44,6 +44,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [addingPart, setAddingPart] = useState(false)
   const [editingLineId, setEditingLineId] = useState<string | null>(null)
   const [draft, setDraft] = useState<LineDraft>(emptyDraft)
+  const [addedFlash, setAddedFlash] = useState<string | null>(null)
+  const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
   const [editingOverride, setEditingOverride] = useState(false)
   const [overrideInput, setOverrideInput] = useState('')
@@ -121,9 +123,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       alert(result.error.message)
       return
     }
-    setAddingPart(false)
-    setEditingLineId(null)
-    setDraft(emptyDraft)
+    if (editingLineId) {
+      setAddingPart(false)
+      setEditingLineId(null)
+      setDraft(emptyDraft)
+    } else {
+      // Adding stays open for the next part — a parts run is rarely one line.
+      // Store and date carry over since they're usually the same receipt/trip.
+      setDraft({ ...emptyDraft, store: draft.store, purchase_date: draft.purchase_date })
+      setAddedFlash(draft.description.trim())
+      setTimeout(() => setAddedFlash(null), 2500)
+      descriptionRef.current?.focus()
+    }
     await load()
   }
 
@@ -277,6 +288,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <div className="col-span-2">
                 <label className="label">Description *</label>
                 <input
+                  ref={descriptionRef}
                   className="input"
                   value={draft.description}
                   onChange={(e) => setDraft({ ...draft, description: e.target.value })}
@@ -331,19 +343,25 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 />
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
               <button className="btn btn-primary btn-sm" onClick={saveLine}>
-                {editingLineId ? 'Save part' : 'Add part'}
+                {editingLineId ? 'Save part' : '+ Add this part'}
               </button>
               <button
                 className="btn btn-sm"
                 onClick={() => {
                   setAddingPart(false)
                   setEditingLineId(null)
+                  setDraft(emptyDraft)
                 }}
               >
-                Cancel
+                {editingLineId ? 'Cancel' : 'Done'}
               </button>
+              {addedFlash && (
+                <span className="text-sm" style={{ color: 'var(--green)' }}>
+                  Added “{addedFlash}” ✓ — next part?
+                </span>
+              )}
             </div>
           </div>
         )}
