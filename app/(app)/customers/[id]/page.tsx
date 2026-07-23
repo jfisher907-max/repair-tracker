@@ -18,6 +18,11 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
   const [jobs, setJobs] = useState<JobWithContext[]>([])
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
+  const [addingVehicle, setAddingVehicle] = useState(false)
+  const [savingVehicle, setSavingVehicle] = useState(false)
+  const [veh, setVeh] = useState({
+    year: '', make: '', model: '', engine: '', vin: '', license_plate: '',
+  })
 
   const load = useCallback(async () => {
     const [{ data: c }, { data: v }, all] = await Promise.all([
@@ -65,6 +70,31 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
     if (error) alert(error.message)
     else {
       setEditing(false)
+      await load()
+    }
+  }
+
+  async function saveVehicle() {
+    const hasAnything = Object.values(veh).some((v) => v.trim() !== '')
+    if (!hasAnything) {
+      alert('Fill in at least one vehicle field.')
+      return
+    }
+    setSavingVehicle(true)
+    const { error } = await supabase.from('vehicles').insert({
+      customer_id: id,
+      year: veh.year ? Number(veh.year) : null,
+      make: veh.make.trim() || null,
+      model: veh.model.trim() || null,
+      engine: veh.engine.trim() || null,
+      vin: veh.vin.trim() || null,
+      license_plate: veh.license_plate.trim() || null,
+    })
+    setSavingVehicle(false)
+    if (error) alert(error.message)
+    else {
+      setAddingVehicle(false)
+      setVeh({ year: '', make: '', model: '', engine: '', vin: '', license_plate: '' })
       await load()
     }
   }
@@ -122,8 +152,59 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
       </div>
 
       <div className="card space-y-2">
-        <div className="label">Vehicles</div>
-        {vehicles.length === 0 && (
+        <div className="flex items-center justify-between">
+          <span className="label !mb-0">Vehicles</span>
+          <button className="btn btn-sm" onClick={() => setAddingVehicle(!addingVehicle)}>
+            {addingVehicle ? 'Cancel' : '+ Add vehicle'}
+          </button>
+        </div>
+        {addingVehicle && (
+          <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--border2)' }}>
+            <div className="grid grid-cols-3 gap-2">
+              <input
+                className="input"
+                inputMode="numeric"
+                placeholder="Year"
+                value={veh.year}
+                onChange={(e) => setVeh({ ...veh, year: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Make"
+                value={veh.make}
+                onChange={(e) => setVeh({ ...veh, make: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Model"
+                value={veh.model}
+                onChange={(e) => setVeh({ ...veh, model: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Engine"
+                value={veh.engine}
+                onChange={(e) => setVeh({ ...veh, engine: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="VIN"
+                value={veh.vin}
+                onChange={(e) => setVeh({ ...veh, vin: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Plate"
+                value={veh.license_plate}
+                onChange={(e) => setVeh({ ...veh, license_plate: e.target.value })}
+              />
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={saveVehicle} disabled={savingVehicle}>
+              {savingVehicle ? 'Saving…' : 'Save vehicle'}
+            </button>
+          </div>
+        )}
+        {vehicles.length === 0 && !addingVehicle && (
           <p className="text-sm" style={{ color: 'var(--text3)' }}>No vehicles on file.</p>
         )}
         {vehicles.map((v) => (

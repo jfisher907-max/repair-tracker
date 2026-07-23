@@ -15,6 +15,9 @@ export default function CustomersPage() {
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
+  const [veh, setVeh] = useState({
+    year: '', make: '', model: '', engine: '', vin: '', license_plate: '',
+  })
 
   useEffect(() => {
     Promise.all([
@@ -61,9 +64,32 @@ export default function CustomersPage() {
       })
       .select('id')
       .single()
-    setSaving(false)
-    if (error) alert(error.message)
-    else router.push(`/customers/${data.id}`)
+    if (error) {
+      setSaving(false)
+      alert(error.message)
+      return
+    }
+
+    // Vehicle is optional — only create one if any field was filled in.
+    const hasVehicle = Object.values(veh).some((v) => v.trim() !== '')
+    if (hasVehicle) {
+      const { error: vehErr } = await supabase.from('vehicles').insert({
+        customer_id: data.id,
+        year: veh.year ? Number(veh.year) : null,
+        make: veh.make.trim() || null,
+        model: veh.model.trim() || null,
+        engine: veh.engine.trim() || null,
+        vin: veh.vin.trim() || null,
+        license_plate: veh.license_plate.trim() || null,
+      })
+      if (vehErr) {
+        setSaving(false)
+        alert(`Customer saved, but the vehicle didn't: ${vehErr.message}`)
+        router.push(`/customers/${data.id}`)
+        return
+      }
+    }
+    router.push(`/customers/${data.id}`)
   }
 
   return (
@@ -110,6 +136,48 @@ export default function CustomersPage() {
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
+          </div>
+          <div className="sm:col-span-2">
+            <div className="label">Vehicle (optional)</div>
+            <div className="grid grid-cols-3 gap-2">
+              <input
+                className="input"
+                inputMode="numeric"
+                placeholder="Year"
+                value={veh.year}
+                onChange={(e) => setVeh({ ...veh, year: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Make"
+                value={veh.make}
+                onChange={(e) => setVeh({ ...veh, make: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Model"
+                value={veh.model}
+                onChange={(e) => setVeh({ ...veh, model: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Engine"
+                value={veh.engine}
+                onChange={(e) => setVeh({ ...veh, engine: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="VIN"
+                value={veh.vin}
+                onChange={(e) => setVeh({ ...veh, vin: e.target.value })}
+              />
+              <input
+                className="input"
+                placeholder="Plate"
+                value={veh.license_plate}
+                onChange={(e) => setVeh({ ...veh, license_plate: e.target.value })}
+              />
+            </div>
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <button className="btn btn-primary" onClick={saveCustomer} disabled={saving}>
