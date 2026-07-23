@@ -2,14 +2,19 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Customer, Vehicle } from '@/lib/types'
 import { vehicleLabel } from '@/lib/types'
 
 export default function CustomersPage() {
+  const router = useRouter()
   const [customers, setCustomers] = useState<Customer[] | null>(null)
   const [vehiclesByCustomer, setVehiclesByCustomer] = useState<Map<string, Vehicle[]>>(new Map())
   const [q, setQ] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
 
   useEffect(() => {
     Promise.all([
@@ -40,12 +45,81 @@ export default function CustomersPage() {
     })
   }, [customers, q, vehiclesByCustomer])
 
+  async function saveCustomer() {
+    if (!form.name.trim()) {
+      alert('Customer name is required.')
+      return
+    }
+    setSaving(true)
+    const { data, error } = await supabase
+      .from('customers')
+      .insert({
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        notes: form.notes.trim() || null,
+      })
+      .select('id')
+      .single()
+    setSaving(false)
+    if (error) alert(error.message)
+    else router.push(`/customers/${data.id}`)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl">Customers</h1>
-        <Link href="/jobs/new" className="btn btn-primary">+ New Job</Link>
+        <button className="btn btn-primary" onClick={() => setAdding(!adding)}>
+          + New Customer
+        </button>
       </div>
+
+      {adding && (
+        <div className="card grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="label">Name *</label>
+            <input
+              className="input"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Phone</label>
+            <input
+              className="input"
+              type="tel"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="label">Email</label>
+            <input
+              className="input"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Notes</label>
+            <input
+              className="input"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </div>
+          <div className="flex gap-2 sm:col-span-2">
+            <button className="btn btn-primary" onClick={saveCustomer} disabled={saving}>
+              {saving ? 'Saving…' : 'Save customer'}
+            </button>
+            <button className="btn" onClick={() => setAdding(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
       <input
         className="input"
         placeholder="Search customers…"
@@ -58,7 +132,7 @@ export default function CustomersPage() {
         <div className="card text-center" style={{ color: 'var(--text2)' }}>
           {customers.length === 0 ? (
             <>
-              No customers yet. Customers are created right inside the{' '}
+              No customers yet — use “+ New Customer” above, or add one right inside the{' '}
               <Link href="/jobs/new" style={{ color: 'var(--accent2)' }}>new-job flow</Link>.
             </>
           ) : (
