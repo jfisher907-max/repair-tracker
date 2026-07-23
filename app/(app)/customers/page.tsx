@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import type { Customer, Vehicle } from '@/lib/types'
 import { vehicleLabel } from '@/lib/types'
+import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 
 export default function CustomersPage() {
   const router = useRouter()
@@ -15,9 +16,7 @@ export default function CustomersPage() {
   const [adding, setAdding] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
-  const [veh, setVeh] = useState({
-    year: '', make: '', model: '', engine: '', vin: '', license_plate: '',
-  })
+  const [veh, setVeh] = useState(emptyVehicleDraft)
 
   useEffect(() => {
     Promise.all([
@@ -75,12 +74,7 @@ export default function CustomersPage() {
     if (hasVehicle) {
       const { error: vehErr } = await supabase.from('vehicles').insert({
         customer_id: data.id,
-        year: veh.year ? Number(veh.year) : null,
-        make: veh.make.trim() || null,
-        model: veh.model.trim() || null,
-        engine: veh.engine.trim() || null,
-        vin: veh.vin.trim() || null,
-        license_plate: veh.license_plate.trim() || null,
+        ...vehiclePayload(veh),
       })
       if (vehErr) {
         setSaving(false)
@@ -139,45 +133,7 @@ export default function CustomersPage() {
           </div>
           <div className="sm:col-span-2">
             <div className="label">Vehicle (optional)</div>
-            <div className="grid grid-cols-3 gap-2">
-              <input
-                className="input"
-                inputMode="numeric"
-                placeholder="Year"
-                value={veh.year}
-                onChange={(e) => setVeh({ ...veh, year: e.target.value })}
-              />
-              <input
-                className="input"
-                placeholder="Make"
-                value={veh.make}
-                onChange={(e) => setVeh({ ...veh, make: e.target.value })}
-              />
-              <input
-                className="input"
-                placeholder="Model"
-                value={veh.model}
-                onChange={(e) => setVeh({ ...veh, model: e.target.value })}
-              />
-              <input
-                className="input"
-                placeholder="Engine"
-                value={veh.engine}
-                onChange={(e) => setVeh({ ...veh, engine: e.target.value })}
-              />
-              <input
-                className="input"
-                placeholder="VIN"
-                value={veh.vin}
-                onChange={(e) => setVeh({ ...veh, vin: e.target.value })}
-              />
-              <input
-                className="input"
-                placeholder="Plate"
-                value={veh.license_plate}
-                onChange={(e) => setVeh({ ...veh, license_plate: e.target.value })}
-              />
-            </div>
+            <VehicleFields value={veh} onChange={setVeh} />
           </div>
           <div className="flex gap-2 sm:col-span-2">
             <button className="btn btn-primary" onClick={saveCustomer} disabled={saving}>

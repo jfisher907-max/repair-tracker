@@ -20,7 +20,7 @@ function toCsv(rows: Record<string, unknown>[], columns: string[]): string {
 const TABLES: Record<string, string[]> = {
   customers: ['id', 'name', 'phone', 'email', 'notes', 'created_at', 'updated_at', 'deleted_at'],
   vehicles: [
-    'id', 'customer_id', 'year', 'make', 'model', 'engine', 'vin', 'license_plate', 'notes',
+    'id', 'customer_id', 'year', 'make', 'model', 'trim', 'engine', 'vin', 'license_plate', 'notes',
     'created_at', 'updated_at', 'deleted_at',
   ],
   jobs: [

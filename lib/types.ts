@@ -18,6 +18,7 @@ export interface Vehicle {
   year: number | null
   make: string | null
   model: string | null
+  trim: string | null
   engine: string | null
   vin: string | null
   license_plate: string | null
@@ -109,9 +110,11 @@ export interface ExtractionResult {
   lines: ExtractedLine[]
 }
 
-/** "2015 Honda Civic" style label; falls back to whatever fields exist. */
-export function vehicleLabel(v: Pick<Vehicle, 'year' | 'make' | 'model'> | null | undefined): string {
+/** "2015 Honda Civic LX" style label; falls back to whatever fields exist. */
+export function vehicleLabel(
+  v: Pick<Vehicle, 'year' | 'make' | 'model'> & Partial<Pick<Vehicle, 'trim'>> | null | undefined,
+): string {
   if (!v) return 'Unknown vehicle'
-  const label = [v.year, v.make, v.model].filter(Boolean).join(' ')
+  const label = [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ')
   return label || 'Unlabeled vehicle'
 }

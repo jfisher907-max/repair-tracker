@@ -8,6 +8,7 @@ import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { formatMiles } from '@/lib/money'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
+import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 
 export default function VehiclePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -18,9 +19,8 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
   const [jobs, setJobs] = useState<JobWithContext[]>([])
   const [editing, setEditing] = useState(false)
   const [changingOwner, setChangingOwner] = useState(false)
-  const [form, setForm] = useState({
-    year: '', make: '', model: '', engine: '', vin: '', license_plate: '', notes: '',
-  })
+  const [form, setForm] = useState(emptyVehicleDraft)
+  const [notes, setNotes] = useState('')
 
   const load = useCallback(async () => {
     const [{ data: v }, { data: cs }, all] = await Promise.all([
@@ -37,11 +37,12 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
         year: veh.year != null ? String(veh.year) : '',
         make: veh.make ?? '',
         model: veh.model ?? '',
+        trim: veh.trim ?? '',
         engine: veh.engine ?? '',
         vin: veh.vin ?? '',
         license_plate: veh.license_plate ?? '',
-        notes: veh.notes ?? '',
       })
+      setNotes(veh.notes ?? '')
     }
     setCustomers((cs as Customer[]) ?? [])
     setJobs(all.filter((j) => j.vehicle?.id === id))
@@ -56,15 +57,7 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
   async function saveEdit() {
     const { error } = await supabase
       .from('vehicles')
-      .update({
-        year: form.year ? Number(form.year) : null,
-        make: form.make.trim() || null,
-        model: form.model.trim() || null,
-        engine: form.engine.trim() || null,
-        vin: form.vin.trim() || null,
-        license_plate: form.license_plate.trim() || null,
-        notes: form.notes.trim() || null,
-      })
+      .update({ ...vehiclePayload(form), notes: notes.trim() || null })
       .eq('id', id)
     if (error) alert(error.message)
     else {
@@ -145,15 +138,10 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
         </div>
 
         {editing && (
-          <div className="grid grid-cols-3 gap-2 border-t pt-2" style={{ borderColor: 'var(--border)' }}>
-            <input className="input" inputMode="numeric" placeholder="Year" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
-            <input className="input" placeholder="Make" value={form.make} onChange={(e) => setForm({ ...form, make: e.target.value })} />
-            <input className="input" placeholder="Model" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-            <input className="input" placeholder="Engine" value={form.engine} onChange={(e) => setForm({ ...form, engine: e.target.value })} />
-            <input className="input" placeholder="VIN" value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} />
-            <input className="input" placeholder="Plate" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} />
-            <input className="input col-span-3" placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            <div className="col-span-3 flex gap-2">
+          <div className="space-y-2 border-t pt-2" style={{ borderColor: 'var(--border)' }}>
+            <VehicleFields value={form} onChange={setForm} />
+            <input className="input" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <div className="flex gap-2">
               <button className="btn btn-primary btn-sm" onClick={saveEdit}>Save</button>
               <button className="btn btn-sm btn-danger" onClick={softDelete}>Delete vehicle</button>
             </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
+import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 
 interface VehicleOption extends Vehicle {
   customer: Customer | null
@@ -34,9 +35,7 @@ export default function JobForm({ job }: { job?: Job }) {
   // New-vehicle panel (with optional new customer)
   const [customerId, setCustomerId] = useState<'new' | string>('new')
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', email: '' })
-  const [newVehicle, setNewVehicle] = useState({
-    year: '', make: '', model: '', engine: '', vin: '', license_plate: '',
-  })
+  const [newVehicle, setNewVehicle] = useState(emptyVehicleDraft)
 
   // Job fields
   const [date, setDate] = useState(job?.date ?? todayLocal())
@@ -122,15 +121,7 @@ export default function JobForm({ job }: { job?: Job }) {
         }
         const { data: veh, error: vehErr } = await supabase
           .from('vehicles')
-          .insert({
-            customer_id: cid,
-            year: newVehicle.year ? Number(newVehicle.year) : null,
-            make: newVehicle.make.trim() || null,
-            model: newVehicle.model.trim() || null,
-            engine: newVehicle.engine.trim() || null,
-            vin: newVehicle.vin.trim() || null,
-            license_plate: newVehicle.license_plate.trim() || null,
-          })
+          .insert({ customer_id: cid, ...vehiclePayload(newVehicle) })
           .select('id')
           .single()
         if (vehErr) throw vehErr
@@ -274,56 +265,9 @@ export default function JobForm({ job }: { job?: Job }) {
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="label">Year</label>
-                  <input
-                    className="input"
-                    inputMode="numeric"
-                    value={newVehicle.year}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, year: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Make</label>
-                  <input
-                    className="input"
-                    value={newVehicle.make}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, make: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Model</label>
-                  <input
-                    className="input"
-                    value={newVehicle.model}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, model: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Engine</label>
-                  <input
-                    className="input"
-                    value={newVehicle.engine}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, engine: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">VIN</label>
-                  <input
-                    className="input"
-                    value={newVehicle.vin}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, vin: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="label">Plate</label>
-                  <input
-                    className="input"
-                    value={newVehicle.license_plate}
-                    onChange={(e) => setNewVehicle({ ...newVehicle, license_plate: e.target.value })}
-                  />
-                </div>
+              <div>
+                <label className="label">Vehicle</label>
+                <VehicleFields value={newVehicle} onChange={setNewVehicle} />
               </div>
             </div>
           )}
