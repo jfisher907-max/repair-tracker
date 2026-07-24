@@ -362,12 +362,6 @@ function Report() {
               </>
             )}
           </p>
-          <p
-            className="mt-5 text-center italic"
-            style={{ color: '#111827', fontSize: '1.15rem' }}
-          >
-            Thank you for trusting us with your vehicle.
-          </p>
         </footer>
       </div>
     </div>
