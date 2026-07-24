@@ -221,9 +221,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           >
             + Add part manually
           </button>
+          <Link href={`/report?job=${id}`} className="btn btn-sm">
+            🖨️ Print this job
+          </Link>
           {customer && (
             <Link href={`/report?customer=${customer.id}`} className="btn btn-sm">
-              🖨️ Print history
+              🖨️ Print full history
             </Link>
           )}
           {job.payment_status !== 'paid' && (

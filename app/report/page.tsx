@@ -42,6 +42,7 @@ function Report() {
   const params = useSearchParams()
   const customerId = params.get('customer')
   const vehicleId = params.get('vehicle')
+  const jobId = params.get('job')
 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [scopeVehicle, setScopeVehicle] = useState<Vehicle | null>(null)
@@ -58,6 +59,26 @@ function Report() {
       try {
         const { data: settings } = await supabase.from('settings').select('business_name').single()
         setBusinessName(settings?.business_name ?? '')
+
+        // Single-job scope loads directly and skips the vehicle fan-out.
+        if (jobId) {
+          const { data: j, error: jErr } = await supabase
+            .from('jobs')
+            .select('*, vehicle:vehicles(*, customer:customers(*))')
+            .eq('id', jobId)
+            .single()
+          if (jErr) throw jErr
+          const { vehicle: v, ...jobRow } =
+            j as Job & { vehicle: Vehicle & { customer: Customer | null } }
+          setScopeVehicle(v)
+          setCustomer(v?.customer ?? null)
+          const { data: lineRows } = await supabase
+            .from('part_lines')
+            .select('*')
+            .eq('job_id', jobId)
+          setJobs([{ job: jobRow as Job, vehicle: v, lines: (lineRows as PartLine[]) ?? [] }])
+          return
+        }
 
         let vehicles: Vehicle[] = []
         if (vehicleId) {
@@ -89,7 +110,7 @@ function Report() {
             .eq('customer_id', customerId)
           vehicles = (vs as Vehicle[]) ?? []
         } else {
-          throw new Error('Missing ?customer= or ?vehicle= parameter')
+          throw new Error('Missing ?customer=, ?vehicle=, or ?job= parameter')
         }
 
         const vehicleIds = vehicles.map((v) => v.id)
@@ -129,7 +150,7 @@ function Report() {
       }
     }
     load()
-  }, [customerId, vehicleId])
+  }, [customerId, vehicleId, jobId])
 
   const filtered = useMemo(() => {
     if (!jobs) return []
@@ -156,6 +177,17 @@ function Report() {
     year: 'numeric', month: 'long', day: 'numeric',
   })
 
+  // The document title matches what's actually being printed: one job is a
+  // service record, one vehicle is that vehicle's history, a whole customer
+  // (possibly several vehicles) is their repair history.
+  const docTitle = jobId ? 'Service Record' : vehicleId ? 'Vehicle Repair History' : 'Repair History'
+  const singleJob = filtered.length === 1 ? filtered[0] : null
+  const backHref = jobId
+    ? `/jobs/${jobId}`
+    : customerId
+      ? `/customers/${customerId}`
+      : `/vehicles/${vehicleId}`
+
   return (
     <div>
       {/* Controls — hidden when printing */}
@@ -163,15 +195,23 @@ function Report() {
         className="no-print sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b px-4 py-3"
         style={{ background: 'var(--bg1)', borderColor: 'var(--border)' }}
       >
-        <Link href={customerId ? `/customers/${customerId}` : `/vehicles/${vehicleId}`} className="btn btn-sm">
+        <Link href={backHref} className="btn btn-sm">
           ← Back
         </Link>
         <span className="text-sm" style={{ color: 'var(--text2)' }}>
-          {scopeVehicle ? vehicleLabel(scopeVehicle) : customer?.name ?? ''}
+          {jobId
+            ? `${singleJob?.job.job_number ?? 'Job'} — ${customer?.name ?? ''}`
+            : scopeVehicle
+              ? vehicleLabel(scopeVehicle)
+              : customer?.name ?? ''}
         </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <input className="input !min-h-[38px] !w-auto" type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From" />
-          <input className="input !min-h-[38px] !w-auto" type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To" />
+          {!jobId && (
+            <>
+              <input className="input !min-h-[38px] !w-auto" type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From" />
+              <input className="input !min-h-[38px] !w-auto" type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To" />
+            </>
+          )}
           <label className="flex items-center gap-1.5 text-sm" style={{ color: 'var(--text2)' }}>
             <input
               type="checkbox"
@@ -193,16 +233,26 @@ function Report() {
           {businessName ? (
             <>
               <h1 className="text-3xl font-bold">{businessName}</h1>
-              <div className="mt-1 text-lg" style={{ color: '#374151' }}>Vehicle Repair History</div>
+              <div className="mt-1 text-lg" style={{ color: '#374151' }}>{docTitle}</div>
             </>
           ) : (
-            <h1 className="text-3xl font-bold">Vehicle Repair History</h1>
+            <h1 className="text-3xl font-bold">{docTitle}</h1>
           )}
           <hr className="report-rule" />
           <div className="report-meta grid grid-cols-2 gap-x-8 gap-y-0.5 sm:grid-cols-4">
             <div><b>Customer:</b> {customer?.name ?? '—'}</div>
-            <div><b>Period:</b> {period}</div>
-            <div><b>Jobs on record:</b> {filtered.length}</div>
+            {jobId ? (
+              <>
+                <div><b>Vehicle:</b> {vehicleLabel(scopeVehicle)}</div>
+                <div><b>Job:</b> {singleJob?.job.job_number ?? '—'} · {singleJob?.job.date ?? ''}</div>
+              </>
+            ) : (
+              <>
+                {vehicleId && <div><b>Vehicle:</b> {vehicleLabel(scopeVehicle)}</div>}
+                <div><b>Period:</b> {period}</div>
+                <div><b>Jobs on record:</b> {filtered.length}</div>
+              </>
+            )}
             <div><b>Generated:</b> {generated}</div>
           </div>
         </header>
@@ -290,10 +340,21 @@ function Report() {
 
         <footer className="mt-8 border-t pt-3 text-sm" style={{ borderColor: '#9ca3af' }}>
           <p>
-            <b>{filtered.length}</b> job{filtered.length === 1 ? '' : 's'} on record ·{' '}
-            <b>{totalHours.toFixed(1)}</b> labor hours
-            {showPrices && (
-              <> · grand total <b>{formatCents(grandTotal)}</b></>
+            {jobId ? (
+              <>
+                <b>{singleJob?.job.job_number}</b> · <b>{totalHours.toFixed(1)}</b> labor hours
+                {showPrices && (
+                  <> · total <b>{formatCents(grandTotal)}</b></>
+                )}
+              </>
+            ) : (
+              <>
+                <b>{filtered.length}</b> job{filtered.length === 1 ? '' : 's'} on record ·{' '}
+                <b>{totalHours.toFixed(1)}</b> labor hours
+                {showPrices && (
+                  <> · grand total <b>{formatCents(grandTotal)}</b></>
+                )}
+              </>
             )}
           </p>
           <p
