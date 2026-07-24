@@ -323,7 +323,12 @@ function Report() {
                         <td className="num">{formatCents(totals.parts_charged_cents)}</td>
                       </tr>
                       <tr>
-                        <td>Labor</td>
+                        <td>
+                          Labor
+                          {Number(job.labor_hours) > 0 && (
+                            <> ({Number(job.labor_hours)} hr @ {formatCents(job.labor_rate_cents)}/hr)</>
+                          )}
+                        </td>
                         <td className="num">{formatCents(totals.labor_charge_cents)}</td>
                       </tr>
                       <tr className="total-row">
