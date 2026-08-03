@@ -13,6 +13,9 @@ interface DeletedItems {
 
 export default function SettingsPage() {
   const [businessName, setBusinessName] = useState('')
+  const [bizPhone, setBizPhone] = useState('')
+  const [bizAddress, setBizAddress] = useState('')
+  const [bizEmail, setBizEmail] = useState('')
   const [laborRate, setLaborRate] = useState('')
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
@@ -43,6 +46,9 @@ export default function SettingsPage() {
       .then(({ data }) => {
         if (!data) return
         setBusinessName(data.business_name)
+        setBizPhone(data.business_phone ?? '')
+        setBizAddress(data.business_address ?? '')
+        setBizEmail(data.business_email ?? '')
         setLaborRate(centsToInput(data.default_labor_rate_cents))
         setStores((data.store_suggestions as string[]).join('\n'))
       })
@@ -63,6 +69,9 @@ export default function SettingsPage() {
       .update({
         // Blank is allowed — the report header adapts until a name is picked.
         business_name: businessName.trim(),
+        business_phone: bizPhone.trim(),
+        business_address: bizAddress.trim(),
+        business_email: bizEmail.trim(),
         default_labor_rate_cents: parseMoney(laborRate) ?? 0,
         store_suggestions: stores
           .split('\n')
@@ -131,6 +140,20 @@ export default function SettingsPage() {
             value={businessName}
             onChange={(e) => setBusinessName(e.target.value)}
           />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Business phone (prints on reports)</label>
+            <input className="input" type="tel" inputMode="tel" value={bizPhone} onChange={(e) => setBizPhone(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Business email (prints on reports)</label>
+            <input className="input" type="email" value={bizEmail} onChange={(e) => setBizEmail(e.target.value)} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Business address (prints on reports)</label>
+            <input className="input" value={bizAddress} onChange={(e) => setBizAddress(e.target.value)} />
+          </div>
         </div>
         <div>
           <label className="label">Default labor rate ($/hr)</label>

@@ -1,4 +1,5 @@
 import JSZip from 'jszip'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { clientForRequest, unauthorized } from '@/lib/server'
 
 // "Export all data" — Jake's insurance policy against vendor lock-in.
@@ -37,6 +38,26 @@ const TABLES: Record<string, string[]> = {
     'id', 'job_id', 'storage_path', 'store', 'purchase_date', 'receipt_total_cents',
     'extraction_status', 'created_at', 'updated_at',
   ],
+  settings: [
+    'id', 'business_name', 'business_phone', 'business_address', 'business_email',
+    'default_labor_rate_cents', 'store_suggestions', 'created_at', 'updated_at',
+  ],
+}
+
+/** Supabase caps a single select at 1000 rows — page through so the backup is never silently partial. */
+async function fetchAllRows(
+  supabase: SupabaseClient,
+  table: string,
+): Promise<Record<string, unknown>[]> {
+  const PAGE = 1000
+  const rows: Record<string, unknown>[] = []
+  for (let offset = 0; ; offset += PAGE) {
+    const { data, error } = await supabase.from(table).select('*').range(offset, offset + PAGE - 1)
+    if (error) throw new Error(`${table}: ${error.message}`)
+    rows.push(...((data ?? []) as Record<string, unknown>[]))
+    if (!data || data.length < PAGE) break
+  }
+  return rows
 }
 
 export async function GET(request: Request) {
@@ -46,15 +67,19 @@ export async function GET(request: Request) {
 
   const zip = new JSZip()
 
-  for (const [table, columns] of Object.entries(TABLES)) {
-    const { data, error } = await supabase.from(table).select('*')
-    if (error) return Response.json({ error: `${table}: ${error.message}` }, { status: 500 })
-    zip.file(`${table}.csv`, toCsv((data ?? []) as Record<string, unknown>[], columns))
+  let allReceiptRows: Record<string, unknown>[] = []
+  try {
+    for (const [table, columns] of Object.entries(TABLES)) {
+      const rows = await fetchAllRows(supabase, table)
+      if (table === 'receipts') allReceiptRows = rows
+      zip.file(`${table}.csv`, toCsv(rows, columns))
+    }
+  } catch (e) {
+    return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 
-  // Receipt images
-  const { data: receipts } = await supabase.from('receipts').select('storage_path')
-  const paths = (receipts ?? []).map((r) => r.storage_path as string)
+  // Receipt images (from the already-fetched, fully-paginated receipt rows)
+  const paths = allReceiptRows.map((r) => r.storage_path as string)
   for (const path of paths) {
     const { data: blob } = await supabase.storage.from('receipts').download(path)
     if (blob) {

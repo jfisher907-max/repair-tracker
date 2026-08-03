@@ -7,6 +7,7 @@ import AuthGate from '@/components/AuthGate'
 import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
 import { formatCents, formatMiles } from '@/lib/money'
+import { formatDate } from '@/lib/date'
 import {
   vehicleLabel,
   type Customer,
@@ -47,6 +48,7 @@ function Report() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [scopeVehicle, setScopeVehicle] = useState<Vehicle | null>(null)
   const [businessName, setBusinessName] = useState('')
+  const [bizContact, setBizContact] = useState('')
   const [jobs, setJobs] = useState<ReportJob[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -57,8 +59,14 @@ function Report() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: settings } = await supabase.from('settings').select('business_name').single()
+        const { data: settings } = await supabase.from('settings').select('*').single()
         setBusinessName(settings?.business_name ?? '')
+        setBizContact(
+          [settings?.business_phone, settings?.business_address, settings?.business_email]
+            .map((s: string | null | undefined) => (s ?? '').trim())
+            .filter(Boolean)
+            .join(' · '),
+        )
 
         // Single-job scope loads directly and skips the vehicle fan-out.
         if (jobId) {
@@ -161,6 +169,24 @@ function Report() {
     })
   }, [jobs, from, to])
 
+  // Print-to-PDF names the file after document.title — make every saved PDF
+  // self-identifying ("J001 Service Record — Sam Steensland.pdf").
+  useEffect(() => {
+    if (!jobs) return
+    let title = ''
+    if (jobId && jobs[0]) {
+      title = `${jobs[0].job.job_number} Service Record — ${customer?.name ?? ''}`
+    } else if (vehicleId && scopeVehicle) {
+      title = `${vehicleLabel(scopeVehicle)} Repair History — ${customer?.name ?? ''}`
+    } else if (customer) {
+      title = `${customer.name} Repair History`
+    }
+    if (title.trim()) document.title = title.trim().replace(/—\s*$/, '').trim()
+    return () => {
+      document.title = 'Repair Tracker'
+    }
+  }, [jobs, customer, scopeVehicle, jobId, vehicleId])
+
   if (error) return <div className="p-8">Couldn&apos;t build report: {error}</div>
   if (!jobs) return <div className="p-8" style={{ color: 'var(--text3)' }}>Building report…</div>
 
@@ -171,8 +197,15 @@ function Report() {
   )
   const period =
     filtered.length > 0
-      ? `${filtered[0].job.date} – ${filtered[filtered.length - 1].job.date}`
+      ? `${formatDate(filtered[0].job.date)} – ${formatDate(filtered[filtered.length - 1].job.date)}`
       : '—'
+  const lastMiles = filtered.reduce<number | null>(
+    (max, j) =>
+      j.job.odometer_miles != null && (max == null || j.job.odometer_miles > max)
+        ? j.job.odometer_miles
+        : max,
+    null,
+  )
   const generated = new Date().toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   })
@@ -238,13 +271,16 @@ function Report() {
           ) : (
             <h1 className="text-3xl font-bold">{docTitle}</h1>
           )}
+          {bizContact && (
+            <div className="mt-0.5 text-sm" style={{ color: '#4b5563' }}>{bizContact}</div>
+          )}
           <hr className="report-rule" />
           <div className="report-meta grid grid-cols-2 gap-x-8 gap-y-0.5 sm:grid-cols-4">
             <div><b>Customer:</b> {customer?.name ?? '—'}</div>
             {jobId ? (
               <>
                 <div><b>Vehicle:</b> {vehicleLabel(scopeVehicle)}</div>
-                <div><b>Job:</b> {singleJob?.job.job_number ?? '—'} · {singleJob?.job.date ?? ''}</div>
+                <div><b>Job:</b> {singleJob?.job.job_number ?? '—'} · {formatDate(singleJob?.job.date)}</div>
               </>
             ) : (
               <>
@@ -254,6 +290,16 @@ function Report() {
               </>
             )}
             <div><b>Generated:</b> {generated}</div>
+            {/* Vehicle identity matters most at resale — print it when scoped to one vehicle. */}
+            {(jobId || vehicleId) && scopeVehicle?.vin && (
+              <div className="col-span-2"><b>VIN:</b> {scopeVehicle.vin}</div>
+            )}
+            {(jobId || vehicleId) && scopeVehicle?.license_plate && (
+              <div><b>Plate:</b> {scopeVehicle.license_plate}</div>
+            )}
+            {vehicleId && lastMiles != null && (
+              <div><b>Last recorded mileage:</b> {formatMiles(lastMiles)} mi</div>
+            )}
           </div>
         </header>
 
@@ -268,7 +314,7 @@ function Report() {
             return (
               <section key={job.id} className="report-job">
                 <h2 className="text-lg font-bold">
-                  {job.date} — {job.title}
+                  {formatDate(job.date)} — {job.title}
                 </h2>
                 <div className="report-meta">
                   {vehicleLabel(vehicle)}
