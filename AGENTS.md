@@ -14,3 +14,5 @@ Single-user car repair tracker for Jake (jfisher907@gmail.com). Next.js App Rout
 - Client-side data access with the shared browser client (`lib/supabase.ts`, RLS enforced). Server routes (`app/api/*`) verify the caller's bearer token before doing anything.
 - `ANTHROPIC_API_KEY` is a server-only env var. Never `NEXT_PUBLIC_`, never returned by an endpoint, never in client code.
 - Phone-first UI: 44px touch targets, `inputMode` on numeric fields, date defaults to today.
+- **Billing**: quotes (`quotes`/`quote_lines`, mirror math in `lib/billing.ts` vs the `quote_totals` view) and invoices. **Invoices are immutable snapshots** — `invoices.lines` jsonb + frozen totals are written once by `buildInvoiceSnapshot`; never recompute a saved invoice from its job. Fix a wrong invoice by voiding and reissuing.
+- **Public token surface**: `/q/[token]` and `/i/[token]` are unauthenticated, backed by SECURITY DEFINER RPCs (`get_public_quote`, `respond_public_quote`, `get_public_invoice`) that must only ever return customer-safe fields — no notes, no costs, no profit. Any new field returned there is customer-visible; treat changes as security-sensitive.

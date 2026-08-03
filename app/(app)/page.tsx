@@ -6,14 +6,27 @@ import JobRow from '@/components/JobRow'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { unpaidBalanceCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
+import { supabase } from '@/lib/supabase'
 
 export default function Dashboard() {
   const [items, setItems] = useState<JobWithContext[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [year, setYear] = useState<'all' | number>('all')
+  const [billing, setBilling] = useState<{ openQuotes: number; unpaidInvoices: number } | null>(null)
 
   useEffect(() => {
     fetchJobsWithContext().then(setItems).catch((e) => setError(String(e.message ?? e)))
+    Promise.all([
+      supabase
+        .from('quotes')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['draft', 'sent'])
+        .is('deleted_at', null),
+      supabase
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['draft', 'sent']),
+    ]).then(([q, i]) => setBilling({ openQuotes: q.count ?? 0, unpaidInvoices: i.count ?? 0 }))
   }, [])
 
   const years = useMemo(() => {
@@ -105,6 +118,23 @@ export default function Dashboard() {
       <Link href="/jobs/new" className="btn btn-primary w-full sm:hidden">
         + New Job
       </Link>
+
+      {billing && (billing.openQuotes > 0 || billing.unpaidInvoices > 0) && (
+        <Link href="/billing" className="card flex items-center justify-between !py-3 hover:brightness-110">
+          <span className="font-semibold">🧾 Billing</span>
+          <span className="text-sm" style={{ color: 'var(--text2)' }}>
+            {billing.openQuotes > 0 && (
+              <>{billing.openQuotes} open quote{billing.openQuotes === 1 ? '' : 's'}</>
+            )}
+            {billing.openQuotes > 0 && billing.unpaidInvoices > 0 && ' · '}
+            {billing.unpaidInvoices > 0 && (
+              <span style={{ color: 'var(--red)' }}>
+                {billing.unpaidInvoices} unpaid invoice{billing.unpaidInvoices === 1 ? '' : 's'}
+              </span>
+            )}
+          </span>
+        </Link>
+      )}
 
       {unpaidJobs.length > 0 && (
         <section className="space-y-2">

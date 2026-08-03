@@ -83,8 +83,85 @@ export interface Receipt {
 export interface Settings {
   id: number
   business_name: string
+  business_phone: string
+  business_address: string
+  business_email: string
   default_labor_rate_cents: number
+  default_tax_rate_bp: number
+  invoice_payment_instructions: string
   store_suggestions: string[]
+  created_at: string
+  updated_at: string
+}
+
+export type QuoteStatus = 'draft' | 'sent' | 'approved' | 'declined' | 'expired'
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void'
+
+export interface Quote {
+  id: string
+  quote_number: string
+  customer_id: string
+  vehicle_id: string | null
+  title: string
+  description: string | null
+  labor_hours: number
+  labor_rate_cents: number
+  tax_rate_bp: number
+  status: QuoteStatus
+  valid_until: string | null
+  notes: string | null
+  job_id: string | null
+  public_token: string
+  sent_at: string | null
+  decided_at: string | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+}
+
+export interface QuoteLine {
+  id: string
+  quote_id: string
+  description: string
+  qty: number
+  unit_charge_cents: number
+  line_total_cents: number
+  created_at: string
+  updated_at: string
+}
+
+/** One customer-facing line frozen into an invoice snapshot. */
+export interface DocLine {
+  description: string
+  qty: number
+  unit_charge_cents: number
+  line_total_cents: number
+}
+
+export interface Invoice {
+  id: string
+  invoice_number: string
+  job_id: string
+  customer_id: string
+  issue_date: string
+  due_date: string | null
+  status: InvoiceStatus
+  customer_name: string
+  vehicle_label: string
+  job_title: string
+  work_performed: string | null
+  lines: DocLine[]
+  labor_hours: number
+  labor_rate_cents: number
+  labor_cents: number
+  parts_cents: number
+  tax_rate_bp: number
+  tax_cents: number
+  total_cents: number
+  memo: string | null
+  public_token: string
+  sent_at: string | null
+  paid_at: string | null
   created_at: string
   updated_at: string
 }

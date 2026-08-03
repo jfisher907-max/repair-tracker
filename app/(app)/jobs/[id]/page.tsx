@@ -5,10 +5,12 @@ import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
+import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import {
   vehicleLabel,
   type Customer,
+  type Invoice,
   type Job,
   type PartLine,
   type PaymentStatus,
@@ -39,6 +41,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [lines, setLines] = useState<PartLine[]>([])
   const [receipts, setReceipts] = useState<Receipt[]>([])
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [invoicing, setInvoicing] = useState(false)
   const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
 
@@ -67,15 +71,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setVehicle(v ?? null)
     setCustomer(v?.customer ?? null)
 
-    const [linesRes, receiptsRes, settingsRes] = await Promise.all([
+    const [linesRes, receiptsRes, settingsRes, invoicesRes] = await Promise.all([
       supabase.from('part_lines').select('*').eq('job_id', id).order('created_at'),
       supabase.from('receipts').select('*').eq('job_id', id).order('created_at'),
       supabase.from('settings').select('store_suggestions').single(),
+      supabase.from('invoices').select('*').eq('job_id', id).order('created_at'),
     ])
     setLines((linesRes.data as PartLine[]) ?? [])
     const recs = (receiptsRes.data as Receipt[]) ?? []
     setReceipts(recs)
     setStoreSuggestions(settingsRes.data?.store_suggestions ?? [])
+    setInvoices((invoicesRes.data as Invoice[]) ?? [])
 
     if (recs.length) {
       const urls: Record<string, string> = {}
@@ -166,6 +172,44 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     else router.push('/jobs')
   }
 
+  async function createInvoice() {
+    const openInvoice = invoices.find((i) => i.status === 'draft' || i.status === 'sent')
+    if (openInvoice) {
+      if (!confirm(`${openInvoice.invoice_number} is already open for this job. Create another anyway?`)) {
+        router.push(`/invoices/${openInvoice.id}`)
+        return
+      }
+    }
+    setInvoicing(true)
+    try {
+      const [{ data: settings }, { data: sourceQuote }] = await Promise.all([
+        supabase.from('settings').select('default_tax_rate_bp').single(),
+        // A job born from a quote bills at the tax rate the customer approved.
+        supabase.from('quotes').select('tax_rate_bp').eq('job_id', id).limit(1).maybeSingle(),
+      ])
+      const taxRateBp = sourceQuote?.tax_rate_bp ?? settings?.default_tax_rate_bp ?? 0
+      const snapshot = buildInvoiceSnapshot(job!, lines, taxRateBp)
+      const { data, error } = await supabase
+        .from('invoices')
+        .insert({
+          job_id: id,
+          customer_id: customer!.id,
+          customer_name: customer!.name,
+          vehicle_label: vehicleLabel(vehicle),
+          job_title: job!.title,
+          work_performed: job!.work_performed,
+          ...snapshot,
+        })
+        .select('id')
+        .single()
+      if (error) throw error
+      router.push(`/invoices/${data.id}`)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+      setInvoicing(false)
+    }
+  }
+
   function startEditLine(l: PartLine) {
     setEditingLineId(l.id)
     setAddingPart(true)
@@ -220,6 +264,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             }}
           >
             + Add part manually
+          </button>
+          <button className="btn btn-sm" disabled={invoicing || !customer} onClick={createInvoice}>
+            {invoicing ? 'Creating…' : '🧾 Create invoice'}
           </button>
           <Link href={`/report?job=${id}`} className="btn btn-sm">
             🖨️ Print this job
@@ -509,6 +556,29 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </span>
         </div>
       </div>
+
+      {/* Invoices */}
+      {invoices.length > 0 && (
+        <div className="card space-y-1">
+          <div className="label">Invoices</div>
+          {invoices.map((inv) => (
+            <Link
+              key={inv.id}
+              href={`/invoices/${inv.id}`}
+              className="flex items-center justify-between rounded-lg px-3 py-2 hover:brightness-110"
+              style={{ background: 'var(--bg2)' }}
+            >
+              <span className="font-semibold">{inv.invoice_number}</span>
+              <span className="flex items-center gap-2">
+                <span className="money">{formatCents(inv.total_cents)}</span>
+                <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[inv.status] ?? 'var(--text3)' }}>
+                  {inv.status}
+                </span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       {/* Payment */}
       <div className="card space-y-2">

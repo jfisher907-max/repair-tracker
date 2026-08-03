@@ -40,7 +40,23 @@ const TABLES: Record<string, string[]> = {
   ],
   settings: [
     'id', 'business_name', 'business_phone', 'business_address', 'business_email',
-    'default_labor_rate_cents', 'store_suggestions', 'created_at', 'updated_at',
+    'default_labor_rate_cents', 'default_tax_rate_bp', 'invoice_payment_instructions',
+    'store_suggestions', 'created_at', 'updated_at',
+  ],
+  quotes: [
+    'id', 'quote_number', 'customer_id', 'vehicle_id', 'title', 'description', 'labor_hours',
+    'labor_rate_cents', 'tax_rate_bp', 'status', 'valid_until', 'notes', 'job_id',
+    'sent_at', 'decided_at', 'created_at', 'updated_at', 'deleted_at',
+  ],
+  quote_lines: [
+    'id', 'quote_id', 'description', 'qty', 'unit_charge_cents', 'line_total_cents',
+    'created_at', 'updated_at',
+  ],
+  invoices: [
+    'id', 'invoice_number', 'job_id', 'customer_id', 'issue_date', 'due_date', 'status',
+    'customer_name', 'vehicle_label', 'job_title', 'lines', 'labor_hours', 'labor_rate_cents',
+    'labor_cents', 'parts_cents', 'tax_rate_bp', 'tax_cents', 'total_cents', 'memo',
+    'sent_at', 'paid_at', 'created_at', 'updated_at',
   ],
 }
 

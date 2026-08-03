@@ -1,0 +1,328 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+import { centsToInput, formatCents, parseMoney } from '@/lib/money'
+import { computeQuoteTotals } from '@/lib/billing'
+import { vehicleLabel, type Customer, type Quote, type QuoteLine, type Vehicle } from '@/lib/types'
+
+interface LineDraft {
+  description: string
+  qty: string
+  unit_charge: string
+}
+
+function plusDays(days: number): string {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** New/edit quote editor. Quotes are estimates — everything here is charge-side. */
+export default function QuoteForm({
+  quote,
+  existingLines,
+}: {
+  quote?: Quote
+  existingLines?: QuoteLine[]
+}) {
+  const router = useRouter()
+  const editing = !!quote
+
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [customerId, setCustomerId] = useState<string>(quote?.customer_id ?? '')
+  const [newCustomerName, setNewCustomerName] = useState('')
+  const [newCustomerPhone, setNewCustomerPhone] = useState('')
+  const [vehicleId, setVehicleId] = useState<string>(quote?.vehicle_id ?? '')
+
+  const [title, setTitle] = useState(quote?.title ?? '')
+  const [description, setDescription] = useState(quote?.description ?? '')
+  const [laborHours, setLaborHours] = useState(quote ? String(quote.labor_hours) : '')
+  const [laborRate, setLaborRate] = useState(quote ? centsToInput(quote.labor_rate_cents) : '')
+  const [taxRate, setTaxRate] = useState(quote ? String(quote.tax_rate_bp / 100) : '')
+  const [validUntil, setValidUntil] = useState(quote?.valid_until ?? plusDays(30))
+  const [notes, setNotes] = useState(quote?.notes ?? '')
+  const [lines, setLines] = useState<LineDraft[]>(
+    existingLines?.length
+      ? existingLines.map((l) => ({
+          description: l.description,
+          qty: String(l.qty),
+          unit_charge: centsToInput(l.unit_charge_cents),
+        }))
+      : [{ description: '', qty: '1', unit_charge: '' }],
+  )
+
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase
+      .from('customers')
+      .select('*')
+      .is('deleted_at', null)
+      .order('name')
+      .then(({ data }) => setCustomers((data as Customer[]) ?? []))
+    supabase
+      .from('vehicles')
+      .select('*')
+      .is('deleted_at', null)
+      .then(({ data }) => setVehicles((data as Vehicle[]) ?? []))
+    if (!editing) {
+      supabase
+        .from('settings')
+        .select('default_labor_rate_cents, default_tax_rate_bp')
+        .single()
+        .then(({ data }) => {
+          if (!data) return
+          setLaborRate(centsToInput(data.default_labor_rate_cents))
+          setTaxRate(String((data.default_tax_rate_bp ?? 0) / 100))
+        })
+    }
+  }, [editing])
+
+  const customerVehicles = vehicles.filter((v) => v.customer_id === customerId)
+
+  const taxRateBp = Math.round((Number(taxRate) || 0) * 100)
+  const totals = useMemo(
+    () =>
+      computeQuoteTotals(
+        {
+          labor_hours: Number(laborHours) || 0,
+          labor_rate_cents: parseMoney(laborRate) ?? 0,
+          tax_rate_bp: taxRateBp,
+        },
+        lines
+          .filter((l) => l.description.trim())
+          .map((l) => ({
+            line_total_cents: Math.round((Number(l.qty) || 0) * (parseMoney(l.unit_charge) ?? 0)),
+          })),
+      ),
+    [laborHours, laborRate, taxRateBp, lines],
+  )
+
+  function setLine(i: number, patch: Partial<LineDraft>) {
+    setLines(lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)))
+  }
+
+  async function save() {
+    setError(null)
+    if (!title.trim()) {
+      setError('Title is required.')
+      return
+    }
+    if (!customerId && !newCustomerName.trim()) {
+      setError('Pick a customer or enter a new one.')
+      return
+    }
+    setBusy(true)
+    try {
+      let cid = customerId
+      if (!cid) {
+        const { data, error } = await supabase
+          .from('customers')
+          .insert({
+            name: newCustomerName.trim(),
+            phone: newCustomerPhone.trim() || null,
+          })
+          .select('id')
+          .single()
+        if (error) throw error
+        cid = data.id
+      }
+
+      const payload = {
+        customer_id: cid,
+        vehicle_id: vehicleId || null,
+        title: title.trim(),
+        description: description.trim() || null,
+        labor_hours: Number(laborHours) || 0,
+        labor_rate_cents: parseMoney(laborRate) ?? 0,
+        tax_rate_bp: taxRateBp,
+        valid_until: validUntil || null,
+        notes: notes.trim() || null,
+      }
+
+      let quoteId = quote?.id
+      if (editing) {
+        const { error } = await supabase.from('quotes').update(payload).eq('id', quote.id)
+        if (error) throw error
+        // Simplest reliable line sync: replace the set.
+        const { error: delErr } = await supabase.from('quote_lines').delete().eq('quote_id', quote.id)
+        if (delErr) throw delErr
+      } else {
+        const { data, error } = await supabase.from('quotes').insert(payload).select('id').single()
+        if (error) throw error
+        quoteId = data.id
+      }
+
+      const validLines = lines.filter((l) => l.description.trim())
+      if (validLines.length) {
+        const { error: lineErr } = await supabase.from('quote_lines').insert(
+          validLines.map((l) => ({
+            quote_id: quoteId,
+            description: l.description.trim(),
+            qty: Number(l.qty) || 1,
+            unit_charge_cents: parseMoney(l.unit_charge) ?? 0,
+          })),
+        )
+        if (lineErr) throw lineErr
+      }
+      router.push(`/quotes/${quoteId}`)
+      router.refresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-4">
+      <h1 className="text-2xl">{editing ? `Edit ${quote.quote_number}` : 'New Quote'}</h1>
+
+      <div className="card space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Customer *</label>
+            <select
+              className="select"
+              value={customerId}
+              onChange={(e) => {
+                setCustomerId(e.target.value)
+                setVehicleId('')
+              }}
+            >
+              <option value="">+ New customer</option>
+              {customers.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Vehicle (optional)</label>
+            <select
+              className="select"
+              value={vehicleId}
+              onChange={(e) => setVehicleId(e.target.value)}
+              disabled={!customerId}
+            >
+              <option value="">{customerId ? 'No specific vehicle' : 'Pick customer first'}</option>
+              {customerVehicles.map((v) => (
+                <option key={v.id} value={v.id}>{vehicleLabel(v)}</option>
+              ))}
+            </select>
+          </div>
+          {!customerId && (
+            <>
+              <div>
+                <label className="label">New customer name *</label>
+                <input className="input" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
+              </div>
+              <div>
+                <label className="label">Phone</label>
+                <input className="input" type="tel" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="card grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label className="label">Title *</label>
+          <input
+            className="input"
+            placeholder="Front brake job — pads & rotors"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="label">Scope of work (customer sees this)</label>
+          <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Est. labor hours</label>
+          <input className="input" inputMode="decimal" value={laborHours} onChange={(e) => setLaborHours(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Labor rate ($/hr)</label>
+          <input className="input" inputMode="decimal" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Sales tax (%)</label>
+          <input className="input" inputMode="decimal" placeholder="0" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+        </div>
+        <div>
+          <label className="label">Valid until</label>
+          <input className="input" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
+        </div>
+      </div>
+
+      <div className="card space-y-2">
+        <div className="label">Parts & materials (estimated, customer prices)</div>
+        {lines.map((l, i) => (
+          <div key={i} className="grid grid-cols-[1fr_64px_96px_36px] items-center gap-1.5">
+            <input
+              className="input !min-h-[40px]"
+              placeholder="Description"
+              value={l.description}
+              onChange={(e) => setLine(i, { description: e.target.value })}
+            />
+            <input
+              className="input !min-h-[40px]"
+              inputMode="decimal"
+              aria-label="Qty"
+              value={l.qty}
+              onChange={(e) => setLine(i, { qty: e.target.value })}
+            />
+            <input
+              className="input !min-h-[40px]"
+              inputMode="decimal"
+              aria-label="Price ($)"
+              placeholder="$"
+              value={l.unit_charge}
+              onChange={(e) => setLine(i, { unit_charge: e.target.value })}
+            />
+            <button
+              type="button"
+              className="btn btn-sm btn-danger !min-h-[40px] !px-2"
+              onClick={() => setLines(lines.filter((_, idx) => idx !== i))}
+              aria-label="Remove line"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="btn btn-sm w-full"
+          onClick={() => setLines([...lines, { description: '', qty: '1', unit_charge: '' }])}
+        >
+          + Add line
+        </button>
+        <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--bg2)' }}>
+          <span className="text-sm" style={{ color: 'var(--text2)' }}>
+            Parts {formatCents(totals.lines_cents)} · Labor {formatCents(totals.labor_cents)}
+            {totals.tax_cents > 0 && <> · Tax {formatCents(totals.tax_cents)}</>}
+          </span>
+          <span className="money font-bold">{formatCents(totals.total_cents)}</span>
+        </div>
+      </div>
+
+      <div className="card">
+        <label className="label">Private notes (never shown to customer)</label>
+        <textarea className="textarea !min-h-[60px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+
+      {error && <p style={{ color: 'var(--red)' }}>{error}</p>}
+      <div className="flex gap-2 pb-4">
+        <button className="btn btn-primary flex-1" disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : editing ? 'Save changes' : 'Create quote'}
+        </button>
+        <button className="btn" onClick={() => router.back()}>Cancel</button>
+      </div>
+    </div>
+  )
+}

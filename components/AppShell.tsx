@@ -8,8 +8,8 @@ const tabs = [
   { href: '/', label: 'Home', icon: '🏠' },
   { href: '/jobs', label: 'Jobs', icon: '🗂️' },
   { href: '/jobs/new', label: 'New Job', icon: '➕', primary: true },
+  { href: '/billing', label: 'Billing', icon: '🧾' },
   { href: '/customers', label: 'Customers', icon: '👤' },
-  { href: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -32,6 +32,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (href === '/') return pathname === '/'
     if (href === '/jobs/new') return pathname === '/jobs/new'
     if (href === '/jobs') return pathname.startsWith('/jobs') && pathname !== '/jobs/new'
+    if (href === '/billing') {
+      return (
+        pathname.startsWith('/billing') ||
+        pathname.startsWith('/quotes') ||
+        pathname.startsWith('/invoices')
+      )
+    }
     return pathname.startsWith(href)
   }
 
@@ -46,7 +53,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
       <header
-        className="sticky top-0 z-40 border-b px-4 py-3 sm:flex sm:items-center sm:justify-between"
+        className="sticky top-0 z-40 flex items-center justify-between border-b px-4 py-3"
         style={{ background: 'var(--bg1)', borderColor: 'var(--border)' }}
       >
         <Link href="/" className="text-xl display font-semibold">
@@ -54,7 +61,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
         {/* Desktop nav */}
         <nav className="hidden gap-1 sm:flex">
-          {tabs.map((t) => (
+          {[...tabs, { href: '/settings', label: 'Settings', icon: '⚙️', primary: false }].map((t) => (
             <Link
               key={t.href}
               href={t.href}
@@ -71,6 +78,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
+        {/* Settings moved off the phone tab bar to make room for Billing */}
+        <Link
+          href="/settings"
+          className="text-2xl sm:hidden"
+          aria-label="Settings"
+          style={{ opacity: pathname.startsWith('/settings') ? 1 : 0.6 }}
+        >
+          ⚙️
+        </Link>
       </header>
 
       <main className="mx-auto w-full max-w-5xl p-4">{children}</main>

@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [bizAddress, setBizAddress] = useState('')
   const [bizEmail, setBizEmail] = useState('')
   const [laborRate, setLaborRate] = useState('')
+  const [taxRate, setTaxRate] = useState('')
+  const [payInstructions, setPayInstructions] = useState('')
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
@@ -50,6 +52,8 @@ export default function SettingsPage() {
         setBizAddress(data.business_address ?? '')
         setBizEmail(data.business_email ?? '')
         setLaborRate(centsToInput(data.default_labor_rate_cents))
+        setTaxRate(String((data.default_tax_rate_bp ?? 0) / 100))
+        setPayInstructions(data.invoice_payment_instructions ?? '')
         setStores((data.store_suggestions as string[]).join('\n'))
       })
     getAccessToken().then(async (token) => {
@@ -73,6 +77,8 @@ export default function SettingsPage() {
         business_address: bizAddress.trim(),
         business_email: bizEmail.trim(),
         default_labor_rate_cents: parseMoney(laborRate) ?? 0,
+        default_tax_rate_bp: Math.round((Number(taxRate) || 0) * 100),
+        invoice_payment_instructions: payInstructions.trim(),
         store_suggestions: stores
           .split('\n')
           .map((s) => s.trim())
@@ -155,9 +161,24 @@ export default function SettingsPage() {
             <input className="input" value={bizAddress} onChange={(e) => setBizAddress(e.target.value)} />
           </div>
         </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="label">Default labor rate ($/hr)</label>
+            <input className="input" inputMode="decimal" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Sales tax % (0 = no tax line)</label>
+            <input className="input" inputMode="decimal" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+          </div>
+        </div>
         <div>
-          <label className="label">Default labor rate ($/hr)</label>
-          <input className="input" inputMode="decimal" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} />
+          <label className="label">Payment instructions (prints on invoices)</label>
+          <textarea
+            className="textarea !min-h-[60px]"
+            placeholder="Cash, check, or Venmo @… — due on receipt"
+            value={payInstructions}
+            onChange={(e) => setPayInstructions(e.target.value)}
+          />
         </div>
         <div>
           <label className="label">Store suggestions (one per line)</label>
