@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
+import { formatDate } from '@/lib/date'
 import { quoteStatusColors } from '@/lib/billing'
+import { SkeletonList } from '@/components/Skeleton'
 import type { Customer, Invoice, Quote } from '@/lib/types'
 
 interface QuoteRow extends Quote {
@@ -68,7 +70,7 @@ export default function BillingPage() {
 
       {tab === 'quotes' ? (
         !quotes ? (
-          <p style={{ color: 'var(--text3)' }}>Loading…</p>
+          <SkeletonList rows={3} />
         ) : quotes.length === 0 ? (
           <div className="card text-center" style={{ color: 'var(--text2)' }}>
             No quotes yet. Write one up and text the customer a link they can approve
@@ -81,7 +83,7 @@ export default function BillingPage() {
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="text-xs font-bold" style={{ color: 'var(--accent2)' }}>{q.quote_number}</span>
-                    <span className="text-xs" style={{ color: 'var(--text3)' }}>{q.created_at.slice(0, 10)}</span>
+                    <span className="text-xs" style={{ color: 'var(--text3)' }}>{formatDate(q.created_at.slice(0, 10))}</span>
                   </div>
                   <div className="truncate font-semibold">{q.title}</div>
                   <div className="truncate text-sm" style={{ color: 'var(--text2)' }}>{q.customer?.name}</div>
@@ -97,7 +99,7 @@ export default function BillingPage() {
           </div>
         )
       ) : !invoices ? (
-        <p style={{ color: 'var(--text3)' }}>Loading…</p>
+        <SkeletonList rows={3} />
       ) : invoices.length === 0 ? (
         <div className="card text-center" style={{ color: 'var(--text2)' }}>
           No invoices yet — open a job and tap “Create invoice”.
@@ -109,7 +111,7 @@ export default function BillingPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span className="text-xs font-bold" style={{ color: 'var(--accent2)' }}>{inv.invoice_number}</span>
-                  <span className="text-xs" style={{ color: 'var(--text3)' }}>{inv.issue_date}</span>
+                  <span className="text-xs" style={{ color: 'var(--text3)' }}>{formatDate(inv.issue_date)}</span>
                 </div>
                 <div className="truncate font-semibold">{inv.job_title}</div>
                 <div className="truncate text-sm" style={{ color: 'var(--text2)' }}>{inv.customer_name}</div>

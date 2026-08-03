@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { SkeletonList } from '@/components/Skeleton'
 import type { Customer, Vehicle } from '@/lib/types'
 import { vehicleLabel } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
@@ -96,7 +97,7 @@ export default function CustomersPage() {
       </div>
 
       {adding && (
-        <div className="card grid gap-3 sm:grid-cols-2">
+        <div className="panel-in card grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="label">Name *</label>
             <input
@@ -151,7 +152,7 @@ export default function CustomersPage() {
         onChange={(e) => setQ(e.target.value)}
       />
       {!customers ? (
-        <p style={{ color: 'var(--text3)' }}>Loading…</p>
+        <SkeletonList rows={3} />
       ) : filtered.length === 0 ? (
         <div className="card text-center" style={{ color: 'var(--text2)' }}>
           {customers.length === 0 ? (

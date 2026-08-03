@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import JobRow from '@/components/JobRow'
+import { SkeletonList } from '@/components/Skeleton'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { vehicleLabel } from '@/lib/types'
 
@@ -74,7 +75,7 @@ export default function JobsPage() {
       </div>
 
       {!items ? (
-        <p style={{ color: 'var(--text3)' }}>Loading…</p>
+        <SkeletonList rows={4} />
       ) : filtered.length === 0 ? (
         <div className="card text-center" style={{ color: 'var(--text2)' }}>
           {items.length === 0 ? (

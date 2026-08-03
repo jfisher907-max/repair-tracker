@@ -342,7 +342,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         ))}
 
         {addingPart && (
-          <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--border2)' }}>
+          <div className="panel-in space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--border2)' }}>
             <div className="grid grid-cols-2 gap-2">
               <div className="col-span-2">
                 <label className="label">Description *</label>
@@ -427,7 +427,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 {editingLineId ? 'Cancel' : 'Done'}
               </button>
               {addedFlash && (
-                <span className="text-sm" style={{ color: 'var(--green)' }}>
+                <span className="flash-in text-sm" style={{ color: 'var(--green)' }}>
                   Added “{addedFlash}” ✓ — next part?
                 </span>
               )}
@@ -520,7 +520,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <span className="money">{formatCents(totals.parts_charged_cents)}</span>
         </div>
         {editingOverride && (
-          <div className="flex items-center gap-2 py-1">
+          <div className="panel-in flex items-center gap-2 py-1">
             <input
               className="input !min-h-[38px]"
               inputMode="decimal"

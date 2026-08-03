@@ -17,6 +17,16 @@
   --red: #f37070;
   --orange: #f08840;
   --blue: #58a6e8;
+
+  /* Motion system */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 150ms;
+  --dur-med: 280ms;
+
+  /* Depth */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 10px rgba(0, 0, 0, 0.22);
+  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.35);
+  --glow-accent: 0 2px 14px rgba(240, 168, 50, 0.22);
 }
 
 html {
@@ -24,7 +34,9 @@ html {
 }
 
 body {
-  background: var(--bg0);
+  background:
+    radial-gradient(1100px 520px at 50% -220px, #182231 0%, rgba(24, 34, 49, 0) 65%),
+    var(--bg0);
   color: var(--text);
   font-family: var(--font-body), system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
@@ -35,12 +47,30 @@ h1, h2, h3, .display {
   letter-spacing: 0.02em;
 }
 
+/* ---------- Surfaces ---------- */
+
 .card {
-  background: var(--bg1);
+  background: linear-gradient(180deg, #151b25 0%, var(--bg1) 100%);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 1rem;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease),
+    border-color var(--dur-med) var(--ease), filter var(--dur-fast) var(--ease);
 }
+
+/* Only cards that are links behave interactively */
+a.card:hover {
+  transform: translateY(-1px);
+  border-color: var(--border2);
+  box-shadow: var(--shadow-2);
+  filter: brightness(1.06);
+}
+a.card:active {
+  transform: translateY(0) scale(0.995);
+}
+
+/* ---------- Controls ---------- */
 
 .btn {
   display: inline-flex;
@@ -49,7 +79,7 @@ h1, h2, h3, .display {
   gap: 0.4rem;
   min-height: 44px;
   padding: 0.5rem 1rem;
-  border-radius: 10px;
+  border-radius: 11px;
   border: 1px solid var(--border2);
   background: var(--bg2);
   color: var(--text);
@@ -57,15 +87,32 @@ h1, h2, h3, .display {
   font-size: 0.95rem;
   cursor: pointer;
   text-decoration: none;
-  transition: filter 0.1s;
+  transition: transform var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease),
+    box-shadow var(--dur-med) var(--ease), border-color var(--dur-med) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
-.btn:hover { filter: brightness(1.15); }
-.btn:disabled { opacity: 0.5; cursor: default; }
+.btn:hover {
+  filter: brightness(1.14);
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0) scale(0.97);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+  filter: none;
+}
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent2) 0%, var(--accent) 90%);
   border-color: var(--accent);
   color: #201503;
+  box-shadow: var(--glow-accent), var(--shadow-1);
+}
+.btn-primary:hover {
+  box-shadow: 0 3px 18px rgba(240, 168, 50, 0.32), var(--shadow-1);
 }
 
 .btn-danger {
@@ -80,16 +127,20 @@ h1, h2, h3, .display {
   width: 100%;
   min-height: 44px;
   padding: 0.5rem 0.75rem;
-  border-radius: 10px;
+  border-radius: 11px;
   border: 1px solid var(--border);
   background: var(--bg2);
   color: var(--text);
   font-size: 1rem;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease),
+    background-color var(--dur-fast) var(--ease);
 }
 .textarea { min-height: 90px; }
 .input:focus, .select:focus, .textarea:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: -1px;
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(240, 168, 50, 0.16);
+  background: #1c2431;
 }
 .input::placeholder, .textarea::placeholder { color: var(--text3); }
 
@@ -111,16 +162,18 @@ h1, h2, h3, .display {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 .chip-unpaid { background: #3d1b1b; color: var(--red); }
 .chip-partial { background: #3d2f14; color: var(--accent2); }
 .chip-paid { background: #143d26; color: var(--green); }
 
 .stat-tile {
-  background: var(--bg1);
+  background: linear-gradient(180deg, #151b25 0%, var(--bg1) 100%);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 0.75rem 0.9rem;
+  box-shadow: var(--shadow-1);
 }
 .stat-tile .stat-label {
   font-size: 0.72rem;
@@ -137,12 +190,108 @@ h1, h2, h3, .display {
 
 .money { font-variant-numeric: tabular-nums; }
 
-/* The printable report is a light document even inside the dark app. */
+/* ---------- App chrome (header + tab bar) ---------- */
+
+/* Note: declare only the standard backdrop-filter — LightningCSS adds the
+   -webkit- prefix itself, and hand-writing both makes it drop the standard one. */
+.appbar {
+  background: color-mix(in srgb, var(--bg1) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+  padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+}
+
+.tabbar {
+  background: color-mix(in srgb, var(--bg1) 84%, transparent);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.tab-item {
+  transition: color var(--dur-med) var(--ease);
+}
+.tab-item .tab-icon {
+  transition: transform var(--dur-med) var(--ease);
+}
+.tab-item.active .tab-icon {
+  transform: translateY(-2px) scale(1.14);
+}
+.tab-item .tab-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--accent2);
+  opacity: 0;
+  transform: scale(0);
+  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+}
+.tab-item.active .tab-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ---------- Motion ---------- */
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+/* Each direct child of a page fades up, lightly staggered — the "arrival" feel. */
+.page-anim > * { animation: rise-in 0.38s var(--ease) both; }
+.page-anim > *:nth-child(2) { animation-delay: 45ms; }
+.page-anim > *:nth-child(3) { animation-delay: 90ms; }
+.page-anim > *:nth-child(4) { animation-delay: 135ms; }
+.page-anim > *:nth-child(5) { animation-delay: 180ms; }
+.page-anim > *:nth-child(n + 6) { animation-delay: 220ms; }
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+/* Inline panels that expand into view (add-part, add-vehicle, review) */
+.panel-in { animation: panel-in var(--dur-med) var(--ease) both; }
+
+@keyframes flash-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: none; }
+}
+.flash-in { animation: flash-in 0.25s var(--ease) both; }
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+.splash-mark { animation: breathe 1.6s var(--ease) infinite; display: inline-block; }
+
+/* Skeleton loading shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.05) 50%, transparent 80%);
+  animation: shimmer 1.4s infinite;
+}
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
+/* ---------- The printable report (light document inside the dark app) ---------- */
+
 .report-root {
   background: #ffffff;
   color: #111827;
   font-family: Georgia, 'Times New Roman', serif;
   line-height: 1.45;
+  box-shadow: var(--shadow-2);
 }
 .report-root h1, .report-root h2, .report-root h3 {
   font-family: Georgia, 'Times New Roman', serif;
@@ -193,9 +342,23 @@ h1, h2, h3, .display {
   border-top: 1px solid #9ca3af;
 }
 
+/* ---------- Guards ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @media print {
   body { background: #ffffff; }
   .no-print { display: none !important; }
-  .report-root { padding: 0 !important; }
+  .report-root { padding: 0 !important; box-shadow: none; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
   @page { size: letter; margin: 0.75in; }
 }

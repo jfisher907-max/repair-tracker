@@ -110,7 +110,18 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
           <div>
             <h1 className="text-2xl">{customer.name}</h1>
             <div className="text-sm" style={{ color: 'var(--text2)' }}>
-              {[customer.phone, customer.email].filter(Boolean).join(' · ') || 'No contact info'}
+              {!customer.phone && !customer.email && 'No contact info'}
+              {customer.phone && (
+                <a href={`tel:${customer.phone}`} style={{ color: 'var(--blue)' }}>
+                  📞 {customer.phone}
+                </a>
+              )}
+              {customer.phone && customer.email && ' · '}
+              {customer.email && (
+                <a href={`mailto:${customer.email}`} style={{ color: 'var(--blue)' }}>
+                  {customer.email}
+                </a>
+              )}
             </div>
             {customer.notes && (
               <p className="mt-1 text-sm" style={{ color: 'var(--text3)' }}>{customer.notes}</p>
@@ -121,7 +132,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
           </button>
         </div>
         {editing && (
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="panel-in grid gap-2 sm:grid-cols-2">
             <input className="input" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             <input className="input" type="tel" placeholder="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
             <input className="input" type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
@@ -153,7 +164,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
           </button>
         </div>
         {addingVehicle && (
-          <div className="space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--border2)' }}>
+          <div className="panel-in space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--border2)' }}>
             <VehicleFields value={veh} onChange={setVeh} />
             <button className="btn btn-primary btn-sm" onClick={saveVehicle} disabled={savingVehicle}>
               {savingVehicle ? 'Saving…' : 'Save vehicle'}

@@ -271,7 +271,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
       )}
 
       {phase === 'review' && (
-        <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+        <div className="panel-in grid gap-4 lg:grid-cols-[1fr_280px]">
           <div className="space-y-3">
             {notice && (
               <div

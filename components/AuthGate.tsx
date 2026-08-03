@@ -29,7 +29,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
         <div className="text-2xl display" style={{ color: 'var(--text3)' }}>
-          🔧 Repair Tracker
+          <span className="splash-mark">🔧</span> Repair Tracker
         </div>
       </div>
     )
@@ -56,7 +56,7 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-4">
-      <form onSubmit={signIn} className="card w-full max-w-sm space-y-4">
+      <form onSubmit={signIn} className="panel-in card w-full max-w-sm space-y-4">
         <div className="text-center">
           <div className="text-4xl">🔧</div>
           <h1 className="mt-1 text-2xl">Repair Tracker</h1>

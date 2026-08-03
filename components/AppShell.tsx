@@ -46,16 +46,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh pb-24 sm:pb-8">
       {!online && (
         <div
-          className="sticky top-0 z-50 px-4 py-2 text-center text-sm font-semibold"
+          className="flash-in sticky top-0 z-50 px-4 py-2 text-center text-sm font-semibold"
           style={{ background: 'var(--red)', color: '#2b0d0d' }}
         >
           No connection — changes won&apos;t save until you&apos;re back online.
         </div>
       )}
-      <header
-        className="sticky top-0 z-40 flex items-center justify-between border-b px-4 py-3"
-        style={{ background: 'var(--bg1)', borderColor: 'var(--border)' }}
-      >
+      <header className="appbar sticky top-0 z-40 flex items-center justify-between px-4 pb-3">
         <Link href="/" className="text-xl display font-semibold">
           🔧 Repair Tracker
         </Link>
@@ -65,12 +62,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={t.href}
               href={t.href}
-              className="btn btn-sm"
+              className={t.primary ? 'btn btn-sm btn-primary' : 'btn btn-sm'}
               style={
                 t.primary
-                  ? { background: 'var(--accent)', borderColor: 'var(--accent)', color: '#201503' }
+                  ? undefined
                   : isActive(t.href)
-                    ? { borderColor: 'var(--accent)', color: 'var(--accent2)' }
+                    ? { borderColor: 'var(--accent)', color: 'var(--accent2)', background: 'transparent' }
                     : { border: '1px solid transparent', background: 'transparent' }
               }
             >
@@ -78,10 +75,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        {/* Settings moved off the phone tab bar to make room for Billing */}
+        {/* Settings lives in the header on phones to keep the tab bar to five */}
         <Link
           href="/settings"
-          className="text-2xl sm:hidden"
+          className="text-2xl transition-opacity sm:hidden"
           aria-label="Settings"
           style={{ opacity: pathname.startsWith('/settings') ? 1 : 0.6 }}
         >
@@ -89,34 +86,34 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl p-4">{children}</main>
+      {/* Keyed by route so the staggered entrance replays on every navigation */}
+      <main key={pathname} className="page-anim mx-auto w-full max-w-5xl p-4">
+        {children}
+      </main>
 
       {/* Phone bottom tab bar */}
-      <nav
-        className="fixed inset-x-0 bottom-0 z-40 flex border-t sm:hidden"
-        style={{
-          background: 'var(--bg1)',
-          borderColor: 'var(--border)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
-        }}
-      >
-        {tabs.map((t) => (
-          <Link
-            key={t.href}
-            href={t.href}
-            className="flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[0.65rem] font-semibold"
-            style={
-              t.primary
-                ? { color: 'var(--accent)' }
-                : { color: isActive(t.href) ? 'var(--accent2)' : 'var(--text3)' }
-            }
-          >
-            <span className={t.primary ? 'text-2xl leading-none' : 'text-lg leading-none'}>
-              {t.icon}
-            </span>
-            {t.label}
-          </Link>
-        ))}
+      <nav className="tabbar fixed inset-x-0 bottom-0 z-40 flex sm:hidden">
+        {tabs.map((t) => {
+          const active = isActive(t.href)
+          return (
+            <Link
+              key={t.href}
+              href={t.href}
+              className={`tab-item flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[0.65rem] font-semibold ${active ? 'active' : ''}`}
+              style={
+                t.primary
+                  ? { color: 'var(--accent)' }
+                  : { color: active ? 'var(--accent2)' : 'var(--text3)' }
+              }
+            >
+              <span className={`tab-icon ${t.primary ? 'text-2xl' : 'text-lg'} leading-none`}>
+                {t.icon}
+              </span>
+              {t.label}
+              <span className="tab-dot" />
+            </Link>
+          )
+        })}
       </nav>
     </div>
   )

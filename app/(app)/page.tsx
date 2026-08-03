@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import JobRow from '@/components/JobRow'
+import { SkeletonDashboard } from '@/components/Skeleton'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { unpaidBalanceCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
@@ -63,7 +64,7 @@ export default function Dashboard() {
   const recent = scoped.slice(0, 6)
 
   if (error) return <p style={{ color: 'var(--red)' }}>Couldn&apos;t load: {error}</p>
-  if (!items) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
+  if (!items) return <SkeletonDashboard />
 
   if (items.length === 0) {
     return (
@@ -96,6 +97,9 @@ export default function Dashboard() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
+          <Link href="/quotes/new" className="btn hidden sm:inline-flex">
+            + New Quote
+          </Link>
           <Link href="/jobs/new" className="btn btn-primary hidden sm:inline-flex">
             + New Job
           </Link>
@@ -115,9 +119,14 @@ export default function Dashboard() {
         />
       </div>
 
-      <Link href="/jobs/new" className="btn btn-primary w-full sm:hidden">
-        + New Job
-      </Link>
+      <div className="grid grid-cols-2 gap-2 sm:hidden">
+        <Link href="/jobs/new" className="btn btn-primary">
+          + New Job
+        </Link>
+        <Link href="/quotes/new" className="btn">
+          + New Quote
+        </Link>
+      </div>
 
       {billing && (billing.openQuotes > 0 || billing.unpaidInvoices > 0) && (
         <Link href="/billing" className="card flex items-center justify-between !py-3 hover:brightness-110">

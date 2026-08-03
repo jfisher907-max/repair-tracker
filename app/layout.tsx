@@ -28,7 +28,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // cover + safe-area padding keeps the installed-PWA status bar clean;
+  // no maximumScale so receipt photos stay pinch-zoomable everywhere.
+  viewportFit: "cover",
   themeColor: "#0b0e13",
 };
 
