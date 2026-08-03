@@ -64,7 +64,14 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         <button className="btn btn-sm no-print mb-3" onClick={() => { setEditing(false); load() }}>
           ← Back to quote
         </button>
-        <QuoteForm quote={quote} existingLines={lines} />
+        <QuoteForm
+          quote={quote}
+          existingLines={lines}
+          onSaved={() => {
+            setEditing(false)
+            load()
+          }}
+        />
       </div>
     )
   }

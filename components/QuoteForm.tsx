@@ -23,9 +23,13 @@ function plusDays(days: number): string {
 export default function QuoteForm({
   quote,
   existingLines,
+  onSaved,
 }: {
   quote?: Quote
   existingLines?: QuoteLine[]
+  /** Embedded-edit mode: called after save instead of navigating (pushing the
+      current route is a no-op, which would leave the button stuck on "Saving…"). */
+  onSaved?: (quoteId: string) => void
 }) {
   const router = useRouter()
   const editing = !!quote
@@ -169,8 +173,13 @@ export default function QuoteForm({
         )
         if (lineErr) throw lineErr
       }
-      router.push(`/quotes/${quoteId}`)
-      router.refresh()
+      if (onSaved) {
+        setBusy(false)
+        onSaved(quoteId!)
+      } else {
+        router.push(`/quotes/${quoteId}`)
+        router.refresh()
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
       setBusy(false)
