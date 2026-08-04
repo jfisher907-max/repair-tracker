@@ -7,16 +7,24 @@ import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
 import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
+import { PAYMENT_METHODS, deletePayment, recordPayment } from '@/lib/payments'
+import { formatDate } from '@/lib/date'
 import {
   vehicleLabel,
   type Customer,
   type Invoice,
   type Job,
   type PartLine,
-  type PaymentStatus,
+  type Payment,
+  type PaymentMethod,
   type Receipt,
   type Vehicle,
 } from '@/lib/types'
+
+function todayIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 interface LineDraft {
   purchase_date: string
@@ -43,6 +51,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [receipts, setReceipts] = useState<Receipt[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [invoicing, setInvoicing] = useState(false)
+  const [payments, setPayments] = useState<Payment[]>([])
+  const [payAmount, setPayAmount] = useState('')
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
+  const [payDate, setPayDate] = useState(todayIso())
+  const [payingBusy, setPayingBusy] = useState(false)
   const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
 
@@ -71,17 +84,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setVehicle(v ?? null)
     setCustomer(v?.customer ?? null)
 
-    const [linesRes, receiptsRes, settingsRes, invoicesRes] = await Promise.all([
+    const [linesRes, receiptsRes, settingsRes, invoicesRes, paymentsRes] = await Promise.all([
       supabase.from('part_lines').select('*').eq('job_id', id).order('created_at'),
       supabase.from('receipts').select('*').eq('job_id', id).order('created_at'),
       supabase.from('settings').select('store_suggestions').single(),
       supabase.from('invoices').select('*').eq('job_id', id).order('created_at'),
+      supabase.from('payments').select('*').eq('job_id', id).order('date'),
     ])
     setLines((linesRes.data as PartLine[]) ?? [])
     const recs = (receiptsRes.data as Receipt[]) ?? []
     setReceipts(recs)
     setStoreSuggestions(settingsRes.data?.store_suggestions ?? [])
     setInvoices((invoicesRes.data as Invoice[]) ?? [])
+    setPayments((paymentsRes.data as Payment[]) ?? [])
 
     if (recs.length) {
       const urls: Record<string, string> = {}
@@ -103,6 +118,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   if (!job) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
   const totals = computeTotals(job, lines)
+  // Ledger is authoritative once it has entries; jobs settled before payment
+  // tracking existed fall back to their cached status/amount.
+  const paidFromLedger = payments.reduce((s, p) => s + p.amount_cents, 0)
+  const legacyPaid =
+    payments.length === 0
+      ? (job.amount_paid_cents ?? (job.payment_status === 'paid' ? totals.total_charged_cents : 0))
+      : 0
+  const balanceDue = Math.max(0, totals.total_charged_cents - paidFromLedger - legacyPaid)
 
   async function updateJob(patch: Partial<Job>) {
     const { error } = await supabase.from('jobs').update(patch).eq('id', id)
@@ -280,7 +303,16 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <button
               className="btn btn-sm"
               style={{ borderColor: 'var(--green)', color: 'var(--green)' }}
-              onClick={() => updateJob({ payment_status: 'paid' })}
+              onClick={async () => {
+                if (balanceDue <= 0) return
+                if (!confirm(`Record a ${formatCents(balanceDue)} payment settling this job?`)) return
+                try {
+                  await recordPayment({ jobId: id, amountCents: balanceDue, method: 'cash', date: todayIso() })
+                  await load()
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : String(e))
+                }
+              }}
             >
               ✓ Mark paid
             </button>
@@ -580,35 +612,101 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
       )}
 
-      {/* Payment */}
+      {/* Payments ledger */}
       <div className="card space-y-2">
-        <div className="label">Payment</div>
-        <div className="grid grid-cols-2 gap-2">
-          <select
-            className="select"
-            value={job.payment_status}
-            onChange={(e) => {
-              const status = e.target.value as PaymentStatus
-              updateJob({
-                payment_status: status,
-                amount_paid_cents: status === 'partial' ? job.amount_paid_cents : null,
-              })
-            }}
+        <div className="flex items-center justify-between">
+          <span className="label !mb-0">Payments</span>
+          <span
+            className="money text-sm font-bold"
+            style={{ color: balanceDue > 0 ? 'var(--red)' : 'var(--green)' }}
           >
-            <option value="unpaid">Unpaid</option>
-            <option value="partial">Partially paid</option>
-            <option value="paid">Paid</option>
-          </select>
-          {job.payment_status === 'partial' && (
+            {balanceDue > 0 ? `Balance due ${formatCents(balanceDue)}` : 'Paid in full ✓'}
+          </span>
+        </div>
+
+        {payments.map((p) => (
+          <div
+            key={p.id}
+            className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+            style={{ background: 'var(--bg2)' }}
+          >
+            <span className="text-sm" style={{ color: 'var(--text2)' }}>
+              {formatDate(p.date)} · {PAYMENT_METHODS.find((m) => m.value === p.method)?.label}
+              {p.invoice_id && ' · 🧾'}
+              {p.note && ` · ${p.note}`}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="money font-semibold" style={{ color: 'var(--green)' }}>
+                {formatCents(p.amount_cents)}
+              </span>
+              <button
+                className="btn btn-sm btn-danger !min-h-[30px] !px-1.5 text-xs"
+                aria-label="Delete payment"
+                onClick={async () => {
+                  if (!confirm('Delete this payment record?')) return
+                  try {
+                    await deletePayment(p.id, id)
+                    await load()
+                  } catch (e) {
+                    alert(e instanceof Error ? e.message : String(e))
+                  }
+                }}
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+        ))}
+        {payments.length === 0 && job.payment_status !== 'unpaid' && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Marked {job.payment_status} before payment tracking existed — new payments recorded
+            here will take over the math.
+          </p>
+        )}
+
+        {balanceDue > 0 && (
+          <div className="grid grid-cols-2 gap-2 border-t pt-2 sm:grid-cols-4" style={{ borderColor: 'var(--border)' }}>
             <input
               className="input"
               inputMode="decimal"
-              placeholder="Amount paid ($)"
-              defaultValue={centsToInput(job.amount_paid_cents)}
-              onBlur={(e) => updateJob({ amount_paid_cents: parseMoney(e.target.value) })}
+              placeholder={`Amount (${centsToInput(balanceDue)})`}
+              value={payAmount}
+              onChange={(e) => setPayAmount(e.target.value)}
             />
-          )}
-        </div>
+            <select
+              className="select"
+              value={payMethod}
+              onChange={(e) => setPayMethod(e.target.value as PaymentMethod)}
+            >
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+            <input className="input" type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+            <button
+              className="btn btn-primary"
+              disabled={payingBusy}
+              onClick={async () => {
+                const amount = payAmount.trim() === '' ? balanceDue : parseMoney(payAmount)
+                if (!amount || amount === 0) {
+                  alert('Enter a payment amount.')
+                  return
+                }
+                setPayingBusy(true)
+                try {
+                  await recordPayment({ jobId: id, amountCents: amount, method: payMethod, date: payDate })
+                  setPayAmount('')
+                  await load()
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : String(e))
+                }
+                setPayingBusy(false)
+              }}
+            >
+              {payingBusy ? 'Recording…' : '💵 Record'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Notes + danger zone */}

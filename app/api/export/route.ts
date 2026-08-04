@@ -58,6 +58,14 @@ const TABLES: Record<string, string[]> = {
     'labor_cents', 'parts_cents', 'tax_rate_bp', 'tax_cents', 'total_cents', 'memo',
     'sent_at', 'paid_at', 'created_at', 'updated_at',
   ],
+  payments: [
+    'id', 'job_id', 'invoice_id', 'date', 'method', 'amount_cents', 'note',
+    'created_at', 'updated_at',
+  ],
+  expenses: [
+    'id', 'date', 'category', 'vendor', 'description', 'amount_cents',
+    'created_at', 'updated_at',
+  ],
 }
 
 /** Supabase caps a single select at 1000 rows — page through so the backup is never silently partial. */

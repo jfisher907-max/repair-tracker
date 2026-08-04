@@ -191,6 +191,32 @@ export interface ExtractionResult {
   lines: ExtractedLine[]
 }
 
+export type PaymentMethod = 'cash' | 'check' | 'venmo' | 'card' | 'other'
+
+export interface Payment {
+  id: string
+  job_id: string
+  invoice_id: string | null
+  date: string
+  method: PaymentMethod
+  amount_cents: number
+  note: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface Expense {
+  id: string
+  date: string
+  category: string
+  vendor: string | null
+  description: string
+  amount_cents: number
+  storage_path: string | null
+  created_at: string
+  updated_at: string
+}
+
 /** "2015 Honda Civic LX" style label; falls back to whatever fields exist. */
 export function vehicleLabel(
   v: Pick<Vehicle, 'year' | 'make' | 'model'> & Partial<Pick<Vehicle, 'trim'>> | null | undefined,

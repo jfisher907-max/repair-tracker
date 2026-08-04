@@ -13,7 +13,13 @@ const tabs = [
 ]
 
 const sideNav: { label: string; items: { href: string; label: string; icon: string }[] }[] = [
-  { label: 'Overview', items: [{ href: '/', label: 'Dashboard', icon: '🏠' }] },
+  {
+    label: 'Overview',
+    items: [
+      { href: '/', label: 'Dashboard', icon: '🏠' },
+      { href: '/reports', label: 'Reports', icon: '📊' },
+    ],
+  },
   {
     label: 'Work',
     items: [
@@ -22,10 +28,11 @@ const sideNav: { label: string; items: { href: string; label: string; icon: stri
     ],
   },
   {
-    label: 'Billing',
+    label: 'Money',
     items: [
       { href: '/billing', label: 'Quotes & Invoices', icon: '🧾' },
       { href: '/quotes/new', label: 'New Quote', icon: '📝' },
+      { href: '/expenses', label: 'Expenses', icon: '🧰' },
     ],
   },
   { label: 'People', items: [{ href: '/customers', label: 'Customers', icon: '👤' }] },

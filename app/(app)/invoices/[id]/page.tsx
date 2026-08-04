@@ -5,21 +5,36 @@ import { use, useCallback, useEffect, useState } from 'react'
 import DocView, { type DocData } from '@/components/DocView'
 import { supabase } from '@/lib/supabase'
 import { quoteStatusColors } from '@/lib/billing'
-import type { Invoice, Settings } from '@/lib/types'
+import { PAYMENT_METHODS, recordPayment } from '@/lib/payments'
+import { centsToInput, formatCents, parseMoney } from '@/lib/money'
+import type { Invoice, Payment, PaymentMethod, Settings } from '@/lib/types'
+
+function todayIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [payments, setPayments] = useState<Payment[]>([])
   const [shareMsg, setShareMsg] = useState('')
+  const [payOpen, setPayOpen] = useState(false)
+  const [payAmount, setPayAmount] = useState('')
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
+  const [payDate, setPayDate] = useState(todayIso())
+  const [payBusy, setPayBusy] = useState(false)
 
   const load = useCallback(async () => {
-    const [{ data: inv }, { data: s }] = await Promise.all([
+    const [{ data: inv }, { data: s }, { data: pays }] = await Promise.all([
       supabase.from('invoices').select('*').eq('id', id).single(),
       supabase.from('settings').select('*').single(),
+      supabase.from('payments').select('*').eq('invoice_id', id).order('date'),
     ])
     setInvoice(inv as Invoice)
     setSettings(s as Settings)
+    setPayments((pays as Payment[]) ?? [])
   }, [id])
 
   useEffect(() => {
@@ -112,9 +127,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <button
               className="btn btn-sm"
               style={{ borderColor: 'var(--green)', color: 'var(--green)' }}
-              onClick={() => patch({ status: 'paid', paid_at: new Date().toISOString() }, 'paid')}
+              onClick={() => {
+                setPayAmount(centsToInput(Math.max(0, invoice.total_cents - payments.reduce((s, p) => s + p.amount_cents, 0))))
+                setPayOpen(!payOpen)
+              }}
             >
-              ✓ Mark paid (updates job too)
+              💵 Record payment
             </button>
           )}
           {invoice.status !== 'void' && invoice.status !== 'paid' && (
@@ -130,6 +148,63 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
         </div>
+        {payOpen && invoice.status !== 'paid' && invoice.status !== 'void' && (
+          <div className="panel-in card grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <input
+              className="input"
+              inputMode="decimal"
+              placeholder="Amount ($)"
+              value={payAmount}
+              onChange={(e) => setPayAmount(e.target.value)}
+            />
+            <select
+              className="select"
+              value={payMethod}
+              onChange={(e) => setPayMethod(e.target.value as PaymentMethod)}
+            >
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+            <input className="input" type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+            <button
+              className="btn btn-primary"
+              disabled={payBusy}
+              onClick={async () => {
+                const amount = parseMoney(payAmount)
+                if (!amount || amount === 0) {
+                  alert('Enter a payment amount.')
+                  return
+                }
+                setPayBusy(true)
+                try {
+                  await recordPayment({
+                    jobId: invoice!.job_id,
+                    invoiceId: id,
+                    amountCents: amount,
+                    method: payMethod,
+                    date: payDate,
+                  })
+                  setPayOpen(false)
+                  await load()
+                } catch (e) {
+                  alert(e instanceof Error ? e.message : String(e))
+                }
+                setPayBusy(false)
+              }}
+            >
+              {payBusy ? 'Recording…' : 'Record'}
+            </button>
+          </div>
+        )}
+        {payments.length > 0 && (
+          <p className="text-sm" style={{ color: 'var(--text2)' }}>
+            Payments received: {payments.map((p) => formatCents(p.amount_cents)).join(' + ')} ={' '}
+            <b className="money" style={{ color: 'var(--green)' }}>
+              {formatCents(payments.reduce((s, p) => s + p.amount_cents, 0))}
+            </b>
+          </p>
+        )}
         {shareMsg && <p className="text-sm" style={{ color: 'var(--green)' }}>{shareMsg}</p>}
         <p className="text-xs" style={{ color: 'var(--text3)' }}>
           Invoices are frozen when created — editing the job won&apos;t change this document.

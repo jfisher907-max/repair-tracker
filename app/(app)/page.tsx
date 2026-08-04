@@ -140,6 +140,12 @@ export default function Dashboard() {
         <Link href="/quotes/new" className="btn">
           + New Quote
         </Link>
+        <Link href="/reports" className="btn">
+          📊 Reports
+        </Link>
+        <Link href="/expenses" className="btn">
+          🧰 Expenses
+        </Link>
       </div>
 
       {billing && (billing.openQuotes > 0 || billing.unpaidInvoices > 0) && (
