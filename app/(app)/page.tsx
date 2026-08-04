@@ -13,7 +13,11 @@ export default function Dashboard() {
   const [items, setItems] = useState<JobWithContext[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [year, setYear] = useState<'all' | number>('all')
-  const [billing, setBilling] = useState<{ openQuotes: number; unpaidInvoices: number } | null>(null)
+  const [billing, setBilling] = useState<{
+    openQuotes: number
+    unpaidInvoices: number
+    overdue: number
+  } | null>(null)
   const [businessName, setBusinessName] = useState('')
 
   useEffect(() => {
@@ -23,6 +27,8 @@ export default function Dashboard() {
       .select('business_name')
       .single()
       .then(({ data }) => setBusinessName(data?.business_name ?? ''))
+    const today = new Date()
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
     Promise.all([
       supabase
         .from('quotes')
@@ -33,7 +39,14 @@ export default function Dashboard() {
         .from('invoices')
         .select('id', { count: 'exact', head: true })
         .in('status', ['draft', 'sent']),
-    ]).then(([q, i]) => setBilling({ openQuotes: q.count ?? 0, unpaidInvoices: i.count ?? 0 }))
+      supabase
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'sent')
+        .lt('due_date', todayIso),
+    ]).then(([q, i, o]) =>
+      setBilling({ openQuotes: q.count ?? 0, unpaidInvoices: i.count ?? 0, overdue: o.count ?? 0 }),
+    )
   }, [])
 
   const years = useMemo(() => {
@@ -159,6 +172,7 @@ export default function Dashboard() {
             {billing.unpaidInvoices > 0 && (
               <span style={{ color: 'var(--red)' }}>
                 {billing.unpaidInvoices} unpaid invoice{billing.unpaidInvoices === 1 ? '' : 's'}
+                {billing.overdue > 0 && <b> ({billing.overdue} overdue)</b>}
               </span>
             )}
           </span>

@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const [bizEmail, setBizEmail] = useState('')
   const [laborRate, setLaborRate] = useState('')
   const [taxRate, setTaxRate] = useState('')
+  const [termsDays, setTermsDays] = useState('0')
   const [payInstructions, setPayInstructions] = useState('')
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
@@ -53,6 +54,7 @@ export default function SettingsPage() {
         setBizEmail(data.business_email ?? '')
         setLaborRate(centsToInput(data.default_labor_rate_cents))
         setTaxRate(String((data.default_tax_rate_bp ?? 0) / 100))
+        setTermsDays(String(data.default_invoice_terms_days ?? 0))
         setPayInstructions(data.invoice_payment_instructions ?? '')
         setStores((data.store_suggestions as string[]).join('\n'))
       })
@@ -78,6 +80,7 @@ export default function SettingsPage() {
         business_email: bizEmail.trim(),
         default_labor_rate_cents: parseMoney(laborRate) ?? 0,
         default_tax_rate_bp: Math.round((Number(taxRate) || 0) * 100),
+        default_invoice_terms_days: Number(termsDays) || 0,
         invoice_payment_instructions: payInstructions.trim(),
         store_suggestions: stores
           .split('\n')
@@ -169,6 +172,15 @@ export default function SettingsPage() {
           <div>
             <label className="label">Sales tax % (0 = no tax line)</label>
             <input className="input" inputMode="decimal" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Invoice payment terms</label>
+            <select className="select" value={termsDays} onChange={(e) => setTermsDays(e.target.value)}>
+              <option value="0">Due on receipt</option>
+              <option value="7">Net 7</option>
+              <option value="15">Net 15</option>
+              <option value="30">Net 30</option>
+            </select>
           </div>
         </div>
         <div>

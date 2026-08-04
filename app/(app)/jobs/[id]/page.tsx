@@ -248,12 +248,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setInvoicing(true)
     try {
       const [{ data: settings }, { data: sourceQuote }] = await Promise.all([
-        supabase.from('settings').select('default_tax_rate_bp').single(),
+        supabase.from('settings').select('default_tax_rate_bp, default_invoice_terms_days').single(),
         // A job born from a quote bills at the tax rate the customer approved.
         supabase.from('quotes').select('tax_rate_bp').eq('job_id', id).limit(1).maybeSingle(),
       ])
       const taxRateBp = sourceQuote?.tax_rate_bp ?? settings?.default_tax_rate_bp ?? 0
       const snapshot = buildInvoiceSnapshot(job!, lines, taxRateBp)
+      // Terms from Settings: 0 = due on receipt (due date = issue date).
+      const termsDays = settings?.default_invoice_terms_days ?? 0
+      const due = new Date()
+      due.setDate(due.getDate() + termsDays)
+      const dueDate = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`
       const { data, error } = await supabase
         .from('invoices')
         .insert({
@@ -263,6 +268,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           vehicle_label: vehicleLabel(vehicle),
           job_title: job!.title,
           work_performed: job!.work_performed,
+          due_date: dueDate,
           ...snapshot,
         })
         .select('id')

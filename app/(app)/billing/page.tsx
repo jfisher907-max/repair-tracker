@@ -14,6 +14,21 @@ interface QuoteRow extends Quote {
   totals: { total_cents: number } | null
 }
 
+function todayIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function isOverdue(inv: Invoice): boolean {
+  return inv.status === 'sent' && !!inv.due_date && inv.due_date < todayIso()
+}
+
+function overdueDays(inv: Invoice): number {
+  return Math.floor(
+    (new Date(`${todayIso()}T00:00:00`).getTime() - new Date(`${inv.due_date}T00:00:00`).getTime()) / 86400000,
+  )
+}
+
 export default function BillingPage() {
   const [tab, setTab] = useState<'quotes' | 'invoices'>('quotes')
   const [quotes, setQuotes] = useState<QuoteRow[] | null>(null)
@@ -128,9 +143,15 @@ export default function BillingPage() {
               </div>
               <div className="text-right">
                 <div className="money font-semibold">{formatCents(inv.total_cents)}</div>
-                <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[inv.status] ?? 'var(--text3)' }}>
-                  {inv.status}
-                </span>
+                {isOverdue(inv) ? (
+                  <span className="chip" style={{ background: '#3d1b1b', color: 'var(--red)' }}>
+                    overdue {overdueDays(inv)}d
+                  </span>
+                ) : (
+                  <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[inv.status] ?? 'var(--text3)' }}>
+                    {inv.status}
+                  </span>
+                )}
               </div>
             </Link>
           ))}

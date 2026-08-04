@@ -1,9 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getAccessToken, supabase } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
 import { EXPENSE_CATEGORIES } from '@/lib/payments'
+import { prepareUpload } from '@/lib/upload'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import type { Expense } from '@/lib/types'
@@ -20,9 +21,56 @@ export default function ExpensesPage() {
   const [adding, setAdding] = useState(false)
   const [busy, setBusy] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanNote, setScanNote] = useState('')
   const [form, setForm] = useState({
-    date: todayIso(), category: 'Other', vendor: '', description: '', amount: '',
+    date: todayIso(), category: 'Other', vendor: '', description: '', amount: '', storage_path: '',
   })
+
+  /** QuickBooks-style snap-a-receipt: photo uploads, AI pre-fills the form, owner reviews. */
+  async function onScanFile(picked: File) {
+    setScanning(true)
+    setScanNote('Uploading…')
+    try {
+      const { file } = await prepareUpload(picked)
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+      const path = `expenses/${crypto.randomUUID()}.${ext}`
+      const { error: upErr } = await supabase.storage.from('receipts').upload(path, file, {
+        contentType: file.type || 'application/octet-stream',
+      })
+      if (upErr) throw upErr
+      setForm((f) => ({ ...f, storage_path: path }))
+
+      setScanNote('Reading the receipt…')
+      const token = await getAccessToken()
+      const res = await fetch('/api/extract-expense', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ storagePath: path }),
+      })
+      if (!res.ok) {
+        setScanNote(
+          res.status === 501
+            ? 'Photo attached — AI reading isn’t set up, type the details in.'
+            : 'Photo attached — couldn’t read it automatically, type the details in.',
+        )
+      } else {
+        const d = await res.json()
+        setForm((f) => ({
+          ...f,
+          vendor: d.vendor ?? f.vendor,
+          date: d.date ?? f.date,
+          amount: d.total != null ? d.total.toFixed(2) : f.amount,
+          category: d.category ?? f.category,
+          description: d.description ?? f.description,
+        }))
+        setScanNote('Read ✓ — double-check the fields, then save.')
+      }
+    } catch (e) {
+      setScanNote(`Upload failed: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    setScanning(false)
+  }
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('expenses').select('*').order('date', { ascending: false })
@@ -56,12 +104,14 @@ export default function ExpensesPage() {
   function startEdit(e: Expense) {
     setEditingId(e.id)
     setAdding(true)
+    setScanNote('')
     setForm({
       date: e.date,
       category: e.category,
       vendor: e.vendor ?? '',
       description: e.description,
       amount: centsToInput(e.amount_cents),
+      storage_path: e.storage_path ?? '',
     })
   }
 
@@ -78,6 +128,7 @@ export default function ExpensesPage() {
       vendor: form.vendor.trim() || null,
       description: form.description.trim(),
       amount_cents: amount,
+      storage_path: form.storage_path || null,
     }
     const result = editingId
       ? await supabase.from('expenses').update(payload).eq('id', editingId)
@@ -87,8 +138,9 @@ export default function ExpensesPage() {
       alert(result.error.message)
       return
     }
-    setForm({ date: form.date, category: form.category, vendor: form.vendor, description: '', amount: '' })
+    setForm({ date: form.date, category: form.category, vendor: form.vendor, description: '', amount: '', storage_path: '' })
     setEditingId(null)
+    setScanNote('')
     await load()
   }
 
@@ -122,6 +174,24 @@ export default function ExpensesPage() {
 
       {adding && (
         <div className="panel-in card grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="col-span-2 flex items-center gap-2 sm:col-span-3">
+            <label className="btn btn-sm cursor-pointer">
+              {scanning ? 'Working…' : form.storage_path ? '📎 Receipt attached — replace' : '📷 Scan receipt'}
+              <input
+                type="file"
+                accept="image/*,application/pdf,.pdf,.heic,.heif"
+                className="hidden"
+                disabled={scanning}
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (f) onScanFile(f)
+                }}
+              />
+            </label>
+            {scanNote && (
+              <span className="flash-in text-sm" style={{ color: 'var(--text2)' }}>{scanNote}</span>
+            )}
+          </div>
           <div>
             <label className="label">Date</label>
             <input className="input" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
@@ -202,6 +272,20 @@ export default function ExpensesPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="money font-semibold">{formatCents(e.amount_cents)}</span>
+                {e.storage_path && (
+                  <button
+                    className="btn btn-sm"
+                    aria-label="View receipt"
+                    onClick={async () => {
+                      const { data } = await supabase.storage
+                        .from('receipts')
+                        .createSignedUrl(e.storage_path!, 3600)
+                      if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+                    }}
+                  >
+                    📎
+                  </button>
+                )}
                 <button className="btn btn-sm" onClick={() => startEdit(e)}>✎</button>
                 <button className="btn btn-sm btn-danger" onClick={() => remove(e.id)}>✕</button>
               </div>

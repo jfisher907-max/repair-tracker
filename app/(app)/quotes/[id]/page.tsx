@@ -210,7 +210,24 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn btn-sm btn-primary" onClick={shareLink}>📤 Send link</button>
           <button className="btn btn-sm" onClick={() => window.print()}>🖨️ Print</button>
-          <button className="btn btn-sm" onClick={() => setEditing(true)}>✎ Edit</button>
+          <button
+            className="btn btn-sm"
+            onClick={() => {
+              // An already-sent/decided quote is evidence of what the customer
+              // saw — editing resets it to draft and requires a re-send.
+              if (
+                quote!.status !== 'draft' &&
+                !confirm(
+                  `This quote is ${quote!.status}. Editing resets it to DRAFT — the customer's copy changes and any approval no longer applies. You'll need to send it again. Continue?`,
+                )
+              ) {
+                return
+              }
+              setEditing(true)
+            }}
+          >
+            ✎ Edit
+          </button>
           {quote.status === 'sent' && (
             <>
               <button className="btn btn-sm" style={{ borderColor: 'var(--green)', color: 'var(--green)' }} onClick={() => setStatus('approved')}>

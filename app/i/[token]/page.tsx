@@ -22,6 +22,7 @@ interface PublicInvoice {
   tax_rate_bp: number
   tax_cents: number
   total_cents: number
+  amount_paid_cents: number
   memo: string | null
   paid_at: string | null
   business: {
@@ -77,6 +78,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
     memo: invoice.memo,
     paymentInstructions: invoice.business.payment_instructions || null,
     paidDate: invoice.paid_at,
+    paidCents: invoice.amount_paid_cents,
     business: invoice.business,
   }
 

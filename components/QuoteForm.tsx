@@ -150,7 +150,16 @@ export default function QuoteForm({
 
       let quoteId = quote?.id
       if (editing) {
-        const { error } = await supabase.from('quotes').update(payload).eq('id', quote.id)
+        // Editing a sent/decided quote invalidates what the customer saw —
+        // drop it back to draft so it must be re-sent.
+        const resetStatus =
+          quote.status !== 'draft'
+            ? { status: 'draft' as const, decided_at: null }
+            : {}
+        const { error } = await supabase
+          .from('quotes')
+          .update({ ...payload, ...resetStatus })
+          .eq('id', quote.id)
         if (error) throw error
         // Simplest reliable line sync: replace the set.
         const { error: delErr } = await supabase.from('quote_lines').delete().eq('quote_id', quote.id)

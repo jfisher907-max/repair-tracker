@@ -7,6 +7,8 @@ export interface Customer {
   phone: string | null
   email: string | null
   notes: string | null
+  /** Statement link token — /s/[token] shows this customer's open balances. */
+  public_token: string
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -88,6 +90,8 @@ export interface Settings {
   business_email: string
   default_labor_rate_cents: number
   default_tax_rate_bp: number
+  /** 0 = due on receipt; otherwise Net N days stamped on new invoices. */
+  default_invoice_terms_days: number
   invoice_payment_instructions: string
   store_suggestions: string[]
   created_at: string

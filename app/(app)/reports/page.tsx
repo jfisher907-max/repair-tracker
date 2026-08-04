@@ -23,9 +23,26 @@ export default function ReportsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [settings, setSettings] = useState<Settings | null>(null)
   const [year, setYear] = useState<number>(new Date().getFullYear())
+  // Accrual = when work was billed (job dates). Cash = when money moved
+  // (payment/purchase dates) — what a Schedule-C cash-basis filer reports.
+  const [basis, setBasis] = useState<'accrual' | 'cash'>('accrual')
+  const [partOutflows, setPartOutflows] = useState<{ date: string; cents: number }[]>([])
 
   useEffect(() => {
     fetchJobsWithContext().then(setJobs)
+    // Parts spending by purchase date (fallback: job date) for the cash view.
+    supabase
+      .from('part_lines')
+      .select('line_total_cents, purchase_date, job:jobs(date, deleted_at)')
+      .then(({ data }) => {
+        const rows =
+          (data as unknown as { line_total_cents: number; purchase_date: string | null; job: { date: string; deleted_at: string | null } | null }[]) ?? []
+        setPartOutflows(
+          rows
+            .filter((r) => r.job && !r.job.deleted_at)
+            .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents })),
+        )
+      })
     // Exclude payments belonging to soft-deleted jobs — their revenue is
     // excluded too, so counting their cash would skew Collected vs Billed.
     supabase
@@ -60,7 +77,7 @@ export default function ReportsPage() {
     const inYear = (iso: string) => Number(iso.slice(0, 4)) === year
     const monthOf = (iso: string) => Number(iso.slice(5, 7)) - 1
 
-    const months = MONTHS.map(() => ({ revenue: 0, parts: 0, overhead: 0, collected: 0 }))
+    const months = MONTHS.map(() => ({ revenue: 0, parts: 0, overhead: 0, collected: 0, partsPaid: 0 }))
     for (const j of jobs.filter((j) => inYear(j.job.date))) {
       const m = months[monthOf(j.job.date)]
       m.revenue += j.totals?.total_charged_cents ?? 0
@@ -72,6 +89,22 @@ export default function ReportsPage() {
     for (const p of payments.filter((p) => inYear(p.date))) {
       months[monthOf(p.date)].collected += p.amount_cents
     }
+    for (const o of partOutflows.filter((o) => inYear(o.date))) {
+      months[monthOf(o.date)].partsPaid += o.cents
+    }
+
+    const byMethod = new Map<string, number>()
+    for (const p of payments.filter((p) => inYear(p.date))) {
+      byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount_cents)
+    }
+
+    // Sales tax by filing quarter — issued (sent/paid) invoices only.
+    const taxQuarters = [0, 0, 0, 0]
+    for (const i of invoices.filter(
+      (i) => (i.status === 'sent' || i.status === 'paid') && inYear(i.issue_date),
+    )) {
+      taxQuarters[Math.floor(monthOf(i.issue_date) / 3)] += i.tax_cents
+    }
 
     const totals = months.reduce(
       (acc, m) => ({
@@ -79,8 +112,9 @@ export default function ReportsPage() {
         parts: acc.parts + m.parts,
         overhead: acc.overhead + m.overhead,
         collected: acc.collected + m.collected,
+        partsPaid: acc.partsPaid + m.partsPaid,
       }),
-      { revenue: 0, parts: 0, overhead: 0, collected: 0 },
+      { revenue: 0, parts: 0, overhead: 0, collected: 0, partsPaid: 0 },
     )
 
     const taxCollected = invoices
@@ -116,8 +150,18 @@ export default function ReportsPage() {
       byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount_cents)
     }
 
-    return { months, totals, taxCollected, aging, owed, topCustomers, byCategory: [...byCategory.entries()].sort((a, b) => b[1] - a[1]) }
-  }, [jobs, expenses, payments, invoices, year])
+    return {
+      months,
+      totals,
+      taxCollected,
+      taxQuarters,
+      byMethod: [...byMethod.entries()].sort((a, b) => b[1] - a[1]),
+      aging,
+      owed,
+      topCustomers,
+      byCategory: [...byCategory.entries()].sort((a, b) => b[1] - a[1]),
+    }
+  }, [jobs, expenses, payments, invoices, partOutflows, year])
 
   if (!jobs || !report) {
     return (
@@ -129,16 +173,33 @@ export default function ReportsPage() {
   }
 
   const net = report.totals.revenue - report.totals.parts - report.totals.overhead
+  const netCash = report.totals.collected - report.totals.partsPaid - report.totals.overhead
   const generated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const activeMonths = report.months
     .map((m, i) => ({ ...m, i }))
-    .filter((m) => m.revenue !== 0 || m.overhead !== 0 || m.collected !== 0)
+    .filter((m) => m.revenue !== 0 || m.overhead !== 0 || m.collected !== 0 || m.partsPaid !== 0)
 
   return (
     <div className="space-y-4">
       <div className="no-print flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl">Reports</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex gap-1">
+            <button
+              className="btn btn-sm"
+              style={basis === 'accrual' ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
+              onClick={() => setBasis('accrual')}
+            >
+              Accrual
+            </button>
+            <button
+              className="btn btn-sm"
+              style={basis === 'cash' ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
+              onClick={() => setBasis('cash')}
+            >
+              Cash
+            </button>
+          </div>
           <select
             className="select !w-auto !min-h-[38px]"
             value={year}
@@ -167,44 +228,95 @@ export default function ReportsPage() {
 
         <main className="mt-6 space-y-7">
           <section>
-            <h2 className="text-lg font-bold">Profit &amp; Loss</h2>
-            <table className="report-table">
-              <thead>
-                <tr>
-                  <th>Month</th>
-                  <th className="num">Billed</th>
-                  <th className="num">Parts cost</th>
-                  <th className="num">Overhead</th>
-                  <th className="num">Net</th>
-                  <th className="num">Collected</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeMonths.map((m) => (
-                  <tr key={m.i}>
-                    <td>{MONTHS[m.i]}</td>
-                    <td className="num">{formatCents(m.revenue)}</td>
-                    <td className="num">{formatCents(m.parts)}</td>
-                    <td className="num">{formatCents(m.overhead)}</td>
-                    <td className="num">{formatCents(m.revenue - m.parts - m.overhead)}</td>
-                    <td className="num">{formatCents(m.collected)}</td>
+            <h2 className="text-lg font-bold">
+              Profit &amp; Loss ({basis === 'accrual' ? 'accrual basis' : 'cash basis'})
+            </h2>
+            {basis === 'accrual' ? (
+              <table className="report-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th className="num">Billed</th>
+                    <th className="num">Parts cost</th>
+                    <th className="num">Overhead</th>
+                    <th className="num">Net</th>
+                    <th className="num">Collected</th>
                   </tr>
-                ))}
-                <tr style={{ fontWeight: 700, borderTop: '1px solid #9ca3af' }}>
-                  <td>Total</td>
-                  <td className="num">{formatCents(report.totals.revenue)}</td>
-                  <td className="num">{formatCents(report.totals.parts)}</td>
-                  <td className="num">{formatCents(report.totals.overhead)}</td>
-                  <td className="num">{formatCents(net)}</td>
-                  <td className="num">{formatCents(report.totals.collected)}</td>
-                </tr>
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {activeMonths.map((m) => (
+                    <tr key={m.i}>
+                      <td>{MONTHS[m.i]}</td>
+                      <td className="num">{formatCents(m.revenue)}</td>
+                      <td className="num">{formatCents(m.parts)}</td>
+                      <td className="num">{formatCents(m.overhead)}</td>
+                      <td className="num">{formatCents(m.revenue - m.parts - m.overhead)}</td>
+                      <td className="num">{formatCents(m.collected)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '1px solid #9ca3af' }}>
+                    <td>Total</td>
+                    <td className="num">{formatCents(report.totals.revenue)}</td>
+                    <td className="num">{formatCents(report.totals.parts)}</td>
+                    <td className="num">{formatCents(report.totals.overhead)}</td>
+                    <td className="num">{formatCents(net)}</td>
+                    <td className="num">{formatCents(report.totals.collected)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            ) : (
+              <table className="report-table">
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th className="num">Money in</th>
+                    <th className="num">Parts paid</th>
+                    <th className="num">Overhead</th>
+                    <th className="num">Net cash</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activeMonths.map((m) => (
+                    <tr key={m.i}>
+                      <td>{MONTHS[m.i]}</td>
+                      <td className="num">{formatCents(m.collected)}</td>
+                      <td className="num">{formatCents(m.partsPaid)}</td>
+                      <td className="num">{formatCents(m.overhead)}</td>
+                      <td className="num">{formatCents(m.collected - m.partsPaid - m.overhead)}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 700, borderTop: '1px solid #9ca3af' }}>
+                    <td>Total</td>
+                    <td className="num">{formatCents(report.totals.collected)}</td>
+                    <td className="num">{formatCents(report.totals.partsPaid)}</td>
+                    <td className="num">{formatCents(report.totals.overhead)}</td>
+                    <td className="num">{formatCents(netCash)}</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
             <p className="report-meta mt-1">
-              Billed = customer charges on jobs dated in {year} (labor + parts at your prices).
-              Collected = payments recorded in the ledger. Net = billed − parts cost − overhead.
+              {basis === 'accrual'
+                ? `Billed = customer charges on jobs dated in ${year} (labor + parts at your prices). Collected = payments recorded in the ledger. Net = billed − parts cost − overhead.`
+                : `Cash basis: money in = payments received in ${year}; parts paid by purchase date; net cash = in − parts − overhead. This is the view that matches the bank account (Schedule C cash filers report this).`}
             </p>
           </section>
+
+          {report.byMethod.length > 0 && (
+            <section>
+              <h2 className="text-lg font-bold">Collected by method — {year}</h2>
+              <table className="report-table" style={{ maxWidth: '24rem' }}>
+                <tbody>
+                  {report.byMethod.map(([method, cents]) => (
+                    <tr key={method}>
+                      <td style={{ textTransform: 'capitalize' }}>{method}</td>
+                      <td className="num">{formatCents(cents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
 
           {report.byCategory.length > 0 && (
             <section>
@@ -224,8 +336,22 @@ export default function ReportsPage() {
 
           <section>
             <h2 className="text-lg font-bold">Sales tax collected — {year}</h2>
-            <p className="mt-1">
-              <b>{formatCents(report.taxCollected)}</b> across invoices issued in {year}.
+            <table className="report-table" style={{ maxWidth: '24rem' }}>
+              <tbody>
+                {report.taxQuarters.map((cents, q) => (
+                  <tr key={q}>
+                    <td>Q{q + 1} ({MONTHS[q * 3]}–{MONTHS[q * 3 + 2]})</td>
+                    <td className="num">{formatCents(cents)}</td>
+                  </tr>
+                ))}
+                <tr style={{ fontWeight: 700, borderTop: '1px solid #9ca3af' }}>
+                  <td>Year total</td>
+                  <td className="num">{formatCents(report.taxQuarters.reduce((a, b) => a + b, 0))}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="report-meta mt-1">
+              Issued (sent or paid) invoices only, by issue date — the numbers for your filing periods.
             </p>
           </section>
 

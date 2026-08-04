@@ -65,6 +65,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     memo: invoice.memo,
     paymentInstructions: settings?.invoice_payment_instructions || null,
     paidDate: invoice.paid_at ? invoice.paid_at.slice(0, 10) : null,
+    paidCents: payments.reduce((s, p) => s + p.amount_cents, 0),
     business: {
       name: settings?.business_name ?? '',
       phone: settings?.business_phone ?? '',

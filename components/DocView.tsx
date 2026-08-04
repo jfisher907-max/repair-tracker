@@ -27,6 +27,8 @@ export interface DocData {
   memo: string | null
   paymentInstructions: string | null
   paidDate: string | null
+  /** Partial payments received so far (invoices) — renders Paid / Balance due rows. */
+  paidCents?: number
   business: { name: string; phone: string; address: string; email: string }
 }
 
@@ -139,9 +141,21 @@ export default function DocView({ doc }: { doc: DocData }) {
               </tr>
             )}
             <tr className="total-row">
-              <td>{doc.docType === 'Quote' ? 'Estimated total' : 'Total due'}</td>
+              <td>{doc.docType === 'Quote' ? 'Estimated total' : 'Total'}</td>
               <td className="num">{formatCents(doc.totalCents)}</td>
             </tr>
+            {doc.paidCents != null && doc.paidCents > 0 && doc.paidCents < doc.totalCents && (
+              <>
+                <tr>
+                  <td>Paid to date</td>
+                  <td className="num">−{formatCents(doc.paidCents)}</td>
+                </tr>
+                <tr className="total-row">
+                  <td>Balance due</td>
+                  <td className="num">{formatCents(doc.totalCents - doc.paidCents)}</td>
+                </tr>
+              </>
+            )}
           </tbody>
         </table>
 

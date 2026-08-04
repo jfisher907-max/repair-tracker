@@ -40,8 +40,8 @@ const TABLES: Record<string, string[]> = {
   ],
   settings: [
     'id', 'business_name', 'business_phone', 'business_address', 'business_email',
-    'default_labor_rate_cents', 'default_tax_rate_bp', 'invoice_payment_instructions',
-    'store_suggestions', 'created_at', 'updated_at',
+    'default_labor_rate_cents', 'default_tax_rate_bp', 'default_invoice_terms_days',
+    'invoice_payment_instructions', 'store_suggestions', 'created_at', 'updated_at',
   ],
   quotes: [
     'id', 'quote_number', 'customer_id', 'vehicle_id', 'title', 'description', 'labor_hours',
@@ -63,7 +63,7 @@ const TABLES: Record<string, string[]> = {
     'created_at', 'updated_at',
   ],
   expenses: [
-    'id', 'date', 'category', 'vendor', 'description', 'amount_cents',
+    'id', 'date', 'category', 'vendor', 'description', 'amount_cents', 'storage_path',
     'created_at', 'updated_at',
   ],
 }

@@ -153,6 +153,24 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
           <Link href={`/report?customer=${id}`} className="btn btn-sm btn-primary">
             🖨️ Print repair history
           </Link>
+          {lifetime.unpaid > 0 && (
+            <button
+              className="btn btn-sm"
+              onClick={async () => {
+                const url = `${window.location.origin}/s/${customer!.public_token}`
+                try {
+                  if (navigator.share) {
+                    await navigator.share({ title: 'Account statement', url })
+                  } else {
+                    await navigator.clipboard.writeText(url)
+                    alert('Statement link copied — text it to the customer. It always shows their current open balances.')
+                  }
+                } catch {}
+              }}
+            >
+              💳 Send statement
+            </button>
+          )}
         </div>
       </div>
 
