@@ -5,12 +5,19 @@ import type { JobWithContext } from '@/lib/data'
 import { formatCents } from '@/lib/money'
 import { vehicleLabel } from '@/lib/types'
 
+const stripeColors: Record<string, string> = {
+  unpaid: 'var(--red)',
+  partial: 'var(--accent2)',
+  paid: 'var(--green)',
+}
+
 export default function JobRow({ item }: { item: JobWithContext }) {
   const { job, vehicle, customer, totals } = item
   return (
     <Link
       href={`/jobs/${job.id}`}
-      className="card flex items-center gap-3 !py-3 transition hover:brightness-110"
+      className="card flex items-center gap-3 !py-3"
+      style={{ borderLeft: `3px solid ${stripeColors[job.payment_status] ?? 'var(--border)'}` }}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">

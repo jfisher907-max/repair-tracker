@@ -79,7 +79,12 @@ export default function BillingPage() {
         ) : (
           <div className="space-y-2">
             {quotes.map((q) => (
-              <Link key={q.id} href={`/quotes/${q.id}`} className="card flex items-center gap-3 !py-3 hover:brightness-110">
+              <Link
+                key={q.id}
+                href={`/quotes/${q.id}`}
+                className="card flex items-center gap-3 !py-3"
+                style={{ borderLeft: `3px solid ${quoteStatusColors[q.status] ?? 'var(--border)'}` }}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="text-xs font-bold" style={{ color: 'var(--accent2)' }}>{q.quote_number}</span>
@@ -107,7 +112,12 @@ export default function BillingPage() {
       ) : (
         <div className="space-y-2">
           {invoices.map((inv) => (
-            <Link key={inv.id} href={`/invoices/${inv.id}`} className="card flex items-center gap-3 !py-3 hover:brightness-110">
+            <Link
+              key={inv.id}
+              href={`/invoices/${inv.id}`}
+              className="card flex items-center gap-3 !py-3"
+              style={{ borderLeft: `3px solid ${quoteStatusColors[inv.status] ?? 'var(--border)'}` }}
+            >
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-2">
                   <span className="text-xs font-bold" style={{ color: 'var(--accent2)' }}>{inv.invoice_number}</span>

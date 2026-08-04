@@ -14,9 +14,15 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [year, setYear] = useState<'all' | number>('all')
   const [billing, setBilling] = useState<{ openQuotes: number; unpaidInvoices: number } | null>(null)
+  const [businessName, setBusinessName] = useState('')
 
   useEffect(() => {
     fetchJobsWithContext().then(setItems).catch((e) => setError(String(e.message ?? e)))
+    supabase
+      .from('settings')
+      .select('business_name')
+      .single()
+      .then(({ data }) => setBusinessName(data?.business_name ?? ''))
     Promise.all([
       supabase
         .from('quotes')
@@ -82,10 +88,17 @@ export default function Dashboard() {
     )
   }
 
+  const today = new Date().toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric',
+  })
+
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl">Dashboard</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="text-sm" style={{ color: 'var(--text3)' }}>{today}</div>
+          <h1 className="text-3xl leading-tight">{businessName || 'Dashboard'}</h1>
+        </div>
         <div className="flex items-center gap-2">
           <select
             className="select !w-auto !min-h-[38px]"
@@ -107,15 +120,16 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatTile label="Jobs" value={String(stats.count)} />
-        <StatTile label="Labor hours" value={stats.hours.toFixed(1)} />
-        <StatTile label="Total charged" value={formatCents(stats.charged)} />
-        <StatTile label="Parts spend" value={formatCents(stats.partsSpend)} />
-        <StatTile label="Profit" value={formatCents(stats.profit)} accent="var(--green)" />
+        <StatTile icon="🔧" label="Jobs" value={String(stats.count)} />
+        <StatTile icon="⏱️" label="Labor hours" value={stats.hours.toFixed(1)} />
+        <StatTile icon="💵" label="Total charged" value={formatCents(stats.charged)} />
+        <StatTile icon="🛒" label="Parts spend" value={formatCents(stats.partsSpend)} />
+        <StatTile icon="📈" label="Profit" value={formatCents(stats.profit)} accent="var(--green)" />
         <StatTile
+          icon="⚠️"
           label="Unpaid balance"
           value={formatCents(stats.unpaid)}
-          accent={stats.unpaid > 0 ? 'var(--red)' : undefined}
+          accent={stats.unpaid > 0 ? 'var(--red)' : 'var(--green)'}
         />
       </div>
 
@@ -147,7 +161,7 @@ export default function Dashboard() {
 
       {unpaidJobs.length > 0 && (
         <section className="space-y-2">
-          <h2 className="text-lg" style={{ color: 'var(--text2)' }}>Unpaid jobs</h2>
+          <h2 className="section-title">Unpaid jobs</h2>
           {unpaidJobs.map((it) => (
             <JobRow key={it.job.id} item={it} />
           ))}
@@ -155,8 +169,8 @@ export default function Dashboard() {
       )}
 
       <section className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-lg" style={{ color: 'var(--text2)' }}>Recent jobs</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="section-title flex-1">Recent jobs</h2>
           <Link href="/jobs" className="text-sm" style={{ color: 'var(--accent2)' }}>
             View all →
           </Link>
@@ -169,10 +183,23 @@ export default function Dashboard() {
   )
 }
 
-function StatTile({ label, value, accent }: { label: string; value: string; accent?: string }) {
+function StatTile({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: string
+  label: string
+  value: string
+  accent?: string
+}) {
   return (
-    <div className="stat-tile">
-      <div className="stat-label">{label}</div>
+    <div className="stat-tile" style={accent ? { borderTop: `2px solid ${accent}` } : undefined}>
+      <div className="flex items-start justify-between">
+        <div className="stat-label">{label}</div>
+        <span className="text-sm" style={{ opacity: 0.45 }}>{icon}</span>
+      </div>
       <div className="stat-value money" style={accent ? { color: accent } : undefined}>
         {value}
       </div>

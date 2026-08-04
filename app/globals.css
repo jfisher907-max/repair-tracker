@@ -231,6 +231,61 @@ a.card:active {
   transform: scale(1);
 }
 
+/* ---------- Desktop sidebar ---------- */
+
+.sidebar {
+  background: linear-gradient(180deg, #141a24 0%, #10151d 100%);
+  border-right: 1px solid var(--border);
+}
+.side-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+  padding: 0 0.75rem;
+  margin: 1.1rem 0 0.3rem;
+}
+.side-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text2);
+  border-left: 3px solid transparent;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
+    border-color var(--dur-med) var(--ease);
+}
+.side-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+.side-item.active {
+  background: rgba(240, 168, 50, 0.1);
+  color: var(--accent2);
+  border-left-color: var(--accent);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
 /* ---------- Motion ---------- */
 
 @keyframes rise-in {
