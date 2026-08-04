@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
 import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
-import { PAYMENT_METHODS, deletePayment, recordPayment } from '@/lib/payments'
+import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
 import {
   vehicleLabel,
@@ -125,12 +125,44 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     payments.length === 0
       ? (job.amount_paid_cents ?? (job.payment_status === 'paid' ? totals.total_charged_cents : 0))
       : 0
-  const balanceDue = Math.max(0, totals.total_charged_cents - paidFromLedger - legacyPaid)
+  // What the customer actually owes: an issued invoice can add sales tax on
+  // top of the job's charge math, so the balance targets the larger figure.
+  const invoicedTotal = invoices
+    .filter((i) => i.status !== 'void')
+    .reduce((s, i) => s + i.total_cents, 0)
+  const owedTarget = Math.max(totals.total_charged_cents, invoicedTotal)
+  const balanceDue = Math.max(0, owedTarget - paidFromLedger - legacyPaid)
+  // Payments recorded here default onto the job's open invoice so it settles.
+  const openInvoice = invoices.find((i) => i.status === 'draft' || i.status === 'sent')
 
-  async function updateJob(patch: Partial<Job>) {
+  /** First ledger entry on a legacy-partial job carries the old credit in, so it isn't erased. */
+  async function ensureLegacyCredit() {
+    if (payments.length > 0 || legacyPaid <= 0 || job!.payment_status === 'paid') return
+    const { error } = await supabase.from('payments').insert({
+      job_id: id,
+      amount_cents: legacyPaid,
+      method: 'other',
+      date: job!.date,
+      note: 'Balance recorded before payment tracking',
+    })
+    if (error) throw error
+  }
+
+  /** resyncPayments: money-changing edits must re-derive cached payment status from the ledger. */
+  async function updateJob(patch: Partial<Job>, opts: { resyncPayments?: boolean } = {}) {
     const { error } = await supabase.from('jobs').update(patch).eq('id', id)
-    if (error) alert(error.message)
-    else await load()
+    if (error) {
+      alert(error.message)
+      return
+    }
+    if (opts.resyncPayments) {
+      try {
+        await syncJobPayment(id)
+      } catch (e) {
+        alert(`Saved, but payment status re-sync failed: ${e instanceof Error ? e.message : e}`)
+      }
+    }
+    await load()
   }
 
   async function saveLine() {
@@ -167,14 +199,24 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       setTimeout(() => setAddedFlash(null), 2500)
       descriptionRef.current?.focus()
     }
+    // Parts change the amount owed — keep cached payment status honest.
+    try {
+      await syncJobPayment(id)
+    } catch {}
     await load()
   }
 
   async function deleteLine(lineId: string) {
     if (!confirm('Delete this part line?')) return
     const { error } = await supabase.from('part_lines').delete().eq('id', lineId)
-    if (error) alert(error.message)
-    else await load()
+    if (error) {
+      alert(error.message)
+      return
+    }
+    try {
+      await syncJobPayment(id)
+    } catch {}
+    await load()
   }
 
   async function deleteReceipt(r: Receipt) {
@@ -307,7 +349,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 if (balanceDue <= 0) return
                 if (!confirm(`Record a ${formatCents(balanceDue)} payment settling this job?`)) return
                 try {
-                  await recordPayment({ jobId: id, amountCents: balanceDue, method: 'cash', date: todayIso() })
+                  await ensureLegacyCredit()
+                  await recordPayment({
+                    jobId: id,
+                    invoiceId: openInvoice?.id ?? null,
+                    amountCents: balanceDue,
+                    method: 'cash',
+                    date: todayIso(),
+                  })
                   await load()
                 } catch (e) {
                   alert(e instanceof Error ? e.message : String(e))
@@ -563,9 +612,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <button
               className="btn btn-sm btn-primary"
               onClick={async () => {
-                await updateJob({
-                  parts_charged_override_cents: overrideInput.trim() === '' ? null : parseMoney(overrideInput),
-                })
+                await updateJob(
+                  { parts_charged_override_cents: overrideInput.trim() === '' ? null : parseMoney(overrideInput) },
+                  { resyncPayments: true },
+                )
                 setEditingOverride(false)
               }}
             >
@@ -694,7 +744,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 }
                 setPayingBusy(true)
                 try {
-                  await recordPayment({ jobId: id, amountCents: amount, method: payMethod, date: payDate })
+                  await ensureLegacyCredit()
+                  await recordPayment({
+                    jobId: id,
+                    invoiceId: openInvoice?.id ?? null,
+                    amountCents: amount,
+                    method: payMethod,
+                    date: payDate,
+                  })
                   setPayAmount('')
                   await load()
                 } catch (e) {

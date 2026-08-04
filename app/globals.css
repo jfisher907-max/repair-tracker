@@ -397,6 +397,21 @@ a.card:active {
   border-top: 1px solid #9ca3af;
 }
 
+/* Wide document tables compress on phones — never horizontal page scroll. */
+@media (max-width: 640px) {
+  .report-root {
+    padding-left: 0.9rem !important;
+    padding-right: 0.9rem !important;
+  }
+  .report-table {
+    font-size: 0.7rem;
+  }
+  .report-table th,
+  .report-table td {
+    padding: 0.15rem 0.25rem;
+  }
+}
+
 /* ---------- Guards ---------- */
 
 @media (prefers-reduced-motion: reduce) {

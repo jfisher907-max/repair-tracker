@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
+import { syncJobPayment } from '@/lib/payments'
 
 interface VehicleOption extends Vehicle {
   customer: Customer | null
@@ -157,6 +158,11 @@ export default function JobForm({ job }: { job?: Job }) {
       if (editing) {
         const { error } = await supabase.from('jobs').update(payload).eq('id', job.id)
         if (error) throw error
+        // Labor changes move the amount owed — re-derive cached payment
+        // status from the ledger (no-op for jobs without ledger entries).
+        try {
+          await syncJobPayment(job.id)
+        } catch {}
         router.push(`/jobs/${job.id}`)
       } else {
         const { data, error } = await supabase.from('jobs').insert(payload).select('id').single()

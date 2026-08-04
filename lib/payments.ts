@@ -51,44 +51,76 @@ export async function recordPayment(input: {
 export async function deletePayment(paymentId: string, jobId: string): Promise<void> {
   const { error } = await supabase.from('payments').delete().eq('id', paymentId)
   if (error) throw error
-  await syncJobPayment(jobId)
+  // allowEmpty: deleting the last payment must reset the job to unpaid.
+  await syncJobPayment(jobId, { allowEmpty: true })
 }
 
-/** Re-derive job payment_status/amount_paid_cents and linked invoice statuses from the ledger. */
-export async function syncJobPayment(jobId: string): Promise<void> {
-  const [{ data: payments }, { data: totals }, { data: invoices }] = await Promise.all([
+/**
+ * Re-derive job payment_status/amount_paid_cents and linked invoice statuses
+ * from the ledger.
+ *
+ * - Every read is error-checked: a transient failed read must throw, never be
+ *   treated as "zero payments" (which would flip a paid job back to unpaid).
+ * - An empty ledger is a no-op by default so jobs settled before payment
+ *   tracking existed keep their cached status; pass allowEmpty when emptiness
+ *   is meaningful (deleting the last payment).
+ * - The amount owed is the greater of the job's charge math and its open
+ *   invoice total — invoices can add sales tax on top of the job total.
+ */
+export async function syncJobPayment(
+  jobId: string,
+  opts: { allowEmpty?: boolean } = {},
+): Promise<void> {
+  const [paymentsRes, totalsRes, invoicesRes] = await Promise.all([
     supabase.from('payments').select('amount_cents, invoice_id, date').eq('job_id', jobId),
     supabase.from('job_totals').select('total_charged_cents').eq('job_id', jobId).single(),
     supabase.from('invoices').select('id, total_cents, status').eq('job_id', jobId),
   ])
-  const paid = (payments ?? []).reduce((s, p) => s + p.amount_cents, 0)
-  const total = totals?.total_charged_cents ?? 0
+  if (paymentsRes.error) throw paymentsRes.error
+  if (totalsRes.error) throw totalsRes.error
+  if (invoicesRes.error) throw invoicesRes.error
 
-  const status = paid <= 0 ? 'unpaid' : paid >= total && total > 0 ? 'paid' : 'partial'
-  await supabase
+  const payments = paymentsRes.data ?? []
+  if (payments.length === 0 && !opts.allowEmpty) return
+
+  const invoices = invoicesRes.data ?? []
+  const paid = payments.reduce((s, p) => s + p.amount_cents, 0)
+  const invoicedTotal = invoices
+    .filter((i) => i.status !== 'void')
+    .reduce((s, i) => s + i.total_cents, 0)
+  const target = Math.max(totalsRes.data?.total_charged_cents ?? 0, invoicedTotal)
+
+  const status = paid <= 0 ? 'unpaid' : paid >= target && target > 0 ? 'paid' : 'partial'
+  const { error: jobErr } = await supabase
     .from('jobs')
     .update({ payment_status: status, amount_paid_cents: paid > 0 ? paid : null })
     .eq('id', jobId)
+  if (jobErr) throw jobErr
 
   // Settle (or unsettle) invoices this job's ledger covers.
-  for (const inv of invoices ?? []) {
+  for (const inv of invoices) {
     if (inv.status === 'void') continue
-    const invPaid = (payments ?? [])
+    const invPaid = payments
       .filter((p) => p.invoice_id === inv.id)
       .reduce((s, p) => s + p.amount_cents, 0)
     const covered = invPaid >= inv.total_cents && inv.total_cents > 0
     if (covered && inv.status !== 'paid') {
-      const lastDate = (payments ?? [])
+      const lastDate = payments
         .filter((p) => p.invoice_id === inv.id)
         .map((p) => p.date)
         .sort()
         .pop()
-      await supabase
+      const { error } = await supabase
         .from('invoices')
         .update({ status: 'paid', paid_at: lastDate ? `${lastDate}T00:00:00Z` : new Date().toISOString() })
         .eq('id', inv.id)
+      if (error) throw error
     } else if (!covered && inv.status === 'paid') {
-      await supabase.from('invoices').update({ status: 'sent', paid_at: null }).eq('id', inv.id)
+      const { error } = await supabase
+        .from('invoices')
+        .update({ status: 'sent', paid_at: null })
+        .eq('id', inv.id)
+      if (error) throw error
     }
   }
 }

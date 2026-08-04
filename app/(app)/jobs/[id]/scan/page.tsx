@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { use, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getAccessToken, supabase } from '@/lib/supabase'
+import { syncJobPayment } from '@/lib/payments'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import type { ExtractionResult } from '@/lib/types'
 
@@ -211,6 +212,11 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
         )
         if (linesErr) throw linesErr
       }
+      // New lines change the amount owed — keep cached payment status honest
+      // (no-op for jobs without ledger entries).
+      try {
+        await syncJobPayment(jobId)
+      } catch {}
       router.push(`/jobs/${jobId}`)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))

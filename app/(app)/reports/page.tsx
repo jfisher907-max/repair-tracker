@@ -26,7 +26,15 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchJobsWithContext().then(setJobs)
-    supabase.from('payments').select('*').then(({ data }) => setPayments((data as Payment[]) ?? []))
+    // Exclude payments belonging to soft-deleted jobs — their revenue is
+    // excluded too, so counting their cash would skew Collected vs Billed.
+    supabase
+      .from('payments')
+      .select('*, job:jobs(deleted_at)')
+      .then(({ data }) => {
+        const rows = (data as (Payment & { job: { deleted_at: string | null } | null })[]) ?? []
+        setPayments(rows.filter((p) => !p.job?.deleted_at).map(({ job: _job, ...p }) => p as Payment))
+      })
     supabase.from('expenses').select('*').then(({ data }) => setExpenses((data as Expense[]) ?? []))
     supabase.from('invoices').select('*').then(({ data }) => setInvoices((data as Invoice[]) ?? []))
     supabase.from('settings').select('*').single().then(({ data }) => setSettings(data as Settings))
