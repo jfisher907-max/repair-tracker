@@ -1,6 +1,7 @@
 'use client'
 
 import { use, useEffect, useState } from 'react'
+import DocBrand from '@/components/DocBrand'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
@@ -31,6 +32,7 @@ interface PublicStatement {
  * PUBLIC customer statement — QuickBooks-style: every open balance on one
  * page, one total due. Token-keyed like quotes/invoices; customer-safe
  * fields only. Balances update live, so the same link stays current.
+ * Bold Brand template, matching quotes/invoices.
  */
 export default function PublicStatementPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)
@@ -58,82 +60,95 @@ export default function PublicStatementPage({ params }: { params: Promise<{ toke
     .map((i) => ({ ...i, balance: Math.max(0, i.total_cents - i.paid_cents) }))
     .filter((i) => i.balance > 0)
   const totalDue = open.reduce((s, i) => s + i.balance, 0)
-  const contact = [statement.business.phone, statement.business.address, statement.business.email]
-    .map((s) => (s ?? '').trim())
-    .filter(Boolean)
-    .join(' · ')
   const generated = new Date().toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   })
 
   return (
-    <div className="min-h-dvh" style={{ background: '#e5e7eb' }}>
-      <div className="report-root mx-auto max-w-[8.5in] px-8 py-10">
-        <header>
-          {statement.business.name ? (
-            <>
-              <h1 className="text-3xl font-bold">{statement.business.name}</h1>
-              <div className="mt-1 text-lg" style={{ color: '#374151' }}>Account Statement</div>
-            </>
-          ) : (
-            <h1 className="text-3xl font-bold">Account Statement</h1>
-          )}
-          {contact && <div className="mt-0.5 text-sm" style={{ color: '#4b5563' }}>{contact}</div>}
-          <hr className="report-rule" />
-          <div className="report-meta grid grid-cols-2 gap-x-8 gap-y-0.5">
-            <div><b>Customer:</b> {statement.customer_name}</div>
-            <div><b>As of:</b> {generated}</div>
-          </div>
-        </header>
+    <div className="min-h-dvh px-0 py-0 sm:px-4 sm:py-8" style={{ background: '#e5e7eb' }}>
+      <div className="doc-root">
+        <DocBrand
+          business={statement.business}
+          docType="Statement"
+          docRef={generated}
+          badge={open.length > 0 ? 'Open balance' : 'Paid in full'}
+        />
 
-        <main className="mt-6">
+        <div className="doc-body">
+          <dl className="doc-meta">
+            <div>
+              <dt>Prepared for</dt>
+              <dd>{statement.customer_name}</dd>
+            </div>
+            <div>
+              <dt>As of</dt>
+              <dd>{generated}</dd>
+            </div>
+            <div>
+              <dt>Open items</dt>
+              <dd>{open.length}</dd>
+            </div>
+          </dl>
+
           {open.length === 0 ? (
-            <p className="text-lg">No outstanding balance — thank you, you&apos;re all paid up.</p>
+            <div className="doc-job">
+              <h2>Nothing owed</h2>
+              <p>No outstanding balance — thank you, you&apos;re all paid up.</p>
+            </div>
           ) : (
             <>
-              <table className="report-table">
+              <table className="doc-table doc-table--tight" style={{ marginTop: 26 }}>
                 <thead>
                   <tr>
                     <th>Date</th>
                     <th>Work</th>
                     <th>Invoice</th>
-                    <th className="num">Total</th>
-                    <th className="num">Paid</th>
-                    <th className="num">Balance</th>
+                    <th className="doc-n doc-col-optional">Total</th>
+                    <th className="doc-n doc-col-optional">Paid</th>
+                    <th className="doc-n">Balance</th>
                   </tr>
                 </thead>
                 <tbody>
                   {open.map((i) => (
                     <tr key={i.job_number}>
-                      <td>{formatDate(i.date)}</td>
-                      <td>{i.title}</td>
-                      <td>{i.invoice_number ?? '—'}</td>
-                      <td className="num">{formatCents(i.total_cents)}</td>
-                      <td className="num">{formatCents(i.paid_cents)}</td>
-                      <td className="num">{formatCents(i.balance)}</td>
+                      <td className="doc-dim">{formatDate(i.date)}</td>
+                      <td className="doc-desc">{i.title}</td>
+                      <td className="doc-dim">{i.invoice_number ?? '—'}</td>
+                      <td className="doc-n doc-dim doc-col-optional">{formatCents(i.total_cents)}</td>
+                      <td className="doc-n doc-dim doc-col-optional">{formatCents(i.paid_cents)}</td>
+                      <td className="doc-n">{formatCents(i.balance)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              <table className="report-table report-totals" style={{ maxWidth: '20rem', marginLeft: 'auto' }}>
-                <tbody>
-                  <tr className="total-row">
-                    <td>Total due</td>
-                    <td className="num">{formatCents(totalDue)}</td>
-                  </tr>
-                </tbody>
-              </table>
+
+              <div className="doc-totals-solo">
+                <div className="doc-due-card">
+                  <div>
+                    <span className="doc-due-label">Total due</span>
+                    <span className="doc-due-sub">
+                      {open.length} open item{open.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="doc-due-amt">{formatCents(totalDue)}</div>
+                </div>
+              </div>
             </>
           )}
-        </main>
 
-        {statement.business.payment_instructions && open.length > 0 && (
-          <footer className="mt-8 border-t pt-3 text-sm" style={{ borderColor: '#9ca3af' }}>
-            <p className="whitespace-pre-wrap" style={{ color: '#374151' }}>
-              <b>Payment:</b> {statement.business.payment_instructions}
+          <footer className="doc-foot">
+            {statement.business.payment_instructions && open.length > 0 ? (
+              <p>
+                <b>Payment:</b> {statement.business.payment_instructions}
+              </p>
+            ) : (
+              <p />
+            )}
+            <p className="doc-foot-ref">
+              Statement · {open.length > 0 ? `${formatCents(totalDue)} due` : 'paid in full'}
             </p>
           </footer>
-        )}
+        </div>
       </div>
     </div>
   )

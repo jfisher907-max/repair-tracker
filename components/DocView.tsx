@@ -1,5 +1,6 @@
 'use client'
 
+import DocBrand from '@/components/DocBrand'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { formatTaxRate } from '@/lib/billing'
@@ -40,10 +41,6 @@ export interface DocData {
  */
 export default function DocView({ doc }: { doc: DocData }) {
   const isQuote = doc.docType === 'Quote'
-  const phoneEmail = [doc.business.phone, doc.business.email]
-    .map((s) => (s ?? '').trim())
-    .filter(Boolean)
-    .join(' · ')
   const showLinePrices = doc.lines.length > 1 || doc.lines.some((l) => Number(l.qty) !== 1)
 
   const paid = doc.paidCents ?? 0
@@ -88,38 +85,7 @@ export default function DocView({ doc }: { doc: DocData }) {
 
   return (
     <div className="doc-root">
-      <header className="doc-brand">
-        <div className="doc-brand-id">
-          <div className="doc-brand-row">
-            <svg width="38" height="38" viewBox="0 0 40 40" role="img" aria-hidden="true">
-              <rect width="40" height="40" rx="9" fill="#f59e0b" />
-              <path fill="#1c1917" d="M8 24 L20 12 H32 L20 24 Z" />
-              <path fill="#1c1917" opacity=".68" d="M8 30 L16 22 H24 L16 30 Z" />
-            </svg>
-            <h1>{doc.business.name || `${doc.docType} ${doc.number}`}</h1>
-          </div>
-          {(doc.business.address || phoneEmail) && (
-            <p className="doc-contact">
-              {doc.business.address && (
-                <>
-                  {doc.business.address}
-                  <br />
-                </>
-              )}
-              {phoneEmail}
-            </p>
-          )}
-        </div>
-        <div className="doc-id">
-          {doc.business.name && (
-            <>
-              <div className="doc-type">{doc.docType}</div>
-              <div className="doc-num">{doc.number}</div>
-            </>
-          )}
-          <span className="doc-badge">{doc.status}</span>
-        </div>
-      </header>
+      <DocBrand business={doc.business} docType={doc.docType} docRef={doc.number} badge={doc.status} />
 
       <div className="doc-body">
         <dl className="doc-meta">

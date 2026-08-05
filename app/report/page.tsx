@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import AuthGate from '@/components/AuthGate'
+import DocBrand from '@/components/DocBrand'
 import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
 import { formatCents, formatMiles } from '@/lib/money'
@@ -47,8 +48,7 @@ function Report() {
 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [scopeVehicle, setScopeVehicle] = useState<Vehicle | null>(null)
-  const [businessName, setBusinessName] = useState('')
-  const [bizContact, setBizContact] = useState('')
+  const [business, setBusiness] = useState({ name: '', phone: '', address: '', email: '' })
   const [jobs, setJobs] = useState<ReportJob[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -60,13 +60,12 @@ function Report() {
     async function load() {
       try {
         const { data: settings } = await supabase.from('settings').select('*').single()
-        setBusinessName(settings?.business_name ?? '')
-        setBizContact(
-          [settings?.business_phone, settings?.business_address, settings?.business_email]
-            .map((s: string | null | undefined) => (s ?? '').trim())
-            .filter(Boolean)
-            .join(' · '),
-        )
+        setBusiness({
+          name: settings?.business_name ?? '',
+          phone: settings?.business_phone ?? '',
+          address: settings?.business_address ?? '',
+          email: settings?.business_email ?? '',
+        })
 
         // Single-job scope loads directly and skips the vehicle fan-out.
         if (jobId) {
@@ -260,155 +259,195 @@ function Report() {
       </div>
 
       {/* The document */}
-      <div className="report-root mx-auto max-w-[8.5in] px-8 py-10">
-        <header>
-          {/* No business name yet: the document title carries the header alone. */}
-          {businessName ? (
-            <>
-              <h1 className="text-3xl font-bold">{businessName}</h1>
-              <div className="mt-1 text-lg" style={{ color: '#374151' }}>{docTitle}</div>
-            </>
-          ) : (
-            <h1 className="text-3xl font-bold">{docTitle}</h1>
-          )}
-          {bizContact && (
-            <div className="mt-0.5 text-sm" style={{ color: '#4b5563' }}>{bizContact}</div>
-          )}
-          <hr className="report-rule" />
-          <div className="report-meta grid grid-cols-2 gap-x-8 gap-y-0.5 sm:grid-cols-4">
-            <div><b>Customer:</b> {customer?.name ?? '—'}</div>
-            {jobId ? (
-              <>
-                <div><b>Vehicle:</b> {vehicleLabel(scopeVehicle)}</div>
-                <div><b>Job:</b> {singleJob?.job.job_number ?? '—'} · {formatDate(singleJob?.job.date)}</div>
-              </>
-            ) : (
-              <>
-                {vehicleId && <div><b>Vehicle:</b> {vehicleLabel(scopeVehicle)}</div>}
-                <div><b>Period:</b> {period}</div>
-                <div><b>Jobs on record:</b> {filtered.length}</div>
-              </>
-            )}
-            <div><b>Generated:</b> {generated}</div>
-            {/* Vehicle identity matters most at resale — print it when scoped to one vehicle. */}
-            {(jobId || vehicleId) && scopeVehicle?.vin && (
-              <div className="col-span-2"><b>VIN:</b> {scopeVehicle.vin}</div>
-            )}
-            {(jobId || vehicleId) && scopeVehicle?.license_plate && (
-              <div><b>Plate:</b> {scopeVehicle.license_plate}</div>
-            )}
-            {vehicleId && lastMiles != null && (
-              <div><b>Last recorded mileage:</b> {formatMiles(lastMiles)} mi</div>
-            )}
-          </div>
-        </header>
+      <div className="mx-auto max-w-[8.5in] px-0 py-0 sm:px-4 sm:py-8 print:p-0">
+        <div className="doc-root">
+          <DocBrand
+            business={business}
+            docType={docTitle}
+            docRef={jobId ? singleJob?.job.job_number ?? null : null}
+          />
 
-        <main className="mt-6">
-          {filtered.length === 0 && <p>No jobs in the selected range.</p>}
-          {filtered.map(({ job, vehicle, lines }) => {
-            const totals = computeTotals(job, lines)
-            // With a parts-charged override in place, per-line receipt prices
-            // would expose actual cost vs. markup — so lines print without
-            // prices and only the charged totals show.
-            const showLinePrices = showPrices && job.parts_charged_override_cents == null
-            return (
-              <section key={job.id} className="report-job">
-                <h2 className="text-lg font-bold">
-                  {formatDate(job.date)} — {job.title}
-                </h2>
-                <div className="report-meta">
-                  {vehicleLabel(vehicle)}
-                  {job.odometer_miles != null && <> · {formatMiles(job.odometer_miles)} miles</>}
-                  {Number(job.labor_hours) > 0 && <> · {Number(job.labor_hours)} labor hours</>}
-                  {' · '}{job.job_number}
+          <div className="doc-body">
+            <dl className="doc-meta">
+              <div>
+                <dt>Prepared for</dt>
+                <dd>{customer?.name ?? '—'}</dd>
+              </div>
+              {jobId ? (
+                <>
+                  <div>
+                    <dt>Vehicle</dt>
+                    <dd>{vehicleLabel(scopeVehicle)}</dd>
+                  </div>
+                  <div>
+                    <dt>Job date</dt>
+                    <dd>{formatDate(singleJob?.job.date)}</dd>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {vehicleId && (
+                    <div>
+                      <dt>Vehicle</dt>
+                      <dd>{vehicleLabel(scopeVehicle)}</dd>
+                    </div>
+                  )}
+                  <div>
+                    <dt>Period</dt>
+                    <dd>{period}</dd>
+                  </div>
+                  <div>
+                    <dt>Jobs on record</dt>
+                    <dd>{filtered.length}</dd>
+                  </div>
+                </>
+              )}
+              <div>
+                <dt>Generated</dt>
+                <dd>{generated}</dd>
+              </div>
+              {/* Vehicle identity matters most at resale — print it when scoped to one vehicle. */}
+              {(jobId || vehicleId) && scopeVehicle?.vin && (
+                <div>
+                  <dt>VIN</dt>
+                  <dd>{scopeVehicle.vin}</dd>
                 </div>
-                {job.work_performed && (
-                  <p className="mt-1.5 whitespace-pre-wrap text-[0.92rem]">{job.work_performed}</p>
-                )}
+              )}
+              {(jobId || vehicleId) && scopeVehicle?.license_plate && (
+                <div>
+                  <dt>Plate</dt>
+                  <dd>{scopeVehicle.license_plate}</dd>
+                </div>
+              )}
+              {vehicleId && lastMiles != null && (
+                <div>
+                  <dt>Last recorded mileage</dt>
+                  <dd>{formatMiles(lastMiles)} mi</dd>
+                </div>
+              )}
+            </dl>
 
-                {lines.length > 0 && (
-                  <table className="report-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: '18%' }}>Part #</th>
-                        <th>Description</th>
-                        <th className="num" style={{ width: '8%' }}>Qty</th>
-                        {showLinePrices && (
-                          <>
-                            <th className="num" style={{ width: '13%' }}>Unit</th>
-                            <th className="num" style={{ width: '13%' }}>Amount</th>
-                          </>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lines.map((l) => (
-                        <tr key={l.id}>
-                          <td>{l.part_number ?? ''}</td>
-                          <td>{l.description}</td>
-                          <td className="num">{Number(l.qty)}</td>
+            {filtered.length === 0 && (
+              <p className="doc-section-sub" style={{ marginTop: 24 }}>No jobs in the selected range.</p>
+            )}
+            {filtered.map(({ job, vehicle, lines }) => {
+              const totals = computeTotals(job, lines)
+              // With a parts-charged override in place, per-line receipt prices
+              // would expose actual cost vs. markup — so lines print without
+              // prices and only the charged totals show.
+              const showLinePrices = showPrices && job.parts_charged_override_cents == null
+              return (
+                <section key={job.id} className="doc-section">
+                  <h2>
+                    {formatDate(job.date)} — {job.title}
+                  </h2>
+                  <div className="doc-section-sub">
+                    {vehicleLabel(vehicle)}
+                    {job.odometer_miles != null && <> · {formatMiles(job.odometer_miles)} miles</>}
+                    {Number(job.labor_hours) > 0 && <> · {Number(job.labor_hours)} labor hours</>}
+                    {' · '}{job.job_number}
+                  </div>
+                  {job.work_performed && (
+                    <p className="doc-section-body">{job.work_performed}</p>
+                  )}
+
+                  {lines.length > 0 && (
+                    <table className="doc-table doc-table--tight">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '18%' }}>Part #</th>
+                          <th>Description</th>
+                          <th className="doc-n" style={{ width: '8%' }}>Qty</th>
                           {showLinePrices && (
                             <>
-                              {/* Customer-facing prices are the CHARGE basis —
-                                  Jake's cost never prints, even per line. */}
-                              <td className="num">{formatCents(l.unit_charge_cents ?? l.unit_cost_cents)}</td>
-                              <td className="num">{formatCents(l.line_charge_total_cents)}</td>
+                              <th className="doc-n" style={{ width: '13%' }}>Unit</th>
+                              <th className="doc-n" style={{ width: '13%' }}>Amount</th>
                             </>
                           )}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                      </thead>
+                      <tbody>
+                        {lines.map((l) => (
+                          <tr key={l.id}>
+                            <td className="doc-dim">{l.part_number ?? ''}</td>
+                            <td className="doc-desc">{l.description}</td>
+                            <td className="doc-n doc-dim">{Number(l.qty)}</td>
+                            {showLinePrices && (
+                              <>
+                                {/* Customer-facing prices are the CHARGE basis —
+                                    Jake's cost never prints, even per line. */}
+                                <td className="doc-n doc-dim">{formatCents(l.unit_charge_cents ?? l.unit_cost_cents)}</td>
+                                <td className="doc-n">{formatCents(l.line_charge_total_cents)}</td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
 
-                {showPrices && (
-                  <table className="report-table report-totals" style={{ maxWidth: '20rem', marginLeft: 'auto' }}>
-                    <tbody>
-                      <tr>
-                        <td>Parts</td>
-                        <td className="num">{formatCents(totals.parts_charged_cents)}</td>
-                      </tr>
-                      <tr>
-                        <td>
+                  {showPrices && (
+                    <div className="doc-totals-solo" style={{ marginTop: 10 }}>
+                      <div className="doc-trow">
+                        <span className="doc-tl">Parts</span>
+                        <span className="doc-tv">{formatCents(totals.parts_charged_cents)}</span>
+                      </div>
+                      <div className="doc-trow">
+                        <span className="doc-tl">
                           Labor
                           {Number(job.labor_hours) > 0 && (
-                            <> ({Number(job.labor_hours)} hr @ {formatCents(job.labor_rate_cents)}/hr)</>
+                            <> · {Number(job.labor_hours)} hr @ {formatCents(job.labor_rate_cents)}/hr</>
                           )}
-                        </td>
-                        <td className="num">{formatCents(totals.labor_charge_cents)}</td>
-                      </tr>
-                      <tr className="total-row">
-                        <td>Total</td>
-                        <td className="num">{formatCents(totals.total_charged_cents)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                )}
-              </section>
-            )
-          })}
-        </main>
+                        </span>
+                        <span className="doc-tv">{formatCents(totals.labor_charge_cents)}</span>
+                      </div>
+                      <div className="doc-trow doc-total">
+                        <span className="doc-tl">Total</span>
+                        <span className="doc-tv">{formatCents(totals.total_charged_cents)}</span>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )
+            })}
 
-        <footer className="mt-8 border-t pt-3 text-sm" style={{ borderColor: '#9ca3af' }}>
-          <p>
-            {jobId ? (
-              <>
-                <b>{singleJob?.job.job_number}</b> · <b>{totalHours.toFixed(1)}</b> labor hours
-                {showPrices && (
-                  <> · total <b>{formatCents(grandTotal)}</b></>
-                )}
-              </>
-            ) : (
-              <>
-                <b>{filtered.length}</b> job{filtered.length === 1 ? '' : 's'} on record ·{' '}
-                <b>{totalHours.toFixed(1)}</b> labor hours
-                {showPrices && (
-                  <> · grand total <b>{formatCents(grandTotal)}</b></>
-                )}
-              </>
+            {showPrices && filtered.length > 1 && (
+              <div className="doc-totals-solo" style={{ marginTop: 26 }}>
+                <div className="doc-due-card">
+                  <div>
+                    <span className="doc-due-label">Grand total</span>
+                    <span className="doc-due-sub">
+                      {filtered.length} jobs · {totalHours.toFixed(1)} labor hours
+                    </span>
+                  </div>
+                  <div className="doc-due-amt">{formatCents(grandTotal)}</div>
+                </div>
+              </div>
             )}
-          </p>
-        </footer>
+
+            <footer className="doc-foot">
+              <p>
+                {jobId ? (
+                  <>
+                    <b>{singleJob?.job.job_number}</b> · <b>{totalHours.toFixed(1)}</b> labor hours
+                    {showPrices && (
+                      <> · total <b>{formatCents(grandTotal)}</b></>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <b>{filtered.length}</b> job{filtered.length === 1 ? '' : 's'} on record ·{' '}
+                    <b>{totalHours.toFixed(1)}</b> labor hours
+                    {showPrices && (
+                      <> · grand total <b>{formatCents(grandTotal)}</b></>
+                    )}
+                  </>
+                )}
+              </p>
+              <p className="doc-foot-ref">Generated {generated}</p>
+            </footer>
+          </div>
+        </div>
       </div>
     </div>
   )

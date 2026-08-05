@@ -638,6 +638,22 @@ a.card:active {
 .doc-foot p { margin: 0; white-space: pre-wrap; }
 .doc-foot .doc-foot-ref { color: var(--doc-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* Statements & service records: multi-column data tables and per-section totals. */
+.doc-table--tight tbody td { font-size: 12.5px; padding: 8px 0; }
+.doc-table--tight thead th { white-space: nowrap; }
+.doc-totals-solo { width: 320px; max-width: 100%; margin-left: auto; }
+.doc-section { margin-top: 30px; break-inside: avoid; }
+.doc-section + .doc-section { border-top: 1px solid var(--doc-line); padding-top: 26px; }
+.doc-section h2 {
+  font-family: var(--font-doc-display), Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+.doc-section-sub { margin-top: 3px; font-size: 12px; color: var(--doc-muted); }
+.doc-section-body { margin-top: 4px; font-size: 13px; color: var(--doc-muted); line-height: 1.55; white-space: pre-wrap; max-width: 44em; }
+.doc-section .doc-table { margin-top: 14px; }
+
 @media (max-width: 700px) {
   .doc-brand { padding: 26px 24px 24px; }
   .doc-body { padding: 26px 24px 30px; }
@@ -654,6 +670,11 @@ a.card:active {
   .doc-table td.doc-n { padding-left: 10px; }
   .doc-due-amt { font-size: 23px; }
   .doc-due-card { padding: 14px 16px; }
+  /* Wide statement tables drop the intermediate money columns on phones —
+     Balance is the number that matters; never horizontal scroll. */
+  .doc-col-optional { display: none; }
+  .doc-table--tight tbody td { font-size: 11.5px; }
+  .doc-table--tight thead th { font-size: 9px; letter-spacing: 0.08em; }
 }
 
 /* ---------- Guards ---------- */
