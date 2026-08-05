@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed } from "next/font/google";
+import { Barlow, Barlow_Condensed, Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import SWRegister from "@/components/SWRegister";
 
@@ -13,6 +13,20 @@ const barlowCondensed = Barlow_Condensed({
   variable: "--font-display",
   subsets: ["latin"],
   weight: ["500", "600", "700"],
+});
+
+// Customer-facing documents (quotes/invoices) use their own faces so the
+// paper reads distinct from the app chrome.
+const inter = Inter({
+  variable: "--font-doc-body",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-doc-display",
+  subsets: ["latin"],
+  weight: ["500", "700"],
 });
 
 export const metadata: Metadata = {
@@ -41,7 +55,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${barlow.variable} ${barlowCondensed.variable}`}>
+      <body className={`${barlow.variable} ${barlowCondensed.variable} ${inter.variable} ${spaceGrotesk.variable}`}>
         <SWRegister />
         {children}
       </body>

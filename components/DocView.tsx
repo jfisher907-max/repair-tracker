@@ -33,67 +33,133 @@ export interface DocData {
 }
 
 /**
- * The customer-facing quote/invoice document. Shared by the owner's print
- * pages and the public token pages, so both always render identically.
- * Charge basis only — costs and profit never appear here.
+ * The customer-facing quote/invoice document ("Bold Brand" template).
+ * Shared by the owner's print pages and the public token pages, so both
+ * always render identically. Charge basis only — costs and profit never
+ * appear here.
  */
 export default function DocView({ doc }: { doc: DocData }) {
-  const contact = [doc.business.phone, doc.business.address, doc.business.email]
+  const isQuote = doc.docType === 'Quote'
+  const phoneEmail = [doc.business.phone, doc.business.email]
     .map((s) => (s ?? '').trim())
     .filter(Boolean)
     .join(' · ')
   const showLinePrices = doc.lines.length > 1 || doc.lines.some((l) => Number(l.qty) !== 1)
 
+  const paid = doc.paidCents ?? 0
+  /** Dates inside the due-card sub line wrap as a unit, never mid-date. */
+  const nbsp = (s: string) => s.replace(/ /g, ' ')
+  const isSettled = !isQuote && (doc.paidDate != null || (paid > 0 && paid >= doc.totalCents))
+  const isVoid = doc.status === 'void'
+  const balanceCents = Math.max(0, doc.totalCents - paid)
+
+  // The charcoal card carries the one number that matters: what the
+  // customer owes (invoice), what the work will run (quote), or PAID.
+  const card = isVoid
+    ? null
+    : isQuote
+      ? {
+          settled: false,
+          label: 'Estimated total',
+          sub: doc.secondaryDate ? `valid until ${nbsp(formatDate(doc.secondaryDate))}` : null,
+          amount: doc.totalCents,
+        }
+      : isSettled
+        ? {
+            settled: true,
+            label: 'Paid in full',
+            sub: doc.paidDate ? `received ${nbsp(formatDate(doc.paidDate))}` : null,
+            amount: doc.totalCents,
+          }
+        : {
+            settled: false,
+            label: 'Balance due',
+            sub: doc.secondaryDate ? `by ${nbsp(formatDate(doc.secondaryDate))}` : null,
+            amount: balanceCents,
+          }
+
+  const footRef = isVoid
+    ? `${doc.number} · void`
+    : isQuote
+      ? `${doc.number} · estimated ${formatCents(doc.totalCents)}`
+      : isSettled
+        ? `${doc.number} · paid in full`
+        : `${doc.number} · ${formatCents(balanceCents)} due${doc.secondaryDate ? ` ${formatDate(doc.secondaryDate)}` : ''}`
+
   return (
-    <div className="report-root mx-auto max-w-[8.5in] px-8 py-10">
-      <header>
-        {doc.business.name ? (
-          <>
-            <h1 className="text-3xl font-bold">{doc.business.name}</h1>
-            <div className="mt-1 text-lg" style={{ color: '#374151' }}>
-              {doc.docType} {doc.number}
-            </div>
-          </>
-        ) : (
-          <h1 className="text-3xl font-bold">
-            {doc.docType} {doc.number}
-          </h1>
-        )}
-        {contact && (
-          <div className="mt-0.5 text-sm" style={{ color: '#4b5563' }}>{contact}</div>
-        )}
-        <hr className="report-rule" />
-        <div className="report-meta grid grid-cols-2 gap-x-8 gap-y-0.5 sm:grid-cols-4">
-          <div><b>Customer:</b> {doc.customerName}</div>
-          {doc.vehicleLabel && <div><b>Vehicle:</b> {doc.vehicleLabel}</div>}
-          <div><b>{doc.docType === 'Quote' ? 'Quote date' : 'Invoice date'}:</b> {formatDate(doc.date)}</div>
-          {doc.secondaryDate && (
-            <div>
-              <b>{doc.docType === 'Quote' ? 'Valid until' : 'Due'}:</b> {formatDate(doc.secondaryDate)}
-            </div>
+    <div className="doc-root">
+      <header className="doc-brand">
+        <div className="doc-brand-id">
+          <div className="doc-brand-row">
+            <svg width="38" height="38" viewBox="0 0 40 40" role="img" aria-hidden="true">
+              <rect width="40" height="40" rx="9" fill="#f59e0b" />
+              <path fill="#1c1917" d="M8 24 L20 12 H32 L20 24 Z" />
+              <path fill="#1c1917" opacity=".68" d="M8 30 L16 22 H24 L16 30 Z" />
+            </svg>
+            <h1>{doc.business.name || `${doc.docType} ${doc.number}`}</h1>
+          </div>
+          {(doc.business.address || phoneEmail) && (
+            <p className="doc-contact">
+              {doc.business.address && (
+                <>
+                  {doc.business.address}
+                  <br />
+                </>
+              )}
+              {phoneEmail}
+            </p>
           )}
-          {doc.paidDate && (
-            <div style={{ color: '#166534' }}><b>PAID</b> {formatDate(doc.paidDate)}</div>
+        </div>
+        <div className="doc-id">
+          {doc.business.name && (
+            <>
+              <div className="doc-type">{doc.docType}</div>
+              <div className="doc-num">{doc.number}</div>
+            </>
           )}
+          <span className="doc-badge">{doc.status}</span>
         </div>
       </header>
 
-      <main className="mt-6">
-        <h2 className="text-lg font-bold">{doc.title}</h2>
-        {doc.bodyText && (
-          <p className="mt-1.5 whitespace-pre-wrap text-[0.92rem]">{doc.bodyText}</p>
-        )}
+      <div className="doc-body">
+        <dl className="doc-meta">
+          <div>
+            <dt>{isQuote ? 'Prepared for' : 'Billed to'}</dt>
+            <dd>{doc.customerName}</dd>
+          </div>
+          {doc.vehicleLabel && (
+            <div>
+              <dt>Vehicle</dt>
+              <dd>{doc.vehicleLabel}</dd>
+            </div>
+          )}
+          <div>
+            <dt>{isQuote ? 'Quote date' : 'Issue date'}</dt>
+            <dd>{formatDate(doc.date)}</dd>
+          </div>
+          {doc.secondaryDate && (
+            <div>
+              <dt>{isQuote ? 'Valid until' : 'Due date'}</dt>
+              <dd>{formatDate(doc.secondaryDate)}</dd>
+            </div>
+          )}
+        </dl>
+
+        <div className="doc-job">
+          <h2>{doc.title}</h2>
+          {doc.bodyText && <p>{doc.bodyText}</p>}
+        </div>
 
         {doc.lines.length > 0 && (
-          <table className="report-table">
+          <table className="doc-table">
             <thead>
               <tr>
                 <th>Description</th>
-                <th className="num" style={{ width: '10%' }}>Qty</th>
+                <th className="doc-n">Qty</th>
                 {showLinePrices && (
                   <>
-                    <th className="num" style={{ width: '15%' }}>Unit</th>
-                    <th className="num" style={{ width: '15%' }}>Amount</th>
+                    <th className="doc-n">Unit</th>
+                    <th className="doc-n">Amount</th>
                   </>
                 )}
               </tr>
@@ -101,12 +167,12 @@ export default function DocView({ doc }: { doc: DocData }) {
             <tbody>
               {doc.lines.map((l, i) => (
                 <tr key={i}>
-                  <td>{l.description}</td>
-                  <td className="num">{Number(l.qty)}</td>
+                  <td className="doc-desc">{l.description}</td>
+                  <td className="doc-n doc-dim">{Number(l.qty)}</td>
                   {showLinePrices && (
                     <>
-                      <td className="num">{formatCents(l.unit_charge_cents)}</td>
-                      <td className="num">{formatCents(l.line_total_cents)}</td>
+                      <td className="doc-n doc-dim">{formatCents(l.unit_charge_cents)}</td>
+                      <td className="doc-n">{formatCents(l.line_total_cents)}</td>
                     </>
                   )}
                 </tr>
@@ -115,67 +181,75 @@ export default function DocView({ doc }: { doc: DocData }) {
           </table>
         )}
 
-        <table className="report-table report-totals" style={{ maxWidth: '22rem', marginLeft: 'auto' }}>
-          <tbody>
+        <div className="doc-settle">
+          {doc.memo && (
+            <div className="doc-memo">
+              <span className="doc-memo-label">Memo</span>
+              <p>{doc.memo}</p>
+            </div>
+          )}
+          <div className="doc-totals">
             {doc.linesCents !== 0 && (
-              <tr>
-                <td>Parts</td>
-                <td className="num">{formatCents(doc.linesCents)}</td>
-              </tr>
+              <div className="doc-trow">
+                <span className="doc-tl">Parts</span>
+                <span className="doc-tv">{formatCents(doc.linesCents)}</span>
+              </div>
             )}
             {doc.laborCents !== 0 && (
-              <tr>
-                <td>
+              <div className="doc-trow">
+                <span className="doc-tl">
                   Labor
-                  {doc.laborHours > 0 && (
-                    <> ({Number(doc.laborHours)} hr @ {formatCents(doc.laborRateCents)}/hr)</>
-                  )}
-                </td>
-                <td className="num">{formatCents(doc.laborCents)}</td>
-              </tr>
+                  {doc.laborHours > 0 && <> · {Number(doc.laborHours)} hr @ {formatCents(doc.laborRateCents)}/hr</>}
+                </span>
+                <span className="doc-tv">{formatCents(doc.laborCents)}</span>
+              </div>
             )}
             {doc.taxRateBp > 0 && (
-              <tr>
-                <td>Sales tax ({formatTaxRate(doc.taxRateBp)})</td>
-                <td className="num">{formatCents(doc.taxCents)}</td>
-              </tr>
+              <div className="doc-trow">
+                <span className="doc-tl">Sales tax ({formatTaxRate(doc.taxRateBp)})</span>
+                <span className="doc-tv">{formatCents(doc.taxCents)}</span>
+              </div>
             )}
-            <tr className="total-row">
-              <td>{doc.docType === 'Quote' ? 'Estimated total' : 'Total'}</td>
-              <td className="num">{formatCents(doc.totalCents)}</td>
-            </tr>
-            {doc.paidCents != null && doc.paidCents > 0 && doc.paidCents < doc.totalCents && (
-              <>
-                <tr>
-                  <td>Paid to date</td>
-                  <td className="num">−{formatCents(doc.paidCents)}</td>
-                </tr>
-                <tr className="total-row">
-                  <td>Balance due</td>
-                  <td className="num">{formatCents(doc.totalCents - doc.paidCents)}</td>
-                </tr>
-              </>
+            {!isQuote && (
+              <div className="doc-trow doc-total">
+                <span className="doc-tl">Total</span>
+                <span className="doc-tv">{formatCents(doc.totalCents)}</span>
+              </div>
             )}
-          </tbody>
-        </table>
+            {!isQuote && paid > 0 && paid < doc.totalCents && (
+              <div className="doc-trow doc-paid">
+                <span className="doc-tl">Paid to date</span>
+                <span className="doc-tv">−{formatCents(paid)}</span>
+              </div>
+            )}
+            {card && (
+              <div className={`doc-due-card${card.settled ? ' doc-settled' : ''}`}>
+                <div>
+                  <span className="doc-due-label">{card.label}</span>
+                  {card.sub && <span className="doc-due-sub">{card.sub}</span>}
+                </div>
+                <div className="doc-due-amt">{formatCents(card.amount)}</div>
+              </div>
+            )}
+          </div>
+        </div>
 
-        {doc.memo && (
-          <p className="mt-4 whitespace-pre-wrap text-sm" style={{ color: '#374151' }}>{doc.memo}</p>
-        )}
-      </main>
-
-      <footer className="mt-8 border-t pt-3 text-sm" style={{ borderColor: '#9ca3af' }}>
-        {doc.docType === 'Quote' ? (
-          <p style={{ color: '#4b5563' }}>
-            This is an estimate. Final billing reflects actual parts and labor; you&apos;ll be
-            contacted before any significant change.
-          </p>
-        ) : doc.paymentInstructions ? (
-          <p className="whitespace-pre-wrap" style={{ color: '#374151' }}>
-            <b>Payment:</b> {doc.paymentInstructions}
-          </p>
-        ) : null}
-      </footer>
+        <footer className="doc-foot">
+          {isQuote ? (
+            <p>
+              This is an estimate. Final billing reflects actual parts and labor; you&apos;ll be
+              contacted before any significant change.
+            </p>
+          ) : doc.paymentInstructions ? (
+            <p>
+              <b>Payment:</b> {doc.paymentInstructions}
+            </p>
+          ) : (
+            <p />
+          )}
+          <p className="doc-foot-ref">{footRef}</p>
+        </footer>
+      </div>
     </div>
   )
 }
