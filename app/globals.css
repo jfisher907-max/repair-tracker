@@ -690,11 +690,30 @@ a.card:active {
 @media print {
   body { background: #ffffff; }
   .no-print { display: none !important; }
+  /* App chrome never prints — only the document does. */
+  .sidebar, .appbar, .tabbar { display: none !important; }
+  .app-frame { display: block !important; padding: 0 !important; }
+  main.page-anim { max-width: none; padding: 0; }
+  .doc-wrap { padding: 0 !important; }
   .report-root { padding: 0 !important; box-shadow: none; }
   .doc-root { max-width: none; border-radius: 0; box-shadow: none; }
+  /* Tighter paper spacing so a one-job document stays one sheet. */
+  .doc-brand { padding: 20px 30px 18px; }
+  .doc-body { padding: 22px 30px 22px; }
+  .doc-meta { padding-bottom: 16px; gap: 12px 24px; }
+  .doc-job { margin: 18px 0 14px; }
+  .doc-table thead th { padding-bottom: 6px; }
+  .doc-table tbody td { padding: 7px 0; }
+  .doc-settle { margin-top: 16px; }
+  .doc-trow { padding: 4px 0; }
+  .doc-due-card { margin-top: 10px; padding: 13px 18px; }
+  .doc-section { margin-top: 20px; }
+  .doc-section + .doc-section { padding-top: 18px; }
+  .doc-foot { margin-top: 18px; padding-top: 12px; }
+  .doc-settle, .doc-totals, .doc-totals-solo, .doc-due-card, .doc-foot { break-inside: avoid; }
   *, *::before, *::after {
     animation: none !important;
     transition: none !important;
   }
-  @page { size: letter; margin: 0.75in; }
+  @page { size: letter; margin: 0.55in; }
 }

@@ -71,7 +71,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-dvh pb-24 sm:grid sm:grid-cols-[232px_1fr] sm:pb-0">
+    <div className="app-frame min-h-dvh pb-24 sm:grid sm:grid-cols-[232px_1fr] sm:pb-0">
       {/* Desktop sidebar — the app reads like a real back office on a PC */}
       <aside className="sidebar sticky top-0 hidden h-dvh flex-col px-3 py-4 sm:flex">
         <Link href="/" className="display flex items-center gap-2 px-2 text-xl font-semibold">

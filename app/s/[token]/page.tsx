@@ -65,7 +65,7 @@ export default function PublicStatementPage({ params }: { params: Promise<{ toke
   })
 
   return (
-    <div className="min-h-dvh px-0 py-0 sm:px-4 sm:py-8" style={{ background: '#e5e7eb' }}>
+    <div className="doc-wrap min-h-dvh px-0 py-0 sm:px-4 sm:py-8" style={{ background: '#e5e7eb' }}>
       <div className="doc-root">
         <DocBrand
           business={statement.business}

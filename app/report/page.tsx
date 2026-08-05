@@ -259,7 +259,7 @@ function Report() {
       </div>
 
       {/* The document */}
-      <div className="mx-auto max-w-[8.5in] px-0 py-0 sm:px-4 sm:py-8 print:p-0">
+      <div className="doc-wrap mx-auto max-w-[8.5in] px-0 py-0 sm:px-4 sm:py-8">
         <div className="doc-root">
           <DocBrand
             business={business}
