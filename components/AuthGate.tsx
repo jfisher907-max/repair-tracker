@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import WingMark from '@/components/WingMark'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -28,8 +29,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
-        <div className="text-2xl display" style={{ color: 'var(--text3)' }}>
-          <span className="splash-mark">🔧</span> Repair Tracker
+        <div className="display flex items-center gap-2 text-2xl" style={{ color: 'var(--text3)' }}>
+          <span className="splash-mark"><WingMark size={26} /></span> Repair Tracker
         </div>
       </div>
     )
@@ -58,7 +59,7 @@ function LoginForm() {
     <div className="flex min-h-dvh items-center justify-center p-4">
       <form onSubmit={signIn} className="panel-in card w-full max-w-sm space-y-4">
         <div className="text-center">
-          <div className="text-4xl">🔧</div>
+          <div className="flex justify-center"><WingMark size={44} /></div>
           <h1 className="mt-1 text-2xl">Repair Tracker</h1>
           <p className="text-sm" style={{ color: 'var(--text3)' }}>
             Sign in to continue

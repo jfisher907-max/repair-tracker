@@ -1,5 +1,7 @@
 'use client'
 
+import WingMark from '@/components/WingMark'
+
 /**
  * The charcoal brand band shared by every customer-facing document —
  * quotes, invoices, statements, and printed service records — so all of
@@ -33,11 +35,7 @@ export default function DocBrand({
     <header className="doc-brand">
       <div className="doc-brand-id">
         <div className="doc-brand-row">
-          <svg width="38" height="38" viewBox="0 0 40 40" role="img" aria-hidden="true">
-            <rect width="40" height="40" rx="9" fill="#f59e0b" />
-            <path fill="#1c1917" d="M8 24 L20 12 H32 L20 24 Z" />
-            <path fill="#1c1917" opacity=".68" d="M8 30 L16 22 H24 L16 30 Z" />
-          </svg>
+          <WingMark size={38} />
           <h1>{business.name || `${docType}${docRef ? ` ${docRef}` : ''}`}</h1>
         </div>
         {(business.address || phoneEmail) && (

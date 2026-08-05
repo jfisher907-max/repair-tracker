@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import WingMark from '@/components/WingMark'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -73,8 +74,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-dvh pb-24 sm:grid sm:grid-cols-[232px_1fr] sm:pb-0">
       {/* Desktop sidebar — the app reads like a real back office on a PC */}
       <aside className="sidebar sticky top-0 hidden h-dvh flex-col px-3 py-4 sm:flex">
-        <Link href="/" className="display px-2 text-xl font-semibold">
-          🔧 Repair Tracker
+        <Link href="/" className="display flex items-center gap-2 px-2 text-xl font-semibold">
+          <WingMark size={22} /> Repair Tracker
         </Link>
         <nav className="mt-2 flex-1">
           {sideNav.map((group) => (
@@ -114,8 +115,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Phone header (desktop brand lives in the sidebar) */}
         <header className="appbar sticky top-0 z-40 flex items-center justify-between px-4 pb-3 sm:hidden">
-          <Link href="/" className="text-xl display font-semibold">
-            🔧 Repair Tracker
+          <Link href="/" className="display flex items-center gap-2 text-xl font-semibold">
+            <WingMark size={22} /> Repair Tracker
           </Link>
           <Link
             href="/settings"
