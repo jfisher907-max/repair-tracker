@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getAccessToken, supabase } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
+import ReceiptPreview, { type ReceiptKind } from '@/components/ReceiptPreview'
 import { EXPENSE_CATEGORIES } from '@/lib/payments'
 import { prepareUpload } from '@/lib/upload'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
@@ -23,6 +24,8 @@ export default function ExpensesPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [scanNote, setScanNote] = useState('')
+  /** The receipt stays on screen while its details are typed in. */
+  const [preview, setPreview] = useState<{ url: string | null; kind: ReceiptKind; name: string } | null>(null)
   const [form, setForm] = useState({
     date: todayIso(), category: 'Other', vendor: '', description: '', amount: '', storage_path: '',
   })
@@ -32,7 +35,8 @@ export default function ExpensesPage() {
     setScanning(true)
     setScanNote('Uploading…')
     try {
-      const { file } = await prepareUpload(picked)
+      const { file, kind } = await prepareUpload(picked)
+      setPreview({ url: kind === 'file' ? null : URL.createObjectURL(file), kind, name: file.name })
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
       const path = `expenses/${crypto.randomUUID()}.${ext}`
       const { error: upErr } = await supabase.storage.from('receipts').upload(path, file, {
@@ -72,6 +76,13 @@ export default function ExpensesPage() {
     setScanning(false)
   }
 
+  // Object URLs from a freshly picked file need handing back; signed URLs don't.
+  useEffect(() => {
+    const url = preview?.url
+    if (!url || !url.startsWith('blob:')) return
+    return () => URL.revokeObjectURL(url)
+  }, [preview])
+
   const load = useCallback(async () => {
     const { data } = await supabase.from('expenses').select('*').order('date', { ascending: false })
     setExpenses((data as Expense[]) ?? [])
@@ -105,6 +116,20 @@ export default function ExpensesPage() {
     setEditingId(e.id)
     setAdding(true)
     setScanNote('')
+    setPreview(null)
+    // Pull the stored receipt back up so edits can be checked against it.
+    if (e.storage_path) {
+      const path = e.storage_path
+      supabase.storage.from('receipts').createSignedUrl(path, 3600).then(({ data }) => {
+        if (data?.signedUrl) {
+          setPreview({
+            url: data.signedUrl,
+            kind: /\.pdf$/i.test(path) ? 'pdf' : 'image',
+            name: path.split('/').pop() ?? '',
+          })
+        }
+      })
+    }
     setForm({
       date: e.date,
       category: e.category,
@@ -141,6 +166,7 @@ export default function ExpensesPage() {
     setForm({ date: form.date, category: form.category, vendor: form.vendor, description: '', amount: '', storage_path: '' })
     setEditingId(null)
     setScanNote('')
+    setPreview(null)
     await load()
   }
 
@@ -166,7 +192,7 @@ export default function ExpensesPage() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <button className="btn btn-primary" onClick={() => { setAdding(!adding); setEditingId(null) }}>
+          <button className="btn btn-primary" onClick={() => { setAdding(!adding); setEditingId(null); setPreview(null) }}>
             {adding ? 'Close' : '+ Add expense'}
           </button>
         </div>
@@ -192,6 +218,11 @@ export default function ExpensesPage() {
               <span className="flash-in text-sm" style={{ color: 'var(--text2)' }}>{scanNote}</span>
             )}
           </div>
+          {preview && (
+            <div className="col-span-2 sm:col-span-3">
+              <ReceiptPreview url={preview.url} kind={preview.kind} fileName={preview.name} />
+            </div>
+          )}
           <div>
             <label className="label">Date</label>
             <input className="input" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />

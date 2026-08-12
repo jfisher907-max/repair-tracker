@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { use, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getAccessToken, supabase } from '@/lib/supabase'
+import ReceiptPreview from '@/components/ReceiptPreview'
 import { syncJobPayment } from '@/lib/payments'
 import { prepareUpload } from '@/lib/upload'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
@@ -63,6 +64,12 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
     })
   }, [])
 
+  // Object URLs outlive the component unless we hand them back.
+  useEffect(() => {
+    if (!photoUrl) return
+    return () => URL.revokeObjectURL(photoUrl)
+  }, [photoUrl])
+
   const runningTotalCents = useMemo(
     () =>
       rows.reduce((sum, r) => {
@@ -82,7 +89,8 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
     const { file, kind } = await prepareUpload(picked)
     setPhotoKind(kind)
     setFileName(file.name)
-    setPhotoUrl(kind === 'image' ? URL.createObjectURL(file) : null)
+    // PDFs preview too — the browser's own viewer renders them in the pane.
+    setPhotoUrl(kind === 'file' ? null : URL.createObjectURL(file))
     try {
       setStatusMsg('Uploading…')
       const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
@@ -191,7 +199,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
+    <div className={`mx-auto space-y-4 ${phase === 'review' ? 'max-w-5xl' : 'max-w-3xl'}`}>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl">Scan receipt</h1>
         <Link href={`/jobs/${jobId}`} className="btn btn-sm">← Back to job</Link>
@@ -224,7 +232,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
         <div className="card space-y-3 text-center">
           <div className="animate-pulse text-4xl">🔍</div>
           <p style={{ color: 'var(--text2)' }}>{statusMsg}</p>
-          {photoUrl ? (
+          {photoUrl && photoKind === 'image' ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt="Receipt" className="mx-auto max-h-72 rounded-lg" />
           ) : (
@@ -239,8 +247,8 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
       )}
 
       {phase === 'review' && (
-        <div className="panel-in grid gap-4 lg:grid-cols-[1fr_280px]">
-          <div className="space-y-3">
+        <div className="panel-in grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,44%)]">
+          <div className="order-2 min-w-0 space-y-3 lg:order-1">
             {notice && (
               <div
                 className="rounded-lg border px-3 py-2 text-sm"
@@ -366,17 +374,10 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
 
-          <div className="card self-start">
-            <div className="label">{photoKind === 'pdf' ? 'PDF receipt' : 'Photo'}</div>
-            {photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photoUrl} alt="Receipt" className="w-full rounded-lg" />
-            ) : (
-              <p className="text-center text-4xl">
-                {photoKind === 'pdf' ? '📄' : '🧾'}
-                <span className="mt-1 block text-xs" style={{ color: 'var(--text3)' }}>{fileName}</span>
-              </p>
-            )}
+          {/* Receipt sits above the form on a phone, beside it on a PC —
+              and stays put while the line items scroll. */}
+          <div className="order-1 min-w-0 lg:order-2 lg:sticky lg:top-4 lg:self-start">
+            <ReceiptPreview url={photoUrl} kind={photoKind} fileName={fileName} />
           </div>
         </div>
       )}
