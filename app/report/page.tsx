@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import AuthGate from '@/components/AuthGate'
 import DocBrand from '@/components/DocBrand'
+import { BRAND_NAME } from '@/lib/brand'
 import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
 import { formatCents, formatMiles } from '@/lib/money'
@@ -182,7 +183,7 @@ function Report() {
     }
     if (title.trim()) document.title = title.trim().replace(/—\s*$/, '').trim()
     return () => {
-      document.title = 'Repair Tracker'
+      document.title = BRAND_NAME
     }
   }, [jobs, customer, scopeVehicle, jobId, vehicleId])
 
@@ -444,7 +445,6 @@ function Report() {
                   </>
                 )}
               </p>
-              <p className="doc-foot-ref">Generated {generated}</p>
             </footer>
           </div>
         </div>

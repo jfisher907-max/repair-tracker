@@ -2,6 +2,8 @@
 
 import { use, useEffect, useState } from 'react'
 import DocView, { type DocData } from '@/components/DocView'
+import { BRAND_NAME } from '@/lib/brand'
+import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import type { DocLine } from '@/lib/types'
 
@@ -45,6 +47,11 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
       else setInvoice(data as PublicInvoice)
     })
   }, [token])
+
+  const loaded = invoice && invoice !== 'missing' ? invoice : null
+  useDocumentTitle(
+    loaded ? `Invoice ${loaded.invoice_number} — ${loaded.business.name || BRAND_NAME}` : null,
+  )
 
   if (invoice === null) {
     return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading invoice…</div>

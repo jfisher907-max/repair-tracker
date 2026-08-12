@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
+import { BRAND_NAME } from '@/lib/brand'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { unpaidBalanceCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
@@ -58,10 +59,10 @@ export default function ReportsPage() {
   }, [])
 
   useEffect(() => {
-    const name = settings?.business_name || 'Shop'
+    const name = settings?.business_name || BRAND_NAME
     document.title = `${name} — Reports ${year}`
     return () => {
-      document.title = 'Repair Tracker'
+      document.title = BRAND_NAME
     }
   }, [settings, year])
 

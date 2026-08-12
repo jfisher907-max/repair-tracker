@@ -2,6 +2,8 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import DocView, { type DocData } from '@/components/DocView'
+import { BRAND_NAME } from '@/lib/brand'
+import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import type { DocLine } from '@/lib/types'
 
@@ -41,6 +43,11 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   useEffect(() => {
     load()
   }, [load])
+
+  const loaded = quote && quote !== 'missing' ? quote : null
+  useDocumentTitle(
+    loaded ? `Quote ${loaded.quote_number} — ${loaded.business.name || BRAND_NAME}` : null,
+  )
 
   if (quote === null) {
     return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading quote…</div>

@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Barlow, Barlow_Condensed, Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import SWRegister from "@/components/SWRegister";
+import { BRAND_NAME } from "@/lib/brand";
 
 const barlow = Barlow({
   variable: "--font-body",
@@ -30,12 +31,12 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Repair Tracker",
-  description: "Customers, vehicles, jobs, parts, and receipts for the shop.",
+  title: BRAND_NAME,
+  description: "Quotes, invoices, jobs, parts, and receipts for the shop.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Repair Tracker",
+    title: BRAND_NAME,
   },
 };
 

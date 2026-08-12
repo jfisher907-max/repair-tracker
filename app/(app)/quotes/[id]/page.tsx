@@ -5,6 +5,7 @@ import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import QuoteForm from '@/components/QuoteForm'
 import DocView, { type DocData } from '@/components/DocView'
+import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { computeQuoteTotals, quoteStatusColors } from '@/lib/billing'
 import {
@@ -55,6 +56,10 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     load()
   }, [load])
+
+  useDocumentTitle(
+    quote ? `${quote.quote_number} Quote — ${customer?.name ?? ''}`.replace(/—\s*$/, '').trim() : null,
+  )
 
   if (!quote) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 

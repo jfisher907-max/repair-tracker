@@ -2,6 +2,8 @@
 
 import { use, useEffect, useState } from 'react'
 import DocBrand from '@/components/DocBrand'
+import { BRAND_NAME } from '@/lib/brand'
+import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
@@ -44,6 +46,9 @@ export default function PublicStatementPage({ params }: { params: Promise<{ toke
       else setStatement(data as PublicStatement)
     })
   }, [token])
+
+  const loaded = statement && statement !== 'missing' ? statement : null
+  useDocumentTitle(loaded ? `Statement — ${loaded.business.name || BRAND_NAME}` : null)
 
   if (statement === null) {
     return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading statement…</div>
@@ -136,18 +141,13 @@ export default function PublicStatementPage({ params }: { params: Promise<{ toke
             </>
           )}
 
-          <footer className="doc-foot">
-            {statement.business.payment_instructions && open.length > 0 ? (
+          {statement.business.payment_instructions && open.length > 0 && (
+            <footer className="doc-foot">
               <p>
                 <b>Payment:</b> {statement.business.payment_instructions}
               </p>
-            ) : (
-              <p />
-            )}
-            <p className="doc-foot-ref">
-              Statement · {open.length > 0 ? `${formatCents(totalDue)} due` : 'paid in full'}
-            </p>
-          </footer>
+            </footer>
+          )}
         </div>
       </div>
     </div>

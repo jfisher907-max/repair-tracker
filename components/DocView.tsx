@@ -75,14 +75,6 @@ export default function DocView({ doc }: { doc: DocData }) {
             amount: balanceCents,
           }
 
-  const footRef = isVoid
-    ? `${doc.number} · void`
-    : isQuote
-      ? `${doc.number} · estimated ${formatCents(doc.totalCents)}`
-      : isSettled
-        ? `${doc.number} · paid in full`
-        : `${doc.number} · ${formatCents(balanceCents)} due${doc.secondaryDate ? ` ${formatDate(doc.secondaryDate)}` : ''}`
-
   return (
     <div className="doc-root">
       <DocBrand business={doc.business} docType={doc.docType} docRef={doc.number} badge={doc.status} />
@@ -200,21 +192,20 @@ export default function DocView({ doc }: { doc: DocData }) {
           </div>
         </div>
 
-        <footer className="doc-foot">
-          {isQuote ? (
-            <p>
-              This is an estimate. Final billing reflects actual parts and labor; you&apos;ll be
-              contacted before any significant change.
-            </p>
-          ) : doc.paymentInstructions ? (
-            <p>
-              <b>Payment:</b> {doc.paymentInstructions}
-            </p>
-          ) : (
-            <p />
-          )}
-          <p className="doc-foot-ref">{footRef}</p>
-        </footer>
+        {(isQuote || doc.paymentInstructions) && (
+          <footer className="doc-foot">
+            {isQuote ? (
+              <p>
+                This is an estimate. Final billing reflects actual parts and labor; you&apos;ll be
+                contacted before any significant change.
+              </p>
+            ) : (
+              <p>
+                <b>Payment:</b> {doc.paymentInstructions}
+              </p>
+            )}
+          </footer>
+        )}
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { clientForRequest, unauthorized } from '@/lib/server'
+import { BRAND_NAME, BRAND_SLUG } from '@/lib/brand'
 
 // "Export all data" — Jake's insurance policy against vendor lock-in.
 // A zip of CSVs (money stays in integer cents, as stored) + every receipt image.
@@ -114,7 +115,7 @@ export async function GET(request: Request) {
   zip.file(
     'README.txt',
     [
-      'Repair Tracker export',
+      `${BRAND_NAME} export`,
       `Generated: ${new Date().toISOString()}`,
       '',
       'All *_cents columns are money in integer US cents (divide by 100 for dollars).',
@@ -127,7 +128,7 @@ export async function GET(request: Request) {
   return new Response(new Uint8Array(buffer), {
     headers: {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="repair-tracker-export-${stamp}.zip"`,
+      'Content-Disposition': `attachment; filename="${BRAND_SLUG}-export-${stamp}.zip"`,
     },
   })
 }

@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import WingMark from '@/components/WingMark'
+import { BRAND_NAME } from '@/lib/brand'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
@@ -75,7 +76,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Desktop sidebar — the app reads like a real back office on a PC */}
       <aside className="sidebar sticky top-0 hidden h-dvh flex-col px-3 py-4 sm:flex">
         <Link href="/" className="display flex items-center gap-2 px-2 text-xl font-semibold">
-          <WingMark size={22} /> Repair Tracker
+          <WingMark size={22} /> {BRAND_NAME}
         </Link>
         <nav className="mt-2 flex-1">
           {sideNav.map((group) => (
@@ -116,7 +117,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         {/* Phone header (desktop brand lives in the sidebar) */}
         <header className="appbar sticky top-0 z-40 flex items-center justify-between px-4 pb-3 sm:hidden">
           <Link href="/" className="display flex items-center gap-2 text-xl font-semibold">
-            <WingMark size={22} /> Repair Tracker
+            <WingMark size={22} /> {BRAND_NAME}
           </Link>
           <Link
             href="/settings"

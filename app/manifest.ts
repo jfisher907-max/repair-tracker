@@ -1,10 +1,11 @@
 import type { MetadataRoute } from 'next'
+import { BRAND_NAME } from '@/lib/brand'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Repair Tracker',
-    short_name: 'Repairs',
-    description: 'Customers, vehicles, jobs, parts, and receipts for the shop.',
+    name: BRAND_NAME,
+    short_name: BRAND_NAME,
+    description: 'Quotes, invoices, jobs, parts, and receipts for the shop.',
     start_url: '/',
     display: 'standalone',
     background_color: '#0b0e13',

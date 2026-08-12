@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { use, useCallback, useEffect, useState } from 'react'
 import DocView, { type DocData } from '@/components/DocView'
+import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { quoteStatusColors } from '@/lib/billing'
 import { PAYMENT_METHODS, recordPayment } from '@/lib/payments'
@@ -40,6 +41,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     load()
   }, [load])
+
+  useDocumentTitle(
+    invoice ? `${invoice.invoice_number} Invoice — ${invoice.customer_name}` : null,
+  )
 
   if (!invoice) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 

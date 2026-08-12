@@ -1,6 +1,8 @@
-# Repair Tracker
+# Wings N Things
 
-Single-user car repair shop tracker: customers → vehicles → jobs → parts & receipt photos → printable customer repair history. Built for Jake; runs on a phone (installable PWA) and PC against the same cloud backend.
+Single-user car repair shop system: customers → vehicles → jobs → parts & receipt photos → quotes, invoices, statements, and printable repair history. Built for Jake; runs on a phone (installable PWA) and PC against the same cloud backend.
+
+The shop name shown in the app chrome lives in `lib/brand.ts`; the name printed on customer documents comes from Settings → business name.
 
 **Stack:** Next.js 16 (App Router) + TypeScript + Tailwind v4 · Supabase (Postgres, Auth, Storage) · Vercel · Anthropic API for receipt reading (optional).
 

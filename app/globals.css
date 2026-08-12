@@ -636,7 +636,6 @@ a.card:active {
   color: var(--doc-muted);
 }
 .doc-foot p { margin: 0; white-space: pre-wrap; }
-.doc-foot .doc-foot-ref { color: var(--doc-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* Statements & service records: multi-column data tables and per-section totals. */
 .doc-table--tight tbody td { font-size: 12.5px; padding: 8px 0; }

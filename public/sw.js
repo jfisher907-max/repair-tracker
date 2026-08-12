@@ -2,7 +2,7 @@
 // instant open + a graceful failure when there's no connection.
 // Bump CACHE on strategy changes; SWRegister reloads the page once when a new
 // worker takes over, so deploys reach open tabs without a manual hard-refresh.
-const CACHE = 'repair-tracker-v2'
+const CACHE = 'wings-n-things-v3'
 const SHELL = ['/', '/manifest.webmanifest', '/icon', '/icon-192', '/apple-icon']
 
 self.addEventListener('install', (event) => {

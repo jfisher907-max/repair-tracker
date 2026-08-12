@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getAccessToken, supabase } from '@/lib/supabase'
+import { BRAND_SLUG } from '@/lib/brand'
 import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
 
@@ -119,7 +120,7 @@ export default function SettingsPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `repair-tracker-export-${new Date().toISOString().slice(0, 10)}.zip`
+      a.download = `${BRAND_SLUG}-export-${new Date().toISOString().slice(0, 10)}.zip`
       a.click()
       URL.revokeObjectURL(url)
     } catch (e) {
