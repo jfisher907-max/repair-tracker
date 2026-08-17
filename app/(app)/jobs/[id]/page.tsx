@@ -66,6 +66,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set())
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
+  const [editingLabor, setEditingLabor] = useState(false)
+  const [savingLabor, setSavingLabor] = useState(false)
+  const [laborHoursInput, setLaborHoursInput] = useState('')
+  const [laborRateInput, setLaborRateInput] = useState('')
   const [editingOverride, setEditingOverride] = useState(false)
   const [overrideInput, setOverrideInput] = useState('')
 
@@ -163,6 +167,36 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       }
     }
     await load()
+  }
+
+  /** Half-hour steps: the unit a shop actually books time in. */
+  function bumpHours(current: string, delta: number): string {
+    const next = Math.max(0, (Number(current) || 0) + delta)
+    return String(Number(next.toFixed(2)))
+  }
+
+  function openLaborEditor() {
+    setLaborHoursInput(String(Number(job!.labor_hours)))
+    setLaborRateInput(centsToInput(job!.labor_rate_cents))
+    setEditingLabor(true)
+  }
+
+  async function saveLabor() {
+    const hours = Number(laborHoursInput)
+    const rate = parseMoney(laborRateInput)
+    if (!Number.isFinite(hours) || hours < 0) {
+      alert('Hours must be a number, like 1.5.')
+      return
+    }
+    if (rate == null || rate < 0) {
+      alert('Rate must be a dollar amount, like 90.')
+      return
+    }
+    setSavingLabor(true)
+    // Labor moves the amount owed, so the cached payment status has to follow.
+    await updateJob({ labor_hours: hours, labor_rate_cents: rate }, { resyncPayments: true })
+    setSavingLabor(false)
+    setEditingLabor(false)
   }
 
   async function saveLine() {
@@ -382,6 +416,91 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <p className="whitespace-pre-wrap">{job.work_performed}</p>
         </div>
       )}
+
+      {/* Labor — adjusted right here, no trip through Edit job. */}
+      <div className="card space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="label !mb-0">Labor</span>
+          {!editingLabor && (
+            <button className="btn btn-sm" onClick={openLaborEditor}>
+              ✎ Adjust
+            </button>
+          )}
+        </div>
+
+        {editingLabor ? (
+          <div className="panel-in space-y-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <label className="label">Hours</label>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="btn btn-sm !min-h-[44px] !px-3"
+                    aria-label="Half an hour less"
+                    onClick={() => setLaborHoursInput(bumpHours(laborHoursInput, -0.5))}
+                  >
+                    −
+                  </button>
+                  <input
+                    className="input !min-h-[44px] text-center"
+                    inputMode="decimal"
+                    aria-label="Labor hours"
+                    value={laborHoursInput}
+                    onChange={(e) => setLaborHoursInput(e.target.value)}
+                  />
+                  <button
+                    className="btn btn-sm !min-h-[44px] !px-3"
+                    aria-label="Half an hour more"
+                    onClick={() => setLaborHoursInput(bumpHours(laborHoursInput, 0.5))}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="label">Rate ($/hr)</label>
+                <input
+                  className="input !min-h-[44px]"
+                  inputMode="decimal"
+                  aria-label="Labor rate"
+                  value={laborRateInput}
+                  onChange={(e) => setLaborRateInput(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-sm" style={{ color: 'var(--text2)' }}>
+                Labor charge{' '}
+                <b className="money">
+                  {formatCents(
+                    Math.round((Number(laborHoursInput) || 0) * (parseMoney(laborRateInput) ?? 0)),
+                  )}
+                </b>
+              </span>
+              <div className="flex gap-2">
+                <button className="btn btn-sm" onClick={() => setEditingLabor(false)}>
+                  Cancel
+                </button>
+                <button className="btn btn-sm btn-primary" disabled={savingLabor} onClick={saveLabor}>
+                  {savingLabor ? 'Saving…' : 'Save labor'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="row-interactive flex items-center justify-between gap-2 rounded-lg px-1 py-1">
+            <div className="min-w-0">
+              <div className="font-semibold">Labor</div>
+              <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                {Number(job.labor_hours) > 0
+                  ? `${Number(job.labor_hours)} hr × ${formatCents(job.labor_rate_cents)}/hr`
+                  : 'No labor booked yet'}
+              </div>
+            </div>
+            <span className="money font-semibold">{formatCents(totals.labor_charge_cents)}</span>
+          </div>
+        )}
+      </div>
 
       {/* Parts */}
       <div className="card space-y-2">
