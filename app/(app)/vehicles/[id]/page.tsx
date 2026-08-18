@@ -21,6 +21,7 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
   const [changingOwner, setChangingOwner] = useState(false)
   const [form, setForm] = useState(emptyVehicleDraft)
   const [notes, setNotes] = useState('')
+  const [search, setSearch] = useState('')
 
   const load = useCallback(async () => {
     const [{ data: v }, { data: cs }, all] = await Promise.all([
@@ -85,6 +86,14 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
     if (error) alert(error.message)
     else router.push('/customers')
   }
+
+  const q = search.trim().toLowerCase()
+  const shownJobs = q
+    ? jobs.filter((it) =>
+        [it.job.title, it.job.work_performed, it.job.recommendations, it.job.job_number]
+          .some((f) => (f ?? '').toLowerCase().includes(q)),
+      )
+    : jobs
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -172,10 +181,36 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
             </span>
           )}
         </h2>
+        {jobs.length > 0 && (
+          <input
+            className="input"
+            placeholder="Search this vehicle's history — work, parts, recommendations…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search service history"
+          />
+        )}
         {jobs.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--text3)' }}>No jobs yet.</p>
+        ) : shownJobs.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--text3)' }}>
+            Nothing on this vehicle matches “{search}”.
+          </p>
         ) : (
-          jobs.map((it) => <JobRow key={it.job.id} item={it} />)
+          shownJobs.map((it) => (
+            <div key={it.job.id} className="space-y-1">
+              <JobRow item={it} />
+              {it.job.recommendations && (
+                <p
+                  className="rounded-lg px-3 py-2 text-sm"
+                  style={{ background: 'var(--bg2)', color: 'var(--text2)', borderLeft: '3px solid var(--accent)' }}
+                >
+                  <b style={{ color: 'var(--accent2)' }}>Recommended:</b>{' '}
+                  <span className="whitespace-pre-wrap">{it.job.recommendations}</span>
+                </p>
+              )}
+            </div>
+          ))
         )}
       </section>
     </div>

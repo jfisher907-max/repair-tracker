@@ -66,6 +66,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set())
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
+  const [editingRecs, setEditingRecs] = useState(false)
+  const [recsInput, setRecsInput] = useState('')
+  const [savingRecs, setSavingRecs] = useState(false)
   const [editingLabor, setEditingLabor] = useState(false)
   const [savingLabor, setSavingLabor] = useState(false)
   const [laborHoursInput, setLaborHoursInput] = useState('')
@@ -307,6 +310,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           job_title: job!.title,
           work_performed: job!.work_performed,
           due_date: dueDate,
+          // What was flagged on the job travels to the customer's copy, then
+          // freezes with the rest of the invoice.
+          memo: job!.recommendations,
           ...snapshot,
         })
         .select('id')
@@ -420,6 +426,59 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <p className="whitespace-pre-wrap">{job.work_performed}</p>
         </div>
       )}
+
+      {/* Recommendations — what to flag for next time. Belongs to the vehicle's
+          history, and seeds the invoice the customer receives. */}
+      <div className="card space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="label !mb-0">Recommendations</span>
+          {!editingRecs && (
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setRecsInput(job.recommendations ?? '')
+                setEditingRecs(true)
+              }}
+            >
+              ✎ {job.recommendations ? 'Edit' : 'Add'}
+            </button>
+          )}
+        </div>
+        {editingRecs ? (
+          <div className="panel-in space-y-2">
+            <textarea
+              className="textarea !min-h-[80px]"
+              placeholder="Rear pads at 4mm — plan to replace within about 6 months. Brake fluid flush due at 80k."
+              value={recsInput}
+              onChange={(e) => setRecsInput(e.target.value)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={savingRecs}
+                onClick={async () => {
+                  setSavingRecs(true)
+                  await updateJob({ recommendations: recsInput.trim() || null })
+                  setSavingRecs(false)
+                  setEditingRecs(false)
+                }}
+              >
+                {savingRecs ? 'Saving…' : 'Save'}
+              </button>
+              <button className="btn btn-sm" onClick={() => setEditingRecs(false)}>Cancel</button>
+              <span className="text-xs" style={{ color: 'var(--text3)' }}>
+                Shows on this vehicle&apos;s history and on the invoice the customer gets.
+              </span>
+            </div>
+          </div>
+        ) : job.recommendations ? (
+          <p className="whitespace-pre-wrap text-sm">{job.recommendations}</p>
+        ) : (
+          <p className="text-sm" style={{ color: 'var(--text3)' }}>
+            Nothing flagged. Note anything the customer should plan for.
+          </p>
+        )}
+      </div>
 
       {/* Labor — adjusted right here, no trip through Edit job. */}
       <div className="card space-y-2">

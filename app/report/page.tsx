@@ -351,6 +351,11 @@ function Report() {
                   {job.work_performed && (
                     <p className="doc-section-body">{job.work_performed}</p>
                   )}
+                  {job.recommendations && (
+                    <p className="doc-section-body">
+                      <b>Recommended:</b> {job.recommendations}
+                    </p>
+                  )}
 
                   {lines.length > 0 && (
                     <table className="doc-table doc-table--tight">

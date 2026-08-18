@@ -85,6 +85,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         .update({
           job_title: (job as Job).title,
           work_performed: (job as Job).work_performed,
+          // Only seed notes that were never written here — a memo typed on
+          // this invoice is the owner's, and a refresh must not eat it.
+          ...(invoice.memo ? {} : { memo: (job as Job).recommendations }),
           ...snapshot,
         })
         .eq('id', invoice.id)

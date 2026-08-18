@@ -38,6 +38,8 @@ export interface Job {
   odometer_miles: number | null
   title: string
   work_performed: string | null
+  /** Customer-facing notes for future work; seeds invoice.memo. */
+  recommendations: string | null
   labor_hours: number
   labor_rate_cents: number
   parts_charged_override_cents: number | null
