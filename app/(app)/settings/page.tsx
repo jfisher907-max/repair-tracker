@@ -27,6 +27,7 @@ export default function SettingsPage() {
   const [newPw2, setNewPw2] = useState('')
   const [pwBusy, setPwBusy] = useState(false)
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const [showPw, setShowPw] = useState(false)
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
   const [markupOn, setMarkupOn] = useState(false)
@@ -264,7 +265,7 @@ export default function SettingsPage() {
         <div className="grid gap-2 sm:grid-cols-2">
           <input
             className="input"
-            type="password"
+            type={showPw ? 'text' : 'password'}
             placeholder="New password (8+ characters)"
             autoComplete="new-password"
             value={newPw}
@@ -272,13 +273,17 @@ export default function SettingsPage() {
           />
           <input
             className="input"
-            type="password"
+            type={showPw ? 'text' : 'password'}
             placeholder="Same again"
             autoComplete="new-password"
             value={newPw2}
             onChange={(e) => setNewPw2(e.target.value)}
           />
         </div>
+        <label className="flex w-fit items-center gap-2 text-sm" style={{ color: 'var(--text2)' }}>
+          <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} />
+          Show password — for copying it into your password manager
+        </label>
         <div className="flex items-center gap-3">
           <button
             className="btn btn-sm btn-primary"
