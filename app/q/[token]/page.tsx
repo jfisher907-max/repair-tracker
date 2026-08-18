@@ -33,6 +33,9 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   const { token } = use(params)
   const [quote, setQuote] = useState<PublicQuote | null | 'missing'>(null)
   const [responding, setResponding] = useState(false)
+  const [signerName, setSignerName] = useState('')
+  const [consented, setConsented] = useState(false)
+  const [respondError, setRespondError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.rpc('get_public_quote', { token })
@@ -92,29 +95,67 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
     const verb = response === 'approved' ? 'Approve' : 'Decline'
     if (!confirm(`${verb} this quote?`)) return
     setResponding(true)
-    const { data, error } = await supabase.rpc('respond_public_quote', { token, response })
+    // Through the server, so the IP and browser are observed rather than
+    // self-reported by the page making the claim.
+    try {
+      const res = await fetch('/api/quote/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, response, name: signerName, consent: consented }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Something went wrong')
+      await load()
+    } catch (e) {
+      setRespondError(e instanceof Error ? e.message : 'Please contact the shop directly.')
+    }
     setResponding(false)
-    if (error || !data) alert('Something went wrong — please contact the shop directly.')
-    else await load()
   }
 
   return (
     <div className="min-h-dvh" style={{ background: '#e5e7eb' }}>
       {quote.status === 'sent' && (
         <div
-          className="no-print sticky top-0 z-10 flex items-center justify-center gap-3 px-4 py-3"
+          className="no-print sticky top-0 z-10 flex flex-col items-center gap-2 px-4 py-3"
           style={{ background: '#111827' }}
         >
-          <button
-            className="btn btn-primary"
-            disabled={responding}
-            onClick={() => respond('approved')}
+          <input
+            className="input w-full max-w-sm"
+            placeholder="Type your name to approve"
+            aria-label="Your name"
+            value={signerName}
+            onChange={(e) => setSignerName(e.target.value)}
+          />
+          <label
+            className="flex w-full max-w-sm items-start gap-2 text-xs"
+            style={{ color: '#d1d5db' }}
           >
-            ✓ Approve quote
-          </button>
-          <button className="btn" disabled={responding} onClick={() => respond('declined')}>
-            Decline
-          </button>
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={consented}
+              onChange={(e) => setConsented(e.target.checked)}
+            />
+            <span>
+              I authorize {quote.business.name || 'the shop'} to perform the work above at the
+              price shown, and I agree to approve it electronically.
+            </span>
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              className="btn btn-primary"
+              disabled={responding || signerName.trim().length < 2 || !consented}
+              onClick={() => respond('approved')}
+            >
+              {responding ? 'Sending…' : '✓ Approve quote'}
+            </button>
+            <button className="btn" disabled={responding} onClick={() => respond('declined')}>
+              Decline
+            </button>
+          </div>
+          {respondError && (
+            <span className="text-xs" style={{ color: '#fca5a5' }}>{respondError}</span>
+          )}
         </div>
       )}
       {(quote.status === 'approved' || quote.status === 'declined') && (

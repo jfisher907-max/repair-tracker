@@ -9,6 +9,7 @@ import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
+import { markedUpCharge, type MarkupConfig } from '@/lib/markup'
 import {
   vehicleLabel,
   type Customer,
@@ -66,6 +67,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set())
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
+  const [markup, setMarkup] = useState<MarkupConfig>({ enabled: false, tiers: [] })
   const [editingRecs, setEditingRecs] = useState(false)
   const [recsInput, setRecsInput] = useState('')
   const [savingRecs, setSavingRecs] = useState(false)
@@ -94,7 +96,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     const [linesRes, receiptsRes, settingsRes, invoicesRes, paymentsRes] = await Promise.all([
       supabase.from('part_lines').select('*').eq('job_id', id).order('created_at'),
       supabase.from('receipts').select('*').eq('job_id', id).order('created_at'),
-      supabase.from('settings').select('store_suggestions').single(),
+      supabase.from('settings').select('store_suggestions, parts_markup_enabled, parts_markup_tiers').single(),
       supabase.from('invoices').select('*').eq('job_id', id).order('created_at'),
       supabase.from('payments').select('*').eq('job_id', id).order('date'),
     ])
@@ -102,6 +104,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     const recs = (receiptsRes.data as Receipt[]) ?? []
     setReceipts(recs)
     setStoreSuggestions(settingsRes.data?.store_suggestions ?? [])
+    setMarkup({
+      enabled: !!settingsRes.data?.parts_markup_enabled,
+      tiers: settingsRes.data?.parts_markup_tiers ?? [],
+    })
     setInvoices((invoicesRes.data as Invoice[]) ?? [])
     setPayments((paymentsRes.data as Payment[]) ?? [])
 
@@ -215,7 +221,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       description: draft.description.trim(),
       qty: draft.qty ? Number(draft.qty) : 1,
       unit_cost_cents: parseMoney(draft.unit_cost) ?? 0,
-      unit_charge_cents: draft.unit_charge.trim() === '' ? null : parseMoney(draft.unit_charge),
+      // Blank charge means "price it for me": the markup matrix fills it in so
+      // the line is never silently sold at cost. Still fully overridable.
+      unit_charge_cents:
+        draft.unit_charge.trim() === ''
+          ? markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup)
+          : parseMoney(draft.unit_charge),
     }
     const result = editingLineId
       ? await supabase.from('part_lines').update(payload).eq('id', editingLineId)

@@ -256,6 +256,22 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         )}
       </div>
 
+      {quote.approved_by_name && (
+        <div className="no-print card space-y-1">
+          <div className="label !mb-0">Authorization record</div>
+          <p className="text-sm">
+            <b>{quote.approved_by_name}</b>{' '}
+            {quote.status === 'declined' ? 'declined' : 'approved'} this quote
+            {quote.decided_at && <> on {new Date(quote.decided_at).toLocaleString()}</>}
+            {quote.approval_consent && <> and ticked the authorization box</>}.
+          </p>
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            {quote.approval_ip && <>From {quote.approval_ip}. </>}
+            The exact document they saw is frozen with this record, so later edits to the
+            quote can&apos;t change what was agreed.
+          </p>
+        </div>
+      )}
       <DocView doc={doc} />
     </div>
   )

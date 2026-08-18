@@ -7,6 +7,7 @@ import { getAccessToken, supabase } from '@/lib/supabase'
 import ReceiptPreview from '@/components/ReceiptPreview'
 import { syncJobPayment } from '@/lib/payments'
 import { prepareUpload } from '@/lib/upload'
+import { loadMarkupConfig, markedUpCharge, type MarkupConfig } from '@/lib/markup'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import type { ExtractionResult } from '@/lib/types'
 
@@ -45,6 +46,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
   const [receiptTotal, setReceiptTotal] = useState('')
   const [rows, setRows] = useState<ReviewLine[]>([])
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
+  const [markup, setMarkup] = useState<MarkupConfig>({ enabled: false, tiers: [] })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
       .select('store_suggestions')
       .single()
       .then(({ data }) => setStoreSuggestions(data?.store_suggestions ?? []))
+    loadMarkupConfig().then(setMarkup)
     getAccessToken().then(async (token) => {
       try {
         const res = await fetch('/api/ai-status', { headers: { Authorization: `Bearer ${token}` } })
@@ -178,6 +181,9 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
             description: r.description.trim(),
             qty: Number(r.qty) || 1,
             unit_cost_cents: parseMoney(r.unit_cost) ?? 0,
+            // Receipt lines carry no customer price, so this is where margin
+            // is won or lost — price them off the matrix as they land.
+            unit_charge_cents: markedUpCharge(parseMoney(r.unit_cost) ?? 0, markup),
           })),
         )
         if (linesErr) throw linesErr

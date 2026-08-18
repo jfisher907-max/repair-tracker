@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getAccessToken, supabase } from '@/lib/supabase'
 import { BRAND_SLUG } from '@/lib/brand'
+import { DEFAULT_TIERS, type MarkupTier } from '@/lib/markup'
 import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
 
@@ -23,6 +24,8 @@ export default function SettingsPage() {
   const [payInstructions, setPayInstructions] = useState('')
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
+  const [markupOn, setMarkupOn] = useState(false)
+  const [markupTiers, setMarkupTiers] = useState<MarkupTier[]>(DEFAULT_TIERS)
   const [cardPay, setCardPay] = useState<boolean | null>(null)
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
   const [aiTest, setAiTest] = useState<string | null>(null)
@@ -59,6 +62,10 @@ export default function SettingsPage() {
         setTermsDays(String(data.default_invoice_terms_days ?? 0))
         setPayInstructions(data.invoice_payment_instructions ?? '')
         setStores((data.store_suggestions as string[]).join('\n'))
+        setMarkupOn(!!data.parts_markup_enabled)
+        if (Array.isArray(data.parts_markup_tiers) && data.parts_markup_tiers.length) {
+          setMarkupTiers(data.parts_markup_tiers as MarkupTier[])
+        }
       })
     getAccessToken().then(async (token) => {
       try {
@@ -88,6 +95,8 @@ export default function SettingsPage() {
         default_tax_rate_bp: Math.round((Number(taxRate) || 0) * 100),
         default_invoice_terms_days: Number(termsDays) || 0,
         invoice_payment_instructions: payInstructions.trim(),
+        parts_markup_enabled: markupOn,
+        parts_markup_tiers: markupTiers,
         store_suggestions: stores
           .split('\n')
           .map((s) => s.trim())
@@ -229,6 +238,55 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="card space-y-3">
+        <div className="label">Parts markup</div>
+        <p className="text-sm" style={{ color: 'var(--text2)' }}>
+          A part line with no price typed in is charged <b>at cost</b>. Turn this on and the
+          matrix prices those lines for you as they come off a receipt — cheap parts carry a
+          higher multiple than expensive ones. You can still override any line by hand, and
+          returns and credits are never marked up.
+        </p>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={markupOn}
+            onChange={(e) => setMarkupOn(e.target.checked)}
+          />
+          Price unpriced part lines automatically
+        </label>
+        <div className="space-y-1">
+          {markupTiers.map((t, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2 text-sm">
+              <span style={{ color: 'var(--text3)', minWidth: 92 }}>
+                {t.up_to_cents == null ? 'Above that' : `Up to ${(t.up_to_cents / 100).toFixed(2)}`}
+              </span>
+              <span style={{ color: 'var(--text3)' }}>×</span>
+              <input
+                className="input !min-h-[38px] !w-24"
+                inputMode="decimal"
+                aria-label={`Multiplier for tier ${i + 1}`}
+                value={t.multiplier}
+                onChange={(e) => {
+                  const next = [...markupTiers]
+                  next[i] = { ...next[i], multiplier: Number(e.target.value) || 0 }
+                  setMarkupTiers(next)
+                }}
+              />
+              <span style={{ color: 'var(--text3)' }}>
+                a ${((t.up_to_cents ?? 40000) / 100 / 2).toFixed(2)} part →{' '}
+                <b className="money" style={{ color: 'var(--text2)' }}>
+                  ${((((t.up_to_cents ?? 40000) / 2) * (t.multiplier || 0)) / 100).toFixed(2)}
+                </b>
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs" style={{ color: 'var(--text3)' }}>
+          These are a starting point, not advice — set them to your own numbers. Existing jobs
+          and any invoice already issued are untouched.
+        </p>
       </div>
 
       <div className="card space-y-2">

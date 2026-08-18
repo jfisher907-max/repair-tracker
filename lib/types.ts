@@ -120,6 +120,11 @@ export interface Quote {
   public_token: string
   sent_at: string | null
   decided_at: string | null
+  approved_by_name: string | null
+  approval_consent: boolean | null
+  approval_ip: string | null
+  approval_user_agent: string | null
+  approved_snapshot: unknown | null
   created_at: string
   updated_at: string
   deleted_at: string | null
