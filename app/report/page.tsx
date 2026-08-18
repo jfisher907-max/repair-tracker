@@ -7,6 +7,7 @@ import AuthGate from '@/components/AuthGate'
 import DocBrand from '@/components/DocBrand'
 import { BRAND_NAME } from '@/lib/brand'
 import { supabase } from '@/lib/supabase'
+import { isLive, type Recommendation } from '@/lib/recommendations'
 import { computeTotals } from '@/lib/calc'
 import { formatCents, formatMiles } from '@/lib/money'
 import { formatDate } from '@/lib/date'
@@ -51,6 +52,7 @@ function Report() {
   const [scopeVehicle, setScopeVehicle] = useState<Vehicle | null>(null)
   const [business, setBusiness] = useState({ name: '', phone: '', address: '', email: '' })
   const [jobs, setJobs] = useState<ReportJob[] | null>(null)
+  const [recs, setRecs] = useState<Recommendation[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const [from, setFrom] = useState('')
@@ -84,6 +86,9 @@ function Report() {
             .from('part_lines')
             .select('*')
             .eq('job_id', jobId)
+          const { data: recRows } = await supabase
+            .from('recommendations').select('*').eq('job_id', jobId)
+          setRecs((recRows as Recommendation[]) ?? [])
           setJobs([{ job: jobRow as Job, vehicle: v, lines: (lineRows as PartLine[]) ?? [] }])
           return
         }
@@ -139,6 +144,11 @@ function Report() {
           ? await supabase.from('part_lines').select('*').in('job_id', jobIds)
           : { data: [] }
 
+        const { data: recRows } = jobIds.length
+          ? await supabase.from('recommendations').select('*').in('job_id', jobIds)
+          : { data: [] }
+        setRecs((recRows as Recommendation[]) ?? [])
+
         const linesByJob = new Map<string, PartLine[]>()
         for (const l of (lineRows as PartLine[]) ?? []) {
           const list = linesByJob.get(l.job_id) ?? []
@@ -189,6 +199,15 @@ function Report() {
 
   if (error) return <div className="p-8">Couldn&apos;t build report: {error}</div>
   if (!jobs) return <div className="p-8" style={{ color: 'var(--text3)' }}>Building report…</div>
+
+  // Only live items belong on a customer document — a declined or completed
+  // recommendation is history, not advice.
+  const recsByJob = new Map<string, Recommendation[]>()
+  for (const r of recs.filter(isLive)) {
+    const list = recsByJob.get(r.job_id) ?? []
+    list.push(r)
+    recsByJob.set(r.job_id, list)
+  }
 
   const totalHours = filtered.reduce((s, j) => s + Number(j.job.labor_hours), 0)
   const grandTotal = filtered.reduce(
@@ -351,9 +370,10 @@ function Report() {
                   {job.work_performed && (
                     <p className="doc-section-body">{job.work_performed}</p>
                   )}
-                  {job.recommendations && (
+                  {(recsByJob.get(job.id) ?? []).length > 0 && (
                     <p className="doc-section-body">
-                      <b>Recommended:</b> {job.recommendations}
+                      <b>Recommended:</b>{' '}
+                      {(recsByJob.get(job.id) ?? []).map((r) => r.description).join(' · ')}
                     </p>
                   )}
 

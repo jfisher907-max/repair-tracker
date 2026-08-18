@@ -8,6 +8,7 @@ import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { formatMiles } from '@/lib/money'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
+import { listForVehicle, statusColors, type Recommendation } from '@/lib/recommendations'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 
 export default function VehiclePage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,6 +23,7 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
   const [form, setForm] = useState(emptyVehicleDraft)
   const [notes, setNotes] = useState('')
   const [search, setSearch] = useState('')
+  const [recs, setRecs] = useState<Recommendation[]>([])
 
   const load = useCallback(async () => {
     const [{ data: v }, { data: cs }, all] = await Promise.all([
@@ -46,6 +48,7 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
       setNotes(veh.notes ?? '')
     }
     setCustomers((cs as Customer[]) ?? [])
+    setRecs(await listForVehicle(id))
     setJobs(all.filter((j) => j.vehicle?.id === id))
   }, [id])
 
@@ -87,10 +90,22 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
     else router.push('/customers')
   }
 
+  const recsByJob = new Map<string, Recommendation[]>()
+  for (const r of recs) {
+    const list = recsByJob.get(r.job_id) ?? []
+    list.push(r)
+    recsByJob.set(r.job_id, list)
+  }
+
   const q = search.trim().toLowerCase()
   const shownJobs = q
     ? jobs.filter((it) =>
-        [it.job.title, it.job.work_performed, it.job.recommendations, it.job.job_number]
+        [
+          it.job.title,
+          it.job.work_performed,
+          it.job.job_number,
+          ...(recsByJob.get(it.job.id) ?? []).map((r) => r.description),
+        ]
           .some((f) => (f ?? '').toLowerCase().includes(q)),
       )
     : jobs
@@ -200,15 +215,22 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
           shownJobs.map((it) => (
             <div key={it.job.id} className="space-y-1">
               <JobRow item={it} />
-              {it.job.recommendations && (
+              {recsByJob.get(it.job.id)?.map((r) => (
                 <p
+                  key={r.id}
                   className="rounded-lg px-3 py-2 text-sm"
-                  style={{ background: 'var(--bg2)', color: 'var(--text2)', borderLeft: '3px solid var(--accent)' }}
+                  style={{
+                    background: 'var(--bg2)',
+                    color: 'var(--text2)',
+                    borderLeft: `3px solid ${statusColors[r.status]}`,
+                  }}
                 >
-                  <b style={{ color: 'var(--accent2)' }}>Recommended:</b>{' '}
-                  <span className="whitespace-pre-wrap">{it.job.recommendations}</span>
+                  <b style={{ color: statusColors[r.status] }}>
+                    {r.status === 'open' ? 'Recommended' : `Recommended (${r.status})`}:
+                  </b>{' '}
+                  <span className="whitespace-pre-wrap">{r.description}</span>
                 </p>
-              )}
+              ))}
             </div>
           ))
         )}

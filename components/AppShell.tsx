@@ -27,6 +27,7 @@ const sideNav: { label: string; items: { href: string; label: string; icon: stri
     items: [
       { href: '/jobs', label: 'Jobs', icon: '🗂️' },
       { href: '/jobs/new', label: 'New Job', icon: '➕' },
+      { href: '/followups', label: 'Follow-ups', icon: '🔔' },
     ],
   },
   {

@@ -27,7 +27,7 @@ const TABLES: Record<string, string[]> = {
   ],
   jobs: [
     'id', 'job_number', 'vehicle_id', 'date', 'odometer_miles', 'title', 'work_performed',
-    'recommendations', 'labor_hours', 'labor_rate_cents', 'parts_charged_override_cents', 'payment_status',
+    'labor_hours', 'labor_rate_cents', 'parts_charged_override_cents', 'payment_status',
     'amount_paid_cents', 'notes', 'created_at', 'updated_at', 'deleted_at',
   ],
   part_lines: [
@@ -62,6 +62,10 @@ const TABLES: Record<string, string[]> = {
   payments: [
     'id', 'job_id', 'invoice_id', 'date', 'method', 'amount_cents', 'note',
     'created_at', 'updated_at',
+  ],
+  recommendations: [
+    'id', 'job_id', 'vehicle_id', 'description', 'status', 'target_date',
+    'estimate_cents', 'resolved_job_id', 'resolved_at', 'created_at', 'updated_at',
   ],
   expenses: [
     'id', 'date', 'category', 'vendor', 'description', 'amount_cents', 'storage_path',

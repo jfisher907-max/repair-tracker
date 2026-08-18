@@ -9,6 +9,8 @@ import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
+import RecommendationList from '@/components/RecommendationList'
+import { listForJob, toMemo, type Recommendation } from '@/lib/recommendations'
 import { markedUpCharge, type MarkupConfig } from '@/lib/markup'
 import {
   vehicleLabel,
@@ -68,9 +70,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
   const [markup, setMarkup] = useState<MarkupConfig>({ enabled: false, tiers: [] })
-  const [editingRecs, setEditingRecs] = useState(false)
-  const [recsInput, setRecsInput] = useState('')
-  const [savingRecs, setSavingRecs] = useState(false)
+  const [recs, setRecs] = useState<Recommendation[]>([])
   const [editingLabor, setEditingLabor] = useState(false)
   const [savingLabor, setSavingLabor] = useState(false)
   const [laborHoursInput, setLaborHoursInput] = useState('')
@@ -104,6 +104,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     const recs = (receiptsRes.data as Receipt[]) ?? []
     setReceipts(recs)
     setStoreSuggestions(settingsRes.data?.store_suggestions ?? [])
+    setRecs(await listForJob(id))
     setMarkup({
       enabled: !!settingsRes.data?.parts_markup_enabled,
       tiers: settingsRes.data?.parts_markup_tiers ?? [],
@@ -323,7 +324,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           due_date: dueDate,
           // What was flagged on the job travels to the customer's copy, then
           // freezes with the rest of the invoice.
-          memo: job!.recommendations,
+          memo: toMemo(recs),
           ...snapshot,
         })
         .select('id')
@@ -438,57 +439,16 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
       )}
 
-      {/* Recommendations — what to flag for next time. Belongs to the vehicle's
-          history, and seeds the invoice the customer receives. */}
+      {/* Recommendations — trackable items that follow the vehicle and seed
+          the invoice the customer receives. */}
       <div className="card space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="label !mb-0">Recommendations</span>
-          {!editingRecs && (
-            <button
-              className="btn btn-sm"
-              onClick={() => {
-                setRecsInput(job.recommendations ?? '')
-                setEditingRecs(true)
-              }}
-            >
-              ✎ {job.recommendations ? 'Edit' : 'Add'}
-            </button>
-          )}
-        </div>
-        {editingRecs ? (
-          <div className="panel-in space-y-2">
-            <textarea
-              className="textarea !min-h-[80px]"
-              placeholder="Rear pads at 4mm — plan to replace within about 6 months. Brake fluid flush due at 80k."
-              value={recsInput}
-              onChange={(e) => setRecsInput(e.target.value)}
-            />
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={savingRecs}
-                onClick={async () => {
-                  setSavingRecs(true)
-                  await updateJob({ recommendations: recsInput.trim() || null })
-                  setSavingRecs(false)
-                  setEditingRecs(false)
-                }}
-              >
-                {savingRecs ? 'Saving…' : 'Save'}
-              </button>
-              <button className="btn btn-sm" onClick={() => setEditingRecs(false)}>Cancel</button>
-              <span className="text-xs" style={{ color: 'var(--text3)' }}>
-                Shows on this vehicle&apos;s history and on the invoice the customer gets.
-              </span>
-            </div>
-          </div>
-        ) : job.recommendations ? (
-          <p className="whitespace-pre-wrap text-sm">{job.recommendations}</p>
-        ) : (
-          <p className="text-sm" style={{ color: 'var(--text3)' }}>
-            Nothing flagged. Note anything the customer should plan for.
-          </p>
-        )}
+        <span className="label !mb-0">Recommendations</span>
+        <RecommendationList
+          jobId={id}
+          vehicleId={job.vehicle_id}
+          items={recs}
+          onChanged={load}
+        />
       </div>
 
       {/* Labor — adjusted right here, no trip through Edit job. */}
