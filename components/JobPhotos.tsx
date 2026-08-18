@@ -17,16 +17,31 @@ interface JobPhoto {
  * Photos of the vehicle itself — the worn pad, the pre-existing dent, the
  * finished repair. Capture opens straight to the camera on a phone; files go
  * to the same private bucket as receipts under a job-photos/ prefix, and are
- * read back through short-lived signed URLs.
+ * read back through signed URLs.
+ *
+ * Signed URLs die, and phones keep this page alive long past their expiry:
+ * an installed PWA resumed the next morning re-fetches every image against
+ * dead links — no previews, dead taps. So the card heals itself: URLs are
+ * re-signed when stale or failed, on foreground, and on tap.
  */
+
+/** Sign for 12h, and treat anything older than expiry-minus-5min as stale. */
+const SIGN_TTL_SECONDS = 12 * 3600
+const RESIGN_AGE_MS = (SIGN_TTL_SECONDS - 300) * 1000
+
 export default function JobPhotos({ jobId }: { jobId: string }) {
   const [photos, setPhotos] = useState<JobPhoto[] | null>(null)
   const [urls, setUrls] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
+  const [signFailed, setSignFailed] = useState(false)
   const [viewing, setViewing] = useState<JobPhoto | null>(null)
   /** Mirrors `urls` so load() can skip already-signed paths without depending on it. */
   const signedRef = useRef<Record<string, string>>({})
+  /** When each path was signed, to re-sign before links expire under a long-lived page. */
+  const signedAtRef = useRef<Record<string, number>>({})
+  /** One automatic retry per broken image per mount — heals, never loops. */
+  const retriedRef = useRef<Set<string>>(new Set())
 
   // Escape closes the viewer, and the page behind it must not scroll.
   useEffect(() => {
@@ -51,28 +66,71 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
       .order('created_at')
     const rows = (data as JobPhoto[]) ?? []
     setPhotos(rows)
-    const unsigned = rows.filter((p) => !signedRef.current[p.storage_path])
+    const now = Date.now()
+    const unsigned = rows.filter((p) => {
+      const at = signedAtRef.current[p.storage_path]
+      return !signedRef.current[p.storage_path] || at == null || now - at > RESIGN_AGE_MS
+    })
     if (unsigned.length) {
-      const { data: signed } = await supabase.storage
+      const { data: signed, error: signErr } = await supabase.storage
         .from('receipts')
         .createSignedUrls(
           unsigned.map((p) => p.storage_path),
-          3600,
+          SIGN_TTL_SECONDS,
         )
+      if (signErr) {
+        // Leave the placeholders standing but say so — a tap retries, and so
+        // does the next return to the foreground. A swallowed error here
+        // meant permanently blank tiles on a flaky connection.
+        setSignFailed(true)
+        return
+      }
       const map: Record<string, string> = {}
       for (const s of signed ?? []) {
-        if (s.signedUrl && s.path) map[s.path] = s.signedUrl
+        if (s.signedUrl && s.path) {
+          map[s.path] = s.signedUrl
+          signedAtRef.current[s.path] = now
+        }
       }
       // Merge rather than replace: a caption edit re-runs load(), and swapping
       // in fresh URLs would make every thumbnail in the grid download again.
       signedRef.current = { ...signedRef.current, ...map }
       setUrls((prev) => ({ ...prev, ...map }))
+      setSignFailed(false)
     }
   }, [jobId])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // A phone resuming this page hours later has expired links — re-sign on
+  // foreground. Cheap when nothing is stale: one table read, no signing.
+  useEffect(() => {
+    const onWake = () => {
+      if (document.visibilityState === 'visible') load()
+    }
+    document.addEventListener('visibilitychange', onWake)
+    window.addEventListener('focus', onWake)
+    return () => {
+      document.removeEventListener('visibilitychange', onWake)
+      window.removeEventListener('focus', onWake)
+    }
+  }, [load])
+
+  /** A broken image (expired or half-fetched link) evicts itself and re-signs once. */
+  function imgFailed(p: JobPhoto) {
+    if (retriedRef.current.has(p.storage_path)) return
+    retriedRef.current.add(p.storage_path)
+    delete signedRef.current[p.storage_path]
+    delete signedAtRef.current[p.storage_path]
+    setUrls((prev) => {
+      const next = { ...prev }
+      delete next[p.storage_path]
+      return next
+    })
+    load()
+  }
 
   async function addFiles(list: FileList) {
     setBusy(true)
@@ -122,6 +180,8 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
     await supabase.storage.from('receipts').remove([p.storage_path])
     await supabase.from('job_photos').delete().eq('id', p.id)
     delete signedRef.current[p.storage_path]
+    delete signedAtRef.current[p.storage_path]
+    retriedRef.current.delete(p.storage_path)
     if (viewing?.id === p.id) setViewing(null)
     await load()
   }
@@ -153,6 +213,12 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
         </div>
       </div>
 
+      {signFailed && (
+        <p className="text-xs" style={{ color: 'var(--red)' }}>
+          Previews couldn’t load — check the connection, then tap a photo to retry.
+        </p>
+      )}
+
       {photos && photos.length === 0 && (
         <p className="text-sm" style={{ color: 'var(--text3)' }}>
           No photos yet. Shoot the fault before you fix it and the finished work after — it sells
@@ -170,7 +236,12 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
             >
               <button
                 className="block w-full"
-                onClick={() => setViewing(p)}
+                onClick={() => {
+                  setViewing(p)
+                  // A tile with no link means signing failed or expired — the
+                  // tap is the retry, never a dead end.
+                  if (!signedRef.current[p.storage_path]) load()
+                }}
                 aria-label={p.caption || 'Open photo'}
               >
                 {urls[p.storage_path] ? (
@@ -179,6 +250,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
                     src={urls[p.storage_path]}
                     alt={p.caption || 'Job photo'}
                     className="aspect-square w-full object-cover"
+                    onError={() => imgFailed(p)}
                   />
                 ) : (
                   <span className="flex aspect-square items-center justify-center text-2xl">🖼️</span>
@@ -220,7 +292,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
         </div>
       )}
 
-      {viewing && urls[viewing.storage_path] && (
+      {viewing && (
         <div
           className="fixed inset-0 z-50 flex flex-col gap-2 p-3"
           style={{ background: 'rgba(6,8,12,0.94)' }}
@@ -234,12 +306,24 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
           {/* The image directly, not a card inside a card — the previous
               version nested a second full-screen viewer and left most of the
               screen unused. Pinch-zoom works because the viewport allows it. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={urls[viewing.storage_path]}
-            alt={viewing.caption || 'Job photo'}
-            className="min-h-0 w-full flex-1 object-contain"
-          />
+          {urls[viewing.storage_path] ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={urls[viewing.storage_path]}
+              alt={viewing.caption || 'Job photo'}
+              className="min-h-0 w-full flex-1 object-contain"
+              onError={() => imgFailed(viewing)}
+            />
+          ) : (
+            <div
+              className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-sm"
+              style={{ color: 'var(--text3)' }}
+            >
+              {signFailed
+                ? 'The photo link couldn’t be fetched — check the connection, close this, and tap the photo again.'
+                : 'Loading photo…'}
+            </div>
+          )}
         </div>
       )}
     </div>
