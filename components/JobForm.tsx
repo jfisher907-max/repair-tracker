@@ -65,6 +65,7 @@ export default function JobForm({ job }: { job?: Job }) {
   // creating duplicates.
   const createdCustomerId = useRef<string | null>(null)
   const createdVehicleId = useRef<string | null>(null)
+  const createdJobId = useRef<string | null>(null)
 
   useEffect(() => {
     supabase
@@ -120,6 +121,25 @@ export default function JobForm({ job }: { job?: Job }) {
       return
     }
 
+    // Number() on text like "12mo" is NaN, and NaN serializes to null on the
+    // wire — the save would succeed with the value silently gone. Reject it
+    // here instead; these three all feed later decisions (warranty disputes,
+    // mileage projections).
+    const odometerNum = odometer.trim() ? Number(odometer.replace(/[,\s]/g, '')) : null
+    const warrantyMonthsNum = warrantyMonths.trim() ? Number(warrantyMonths.trim()) : null
+    const warrantyMilesNum = warrantyMiles.trim()
+      ? Number(warrantyMiles.replace(/[,\s]/g, ''))
+      : null
+    const badNumber = (n: number | null) => n != null && (!Number.isInteger(n) || n < 0)
+    if (badNumber(odometerNum)) {
+      setError('Odometer needs a plain number of miles.')
+      return
+    }
+    if (badNumber(warrantyMonthsNum) || badNumber(warrantyMilesNum)) {
+      setError('Warranty needs plain whole numbers — e.g. 12 months, 12,000 miles.')
+      return
+    }
+
     setBusy(true)
     try {
       if (creatingVehicle) {
@@ -160,14 +180,14 @@ export default function JobForm({ job }: { job?: Job }) {
         vehicle_id: targetVehicleId,
         date,
         title: title.trim(),
-        odometer_miles: odometer ? Number(odometer.replace(/[,\s]/g, '')) : null,
+        odometer_miles: odometerNum,
         labor_hours: laborHours ? Number(laborHours) : 0,
         labor_rate_cents: parseMoney(laborRate) ?? 0,
         work_performed: workPerformed.trim() || null,
         notes: notes.trim() || null,
         promised_date: promisedDate || null,
-        warranty_months: warrantyMonths ? Number(warrantyMonths) : null,
-        warranty_miles: warrantyMiles ? Number(warrantyMiles.replace(/[,\s]/g, '')) : null,
+        warranty_months: warrantyMonthsNum,
+        warranty_miles: warrantyMilesNum,
       }
 
       if (editing) {
@@ -180,14 +200,21 @@ export default function JobForm({ job }: { job?: Job }) {
         } catch {}
         router.push(`/jobs/${job.id}`)
       } else {
-        const { data, error } = await supabase.from('jobs').insert(payload).select('id').single()
-        if (error) throw error
+        // Same retry rule as customer/vehicle above: if the job landed but the
+        // template-lines insert failed, resubmitting must not create a twin.
+        let jobId = createdJobId.current
+        if (!jobId) {
+          const { data, error } = await supabase.from('jobs').insert(payload).select('id').single()
+          if (error) throw error
+          createdJobId.current = data.id
+          jobId = data.id
+        }
         // A template's lines come along as pre-priced charge lines; costs stay
         // zero until the real parts are bought and the receipt is scanned.
         if (templateLines.length) {
           const { error: lineErr } = await supabase.from('part_lines').insert(
             templateLines.map((l) => ({
-              job_id: data.id,
+              job_id: jobId,
               description: l.description,
               qty: l.qty,
               unit_cost_cents: 0,
@@ -196,7 +223,7 @@ export default function JobForm({ job }: { job?: Job }) {
           )
           if (lineErr) throw lineErr
         }
-        router.push(`/jobs/${data.id}`)
+        router.push(`/jobs/${jobId}`)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

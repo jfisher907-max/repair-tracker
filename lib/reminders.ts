@@ -122,7 +122,9 @@ export function projectDue(
       ...readings.filter((r) => r.date && r.miles > 0),
       { date: reminder.last_done_date, miles: reminder.last_done_miles },
     ]
-    const anchor = anchors.reduce((a, b) => (b.date > a.date ? b : a))
+    // >= so the reminder's own last-done entry (appended last) wins date ties —
+    // it is the freshest odometer statement for this reminder.
+    const anchor = anchors.reduce((a, b) => (b.date >= a.date ? b : a))
     const daysSinceAnchor = Math.max(0, dayDiff(anchor.date, today))
     const estimatedNow = anchor.miles + daysSinceAnchor * mpd
     const daysUntilDue = (dueMiles - estimatedNow) / mpd

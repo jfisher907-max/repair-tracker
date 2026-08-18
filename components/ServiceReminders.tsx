@@ -39,6 +39,7 @@ export default function ServiceReminders({
   const [reminders, setReminders] = useState<VehicleReminder[] | null>(null)
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const latestMiles = readings.length
     ? readings.reduce((a, b) => (b.date > a.date ? b : a)).miles
@@ -70,7 +71,7 @@ export default function ServiceReminders({
   }
 
   async function save() {
-    if (!draft) return
+    if (!draft || saving) return
     const name = draft.name.trim()
     const miles = draft.interval_miles.trim() ? Number(draft.interval_miles) : null
     const months = draft.interval_months.trim() ? Number(draft.interval_months) : null
@@ -81,33 +82,55 @@ export default function ServiceReminders({
     if ((miles != null && !(miles > 0)) || (months != null && !(months > 0)))
       return alert('Intervals must be positive numbers.')
     if (!draft.last_done_date) return alert('When was it last done?')
-    const { error } = await supabase.from('vehicle_reminders').insert({
-      vehicle_id: vehicleId,
-      name,
-      interval_miles: miles,
-      interval_months: months,
-      last_done_date: draft.last_done_date,
-      last_done_miles: lastMiles,
-    })
-    if (error) return alert(error.message)
-    setAdding(false)
-    setDraft(null)
-    await load()
+    if (lastMiles != null && !(lastMiles >= 0)) return alert('That isn’t an odometer reading.')
+    // A mileage-only reminder with no baseline can never project a date — it
+    // would save fine and then silently never come due anywhere.
+    if (miles != null && months == null && lastMiles == null)
+      return alert(
+        'A mileage reminder needs the odometer reading when it was last done — without it there’s nothing to count from.',
+      )
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('vehicle_reminders').insert({
+        vehicle_id: vehicleId,
+        name,
+        interval_miles: miles,
+        interval_months: months,
+        last_done_date: draft.last_done_date,
+        last_done_miles: lastMiles,
+      })
+      if (error) return alert(error.message)
+      setAdding(false)
+      setDraft(null)
+      await load()
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function markDone(r: VehicleReminder) {
-    let miles: number | null = null
+    // Months-only reminders leave last_done_miles alone; only mileage-based
+    // ones collect a reading, and a blank answer keeps the previous one
+    // rather than wiping the baseline the projection depends on.
+    const patch: { last_done_date: string; last_done_miles?: number } = {
+      last_done_date: todayLocalIso(),
+    }
     if (r.interval_miles != null) {
-      const suggestion = latestMiles != null ? String(latestMiles) : ''
+      const suggestion =
+        latestMiles != null
+          ? String(latestMiles)
+          : r.last_done_miles != null
+            ? String(r.last_done_miles)
+            : ''
       const answer = prompt(`Odometer today for “${r.name}”?`, suggestion)
       if (answer == null) return
-      miles = answer.trim() ? Number(answer) : null
-      if (miles != null && !(miles >= 0)) return alert('That isn’t a mileage.')
+      const miles = answer.trim() ? Number(answer.replace(/[,\s]/g, '')) : r.last_done_miles
+      if (miles == null)
+        return alert('Need the odometer reading — a mileage reminder can’t count without it.')
+      if (!(miles >= 0)) return alert('That isn’t a mileage.')
+      patch.last_done_miles = miles
     }
-    const { error } = await supabase
-      .from('vehicle_reminders')
-      .update({ last_done_date: todayLocalIso(), last_done_miles: miles })
-      .eq('id', r.id)
+    const { error } = await supabase.from('vehicle_reminders').update(patch).eq('id', r.id)
     if (error) return alert(error.message)
     await load()
   }
@@ -275,8 +298,8 @@ export default function ServiceReminders({
               : `Until there are two odometer readings, dates assume ${FALLBACK_MILES_PER_DAY} mi/day.`}
           </p>
           <div className="flex gap-2">
-            <button type="submit" className="btn btn-primary btn-sm">
-              Save reminder
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+              {saving ? 'Saving…' : 'Save reminder'}
             </button>
             <button
               type="button"

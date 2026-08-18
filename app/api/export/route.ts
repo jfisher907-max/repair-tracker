@@ -8,7 +8,10 @@ import { BRAND_NAME, BRAND_SLUG } from '@/lib/brand'
 
 function csvEscape(value: unknown): string {
   if (value == null) return ''
-  const s = Array.isArray(value) ? value.join('; ') : String(value)
+  // jsonb columns (invoice/template lines, markup tiers, store suggestions)
+  // arrive parsed — JSON is the only encoding that survives a round trip;
+  // String() on an object is "[object Object]" and loses the data.
+  const s = typeof value === 'object' ? JSON.stringify(value) : String(value)
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
   return s
 }

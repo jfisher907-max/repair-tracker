@@ -71,7 +71,12 @@ export default function FollowUpsPage() {
   }, [load])
 
   async function coreReturned(c: CoreOut) {
-    await markCoreReturned(c.id, true)
+    try {
+      await markCoreReturned(c.id, true)
+    } catch (e) {
+      alert(`Couldn't mark the core returned: ${e instanceof Error ? e.message : e}`)
+      return
+    }
     await load()
   }
 
@@ -153,7 +158,11 @@ export default function FollowUpsPage() {
             </span>
           </div>
           {cores.map((c) => {
-            const days = ageInDays(c)
+            // Supplier return windows run from the PURCHASE date; created_at is
+            // just when the receipt got entered, which can be weeks later.
+            const days = ageInDays({
+              created_at: c.purchase_date ? `${c.purchase_date}T12:00:00` : c.created_at,
+            })
             return (
               <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <div className="min-w-0">
