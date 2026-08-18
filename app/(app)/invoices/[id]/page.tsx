@@ -32,6 +32,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [refreshMsg, setRefreshMsg] = useState('')
   const [editingTax, setEditingTax] = useState(false)
   const [taxInput, setTaxInput] = useState('')
+  const [editingMemo, setEditingMemo] = useState(false)
+  const [memoInput, setMemoInput] = useState('')
+  const [savingMemo, setSavingMemo] = useState(false)
 
   const load = useCallback(async () => {
     const [{ data: inv }, { data: s }, { data: pays }] = await Promise.all([
@@ -199,6 +202,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn btn-sm btn-primary" onClick={shareLink}>📤 Send link</button>
           <button className="btn btn-sm" onClick={() => window.print()}>🖨️ Print</button>
+          {invoice.status !== 'void' && (
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setMemoInput(invoice.memo ?? '')
+                setEditingMemo(!editingMemo)
+              }}
+            >
+              📝 {invoice.memo ? 'Edit notes' : 'Add notes'}
+            </button>
+          )}
           {invoice.status === 'draft' && (
             <button
               className="btn btn-sm"
@@ -245,6 +259,35 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
         </div>
+        {editingMemo && invoice.status !== 'void' && (
+          <div className="panel-in space-y-2">
+            <label className="label !mb-0">Notes for the customer</label>
+            <textarea
+              className="textarea !min-h-[80px]"
+              placeholder="Rear pads at 4mm — plan to replace within about 6 months. Brake fluid flush due at 80k."
+              value={memoInput}
+              onChange={(e) => setMemoInput(e.target.value)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={savingMemo}
+                onClick={async () => {
+                  setSavingMemo(true)
+                  await patch({ memo: memoInput.trim() || null })
+                  setSavingMemo(false)
+                  setEditingMemo(false)
+                }}
+              >
+                {savingMemo ? 'Saving…' : 'Save notes'}
+              </button>
+              <button className="btn btn-sm" onClick={() => setEditingMemo(false)}>Cancel</button>
+              <span className="text-xs" style={{ color: 'var(--text3)' }}>
+                Prints on the invoice and shows on the customer&apos;s link — money is untouched.
+              </span>
+            </div>
+          </div>
+        )}
         {editingTax && invoice.status === 'draft' && (
           <div className="panel-in flex flex-wrap items-center gap-2">
             <label className="text-sm" style={{ color: 'var(--text2)' }}>Sales tax %</label>

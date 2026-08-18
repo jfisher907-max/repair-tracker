@@ -142,7 +142,7 @@ export default function DocView({ doc }: { doc: DocData }) {
         <div className="doc-settle">
           {doc.memo && (
             <div className="doc-memo">
-              <span className="doc-memo-label">Memo</span>
+              <span className="doc-memo-label">Notes</span>
               <p>{doc.memo}</p>
             </div>
           )}
