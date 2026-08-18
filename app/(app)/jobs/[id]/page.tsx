@@ -9,6 +9,7 @@ import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
+import JobPhotos from '@/components/JobPhotos'
 import RecommendationList from '@/components/RecommendationList'
 import { listForJob, toMemo, type Recommendation } from '@/lib/recommendations'
 import { markedUpCharge, type MarkupConfig } from '@/lib/markup'
@@ -438,6 +439,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <p className="whitespace-pre-wrap">{job.work_performed}</p>
         </div>
       )}
+
+      <JobPhotos jobId={id} />
 
       {/* Recommendations — trackable items that follow the vehicle and seed
           the invoice the customer receives. */}
