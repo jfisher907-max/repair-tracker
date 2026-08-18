@@ -20,12 +20,24 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * record is supposed to contain.
  */
 export async function POST(request: Request) {
-  let body: { token?: string; response?: string; name?: string; consent?: boolean }
+  let body: {
+    token?: string
+    response?: string
+    name?: string
+    consent?: boolean
+    declinedIds?: unknown
+  }
   try {
     body = await request.json()
   } catch {
     return Response.json({ error: 'bad request' }, { status: 400 })
   }
+
+  // Line ids the customer unchecked. Anything not a UUID is discarded here;
+  // anything not belonging to the quote is discarded again in the database.
+  const declinedIds = Array.isArray(body.declinedIds)
+    ? body.declinedIds.filter((x): x is string => typeof x === 'string' && UUID.test(x)).slice(0, 200)
+    : []
 
   const token = String(body.token ?? '')
   const response = String(body.response ?? '')
@@ -58,6 +70,7 @@ export async function POST(request: Request) {
     p_consent: response === 'approved' ? true : (body.consent ?? null),
     p_ip: ip,
     p_user_agent: userAgent,
+    p_declined_ids: declinedIds.length ? declinedIds : null,
   })
 
   if (error) return Response.json({ error: error.message }, { status: 500 })

@@ -10,10 +10,12 @@ export interface QuoteComputedTotals {
 
 export function computeQuoteTotals(
   quote: Pick<Quote, 'labor_hours' | 'labor_rate_cents' | 'tax_rate_bp'>,
-  lines: Pick<QuoteLine, 'line_total_cents'>[],
+  lines: (Pick<QuoteLine, 'line_total_cents'> & { declined?: boolean })[],
 ): QuoteComputedTotals {
   const labor = Math.round(Number(quote.labor_hours) * quote.labor_rate_cents)
-  const lineSum = lines.reduce((s, l) => s + l.line_total_cents, 0)
+  // Customer-declined lines leave the total — the quote is worth what was
+  // actually agreed to, not what was proposed.
+  const lineSum = lines.filter((l) => !l.declined).reduce((s, l) => s + l.line_total_cents, 0)
   const tax = Math.round(((labor + lineSum) * quote.tax_rate_bp) / 10000)
   return {
     labor_cents: labor,

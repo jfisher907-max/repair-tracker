@@ -95,6 +95,8 @@ export interface Settings {
   /** 0 = due on receipt; otherwise Net N days stamped on new invoices. */
   default_invoice_terms_days: number
   invoice_payment_instructions: string
+  /** Google review link shared after an invoice is paid; blank hides the button. */
+  google_review_url: string | null
   store_suggestions: string[]
   created_at: string
   updated_at: string
@@ -137,6 +139,8 @@ export interface QuoteLine {
   qty: number
   unit_charge_cents: number
   line_total_cents: number
+  /** Ticked off by the customer's response — out of the total, into follow-ups at conversion. */
+  declined: boolean
   created_at: string
   updated_at: string
 }

@@ -4,8 +4,11 @@ import { use, useCallback, useEffect, useState } from 'react'
 import DocView, { type DocData } from '@/components/DocView'
 import { BRAND_NAME } from '@/lib/brand'
 import { useDocumentTitle } from '@/lib/title'
+import { formatCents } from '@/lib/money'
 import { supabase } from '@/lib/supabase'
 import type { DocLine } from '@/lib/types'
+
+type PublicQuoteLine = DocLine & { id: string; declined: boolean }
 
 interface PublicQuote {
   quote_number: string
@@ -19,15 +22,16 @@ interface PublicQuote {
   labor_hours: number
   labor_rate_cents: number
   tax_rate_bp: number
-  lines: DocLine[]
+  lines: PublicQuoteLine[]
   business: { name: string; phone: string; address: string; email: string }
 }
 
 /**
  * PUBLIC page — no login. The unguessable token in the URL is the only key,
  * and the backing RPC returns customer-safe fields only. This is what the
- * customer opens when the owner texts them a quote, with one-tap
- * approve/decline that updates the shop app.
+ * customer opens when the owner texts them a quote. With several line items
+ * they can untick the ones they don't want — "do the brakes, skip the flush"
+ * in one visit instead of a rebuild-and-resend.
  */
 export default function PublicQuotePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)
@@ -36,6 +40,8 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   const [signerName, setSignerName] = useState('')
   const [consented, setConsented] = useState(false)
   const [respondError, setRespondError] = useState<string | null>(null)
+  /** Line ids the customer has unticked while deciding. */
+  const [unchecked, setUnchecked] = useState<Record<string, boolean>>({})
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.rpc('get_public_quote', { token })
@@ -63,9 +69,24 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
     )
   }
 
+  const isSent = quote.status === 'sent'
   const labor = Math.round(Number(quote.labor_hours) * quote.labor_rate_cents)
-  const linesSum = quote.lines.reduce((s, l) => s + l.line_total_cents, 0)
-  const tax = Math.round(((labor + linesSum) * quote.tax_rate_bp) / 10000)
+
+  // While deciding, the DOCUMENT shows the full proposal and the chooser shows
+  // the live selection. Once decided, the document is what was agreed to —
+  // declined lines drop out of it and out of the totals.
+  const docLines = isSent ? quote.lines : quote.lines.filter((l) => !l.declined)
+  const docLineSum = docLines.reduce((s, l) => s + l.line_total_cents, 0)
+  const docTax = Math.round(((labor + docLineSum) * quote.tax_rate_bp) / 10000)
+
+  const keptSum = quote.lines
+    .filter((l) => !unchecked[l.id])
+    .reduce((s, l) => s + l.line_total_cents, 0)
+  const keptTax = Math.round(((labor + keptSum) * quote.tax_rate_bp) / 10000)
+  const keptTotal = labor + keptSum + keptTax
+  const skippedCount = quote.lines.filter((l) => unchecked[l.id]).length
+  const nothingKept = labor === 0 && keptSum === 0 && quote.lines.length > 0
+  const declinedAfterDecision = quote.lines.filter((l) => l.declined)
 
   const doc: DocData = {
     docType: 'Quote',
@@ -77,14 +98,14 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
     vehicleLabel: quote.vehicle_label,
     title: quote.title,
     bodyText: quote.description,
-    lines: quote.lines,
+    lines: docLines,
     laborHours: Number(quote.labor_hours),
     laborRateCents: quote.labor_rate_cents,
     laborCents: labor,
-    linesCents: linesSum,
+    linesCents: docLineSum,
     taxRateBp: quote.tax_rate_bp,
-    taxCents: tax,
-    totalCents: labor + linesSum + tax,
+    taxCents: docTax,
+    totalCents: labor + docLineSum + docTax,
     memo: null,
     paymentInstructions: null,
     paidDate: null,
@@ -93,15 +114,26 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
 
   async function respond(response: 'approved' | 'declined') {
     const verb = response === 'approved' ? 'Approve' : 'Decline'
-    if (!confirm(`${verb} this quote?`)) return
+    const detail =
+      response === 'approved' && skippedCount > 0
+        ? ` (leaving out ${skippedCount} item${skippedCount === 1 ? '' : 's'})`
+        : ''
+    if (!confirm(`${verb} this quote${detail}?`)) return
     setResponding(true)
     // Through the server, so the IP and browser are observed rather than
     // self-reported by the page making the claim.
     try {
+      const declinedIds = loaded ? loaded.lines.filter((l) => unchecked[l.id]).map((l) => l.id) : []
       const res = await fetch('/api/quote/respond', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, response, name: signerName, consent: consented }),
+        body: JSON.stringify({
+          token,
+          response,
+          name: signerName,
+          consent: consented,
+          declinedIds: response === 'approved' ? declinedIds : [],
+        }),
       })
       const body = await res.json()
       if (!res.ok) throw new Error(body.error || 'Something went wrong')
@@ -114,11 +146,51 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
 
   return (
     <div className="min-h-dvh" style={{ background: '#e5e7eb' }}>
-      {quote.status === 'sent' && (
+      {isSent && (
         <div
           className="no-print sticky top-0 z-10 flex flex-col items-center gap-2 px-4 py-3"
           style={{ background: '#111827' }}
         >
+          {quote.lines.length >= 2 && (
+            <div className="w-full max-w-sm space-y-1">
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#9ca3af' }}>
+                Untick anything you&apos;d like to skip for now
+              </p>
+              {quote.lines.map((l) => (
+                <label
+                  key={l.id}
+                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm"
+                  style={{
+                    background: unchecked[l.id] ? 'transparent' : '#1f2937',
+                    color: unchecked[l.id] ? '#6b7280' : '#e5e7eb',
+                    textDecoration: unchecked[l.id] ? 'line-through' : 'none',
+                  }}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={!unchecked[l.id]}
+                      onChange={(e) =>
+                        setUnchecked((prev) => ({ ...prev, [l.id]: !e.target.checked }))
+                      }
+                    />
+                    <span className="truncate">{l.description}</span>
+                  </span>
+                  <span className="money flex-none">{formatCents(l.line_total_cents)}</span>
+                </label>
+              ))}
+              <p className="text-right text-sm" style={{ color: '#e5e7eb' }}>
+                Your total:{' '}
+                <b className="money">{formatCents(keptTotal)}</b>
+                {skippedCount > 0 && (
+                  <span className="text-xs" style={{ color: '#9ca3af' }}>
+                    {' '}
+                    ({skippedCount} item{skippedCount === 1 ? '' : 's'} skipped)
+                  </span>
+                )}
+              </p>
+            </div>
+          )}
           <input
             className="input w-full max-w-sm"
             placeholder="Type your name to approve"
@@ -137,22 +209,31 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
               onChange={(e) => setConsented(e.target.checked)}
             />
             <span>
-              I authorize {quote.business.name || 'the shop'} to perform the work above at the
+              I authorize {quote.business.name || 'the shop'} to perform the selected work at the
               price shown, and I agree to approve it electronically.
             </span>
           </label>
           <div className="flex items-center gap-3">
             <button
               className="btn btn-primary"
-              disabled={responding || signerName.trim().length < 2 || !consented}
+              disabled={responding || signerName.trim().length < 2 || !consented || nothingKept}
               onClick={() => respond('approved')}
             >
-              {responding ? 'Sending…' : '✓ Approve quote'}
+              {responding
+                ? 'Sending…'
+                : skippedCount > 0
+                  ? `✓ Approve ${formatCents(keptTotal)}`
+                  : '✓ Approve quote'}
             </button>
             <button className="btn" disabled={responding} onClick={() => respond('declined')}>
-              Decline
+              Decline all
             </button>
           </div>
+          {nothingKept && (
+            <span className="text-xs" style={{ color: '#fca5a5' }}>
+              Everything is unticked — there&apos;s nothing left to approve.
+            </span>
+          )}
           {respondError && (
             <span className="text-xs" style={{ color: '#fca5a5' }}>{respondError}</span>
           )}
@@ -169,6 +250,11 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
           {quote.status === 'approved'
             ? '✓ You approved this quote — the shop has been notified.'
             : 'This quote was declined.'}
+          {quote.status === 'approved' && declinedAfterDecision.length > 0 && (
+            <div className="mt-1 text-sm font-normal">
+              Left out for now: {declinedAfterDecision.map((l) => l.description).join(', ')}
+            </div>
+          )}
         </div>
       )}
       <DocView doc={doc} />

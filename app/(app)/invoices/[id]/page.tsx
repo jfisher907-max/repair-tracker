@@ -207,6 +207,27 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn btn-sm btn-primary" onClick={shareLink}>📤 Send link</button>
           <button className="btn btn-sm" onClick={() => window.print()}>🖨️ Print</button>
+          {invoice.status === 'paid' && settings?.google_review_url && (
+            <button
+              className="btn btn-sm"
+              style={{ borderColor: 'var(--accent-dim)', color: 'var(--accent2)' }}
+              onClick={async () => {
+                // A plain thank-you and the link — no incentives, no sentiment
+                // routing; both are against Google's review policy.
+                const text = `Thanks for your business! If you have a minute, a quick Google review helps a small shop a lot: ${settings.google_review_url}`
+                try {
+                  if (navigator.share) await navigator.share({ text })
+                  else {
+                    await navigator.clipboard.writeText(text)
+                    setShareMsg('Review request copied — text it to the customer ✓')
+                    setTimeout(() => setShareMsg(''), 3000)
+                  }
+                } catch {}
+              }}
+            >
+              ⭐ Ask for a review
+            </button>
+          )}
           {invoice.status !== 'void' && (
             <button
               className="btn btn-sm"

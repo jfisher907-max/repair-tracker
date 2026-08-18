@@ -22,6 +22,7 @@ export default function SettingsPage() {
   const [taxRate, setTaxRate] = useState('')
   const [termsDays, setTermsDays] = useState('0')
   const [payInstructions, setPayInstructions] = useState('')
+  const [reviewUrl, setReviewUrl] = useState('')
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
   const [markupOn, setMarkupOn] = useState(false)
@@ -61,6 +62,7 @@ export default function SettingsPage() {
         setTaxRate(String((data.default_tax_rate_bp ?? 0) / 100))
         setTermsDays(String(data.default_invoice_terms_days ?? 0))
         setPayInstructions(data.invoice_payment_instructions ?? '')
+        setReviewUrl(data.google_review_url ?? '')
         setStores((data.store_suggestions as string[]).join('\n'))
         setMarkupOn(!!data.parts_markup_enabled)
         if (Array.isArray(data.parts_markup_tiers) && data.parts_markup_tiers.length) {
@@ -95,6 +97,7 @@ export default function SettingsPage() {
         default_tax_rate_bp: Math.round((Number(taxRate) || 0) * 100),
         default_invoice_terms_days: Number(termsDays) || 0,
         invoice_payment_instructions: payInstructions.trim(),
+        google_review_url: reviewUrl.trim() || null,
         parts_markup_enabled: markupOn,
         parts_markup_tiers: markupTiers,
         store_suggestions: stores
@@ -205,6 +208,16 @@ export default function SettingsPage() {
             placeholder="Cash, check, or Venmo @… — due on receipt"
             value={payInstructions}
             onChange={(e) => setPayInstructions(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label">Google review link (shown after an invoice is paid)</label>
+          <input
+            className="input"
+            type="url"
+            placeholder="https://g.page/r/…/review — from your Google Business Profile"
+            value={reviewUrl}
+            onChange={(e) => setReviewUrl(e.target.value)}
           />
         </div>
         <div>

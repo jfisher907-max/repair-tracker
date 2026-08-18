@@ -8,6 +8,7 @@ import DocView, { type DocData } from '@/components/DocView'
 import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { computeQuoteTotals, quoteStatusColors } from '@/lib/billing'
+import { formatCents } from '@/lib/money'
 import {
   vehicleLabel,
   type Customer,
@@ -94,12 +95,16 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     vehicleLabel: vehicle ? vehicleLabel(vehicle) : '',
     title: quote.title,
     bodyText: quote.description,
-    lines: lines.map((l) => ({
-      description: l.description,
-      qty: Number(l.qty),
-      unit_charge_cents: l.unit_charge_cents,
-      line_total_cents: l.line_total_cents,
-    })),
+    // The document shows what stands to be (or was) agreed — customer-declined
+    // lines drop out of it, matching the approved-subset totals.
+    lines: lines
+      .filter((l) => !l.declined)
+      .map((l) => ({
+        description: l.description,
+        qty: Number(l.qty),
+        unit_charge_cents: l.unit_charge_cents,
+        line_total_cents: l.line_total_cents,
+      })),
     laborHours: Number(quote.labor_hours),
     laborRateCents: quote.labor_rate_cents,
     laborCents: totals.labor_cents,
@@ -173,9 +178,11 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         .select('id')
         .single()
       if (error) throw error
-      if (lines.length) {
+      // Only what the customer agreed to becomes work on the job.
+      const approved = lines.filter((l) => !l.declined)
+      if (approved.length) {
         const { error: lineErr } = await supabase.from('part_lines').insert(
-          lines.map((l) => ({
+          approved.map((l) => ({
             job_id: job.id,
             description: l.description,
             qty: Number(l.qty),
@@ -184,6 +191,21 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           })),
         )
         if (lineErr) throw lineErr
+      }
+      // What they skipped isn't lost — it lands in Follow-ups as an open
+      // recommendation with the quoted price attached.
+      const declined = lines.filter((l) => l.declined)
+      if (declined.length) {
+        const { error: recErr } = await supabase.from('recommendations').insert(
+          declined.map((l) => ({
+            job_id: job.id,
+            vehicle_id: quote!.vehicle_id,
+            description: `${l.description} (declined on ${quote!.quote_number})`,
+            estimate_cents: l.line_total_cents,
+            status: 'open',
+          })),
+        )
+        if (recErr) throw recErr
       }
       await supabase.from('quotes').update({ job_id: job.id }).eq('id', id)
       router.push(`/jobs/${job.id}`)
@@ -269,6 +291,27 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             {quote.approval_ip && <>From {quote.approval_ip}. </>}
             The exact document they saw is frozen with this record, so later edits to the
             quote can&apos;t change what was agreed.
+          </p>
+        </div>
+      )}
+      {lines.some((l) => l.declined) && (
+        <div className="no-print card space-y-1">
+          <div className="label !mb-0">Declined by the customer</div>
+          {lines
+            .filter((l) => l.declined)
+            .map((l) => (
+              <div key={l.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate" style={{ color: 'var(--text2)' }}>
+                  {l.description}
+                </span>
+                <span className="money flex-none" style={{ color: 'var(--text3)' }}>
+                  {formatCents(l.line_total_cents)}
+                </span>
+              </div>
+            ))}
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Out of the total above. When you convert to a job, these land in Follow-ups with
+            their quoted price, so they can be chased later.
           </p>
         </div>
       )}

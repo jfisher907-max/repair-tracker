@@ -30,12 +30,24 @@ export default function FollowUpsPage() {
     // Inner joins plus the deleted_at filters keep items from binned jobs and
     // vehicles out of the worklist — chasing a customer about a job that was
     // deleted is worse than not chasing at all.
-    const { data } = await supabase
+    //
+    // The jobs embed MUST name its foreign key: recommendations has two FKs to
+    // jobs (job_id and resolved_job_id), and an unqualified jobs!inner makes
+    // PostgREST error out — which an unchecked `data ?? []` silently rendered
+    // as an empty worklist.
+    const { data, error } = await supabase
       .from('recommendations')
-      .select('*, job:jobs!inner(deleted_at), vehicle:vehicles!inner(*, customer:customers(*))')
+      .select(
+        '*, job:jobs!recommendations_job_id_fkey!inner(deleted_at), vehicle:vehicles!inner(*, customer:customers(*))',
+      )
       .is('job.deleted_at', null)
       .is('vehicle.deleted_at', null)
       .order('created_at')
+    if (error) {
+      alert(`Couldn't load follow-ups: ${error.message}`)
+      setRows([])
+      return
+    }
     setRows((data as Row[]) ?? [])
   }, [])
 
