@@ -23,6 +23,10 @@ export default function SettingsPage() {
   const [termsDays, setTermsDays] = useState('0')
   const [payInstructions, setPayInstructions] = useState('')
   const [reviewUrl, setReviewUrl] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [newPw2, setNewPw2] = useState('')
+  const [pwBusy, setPwBusy] = useState(false)
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
   const [markupOn, setMarkupOn] = useState(false)
@@ -251,6 +255,62 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* You're already signed in, so the password changes right here — no
+          email round-trip, no recovery links pointing at dead URLs. */}
+      <div className="card space-y-2">
+        <div className="label">Change password</div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <input
+            className="input"
+            type="password"
+            placeholder="New password (8+ characters)"
+            autoComplete="new-password"
+            value={newPw}
+            onChange={(e) => setNewPw(e.target.value)}
+          />
+          <input
+            className="input"
+            type="password"
+            placeholder="Same again"
+            autoComplete="new-password"
+            value={newPw2}
+            onChange={(e) => setNewPw2(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            className="btn btn-sm btn-primary"
+            disabled={pwBusy || newPw.length < 8 || newPw !== newPw2}
+            onClick={async () => {
+              setPwBusy(true)
+              setPwMsg(null)
+              const { error } = await supabase.auth.updateUser({ password: newPw })
+              setPwBusy(false)
+              if (error) setPwMsg({ ok: false, text: error.message })
+              else {
+                setPwMsg({ ok: true, text: 'Password changed ✓ — use it at your next sign-in.' })
+                setNewPw('')
+                setNewPw2('')
+              }
+            }}
+          >
+            {pwBusy ? 'Changing…' : 'Change password'}
+          </button>
+          {newPw && newPw2 && newPw !== newPw2 && (
+            <span className="text-xs" style={{ color: 'var(--red)' }}>The two don&apos;t match yet.</span>
+          )}
+          {pwMsg && (
+            <span className="text-sm" style={{ color: pwMsg.ok ? 'var(--green)' : 'var(--red)' }}>
+              {pwMsg.text}
+            </span>
+          )}
+        </div>
+        <p className="text-xs" style={{ color: 'var(--text3)' }}>
+          Devices already signed in stay signed in; the new password applies from the next
+          sign-in.
+        </p>
       </div>
 
       <div className="card space-y-3">
