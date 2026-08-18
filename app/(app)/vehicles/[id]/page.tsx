@@ -10,6 +10,8 @@ import { formatMiles } from '@/lib/money'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 import { listForVehicle, statusColors, type Recommendation } from '@/lib/recommendations'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
+import ServiceReminders from '@/components/ServiceReminders'
+import type { OdometerReading } from '@/lib/reminders'
 
 export default function VehiclePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -89,6 +91,10 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
     if (error) alert(error.message)
     else router.push('/customers')
   }
+
+  const readings: OdometerReading[] = jobs
+    .filter((it) => it.job.odometer_miles != null)
+    .map((it) => ({ date: it.job.date, miles: it.job.odometer_miles! }))
 
   const recsByJob = new Map<string, Recommendation[]>()
   for (const r of recs) {
@@ -180,6 +186,8 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
           </div>
         )}
       </div>
+
+      <ServiceReminders vehicleId={id} readings={readings} />
 
       <section className="space-y-2">
         <h2 className="text-lg" style={{ color: 'var(--text2)' }}>

@@ -80,6 +80,10 @@ const TABLES: Record<string, string[]> = {
     'id', 'job_id', 'vehicle_id', 'description', 'status', 'target_date',
     'estimate_cents', 'resolved_job_id', 'resolved_at', 'created_at', 'updated_at',
   ],
+  vehicle_reminders: [
+    'id', 'vehicle_id', 'name', 'interval_miles', 'interval_months',
+    'last_done_date', 'last_done_miles', 'created_at', 'updated_at',
+  ],
   expenses: [
     'id', 'date', 'category', 'vendor', 'description', 'amount_cents', 'storage_path',
     'created_at', 'updated_at',

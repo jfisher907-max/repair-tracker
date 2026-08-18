@@ -9,6 +9,8 @@ import { formatDate } from '@/lib/date'
 import { ageInDays, statusColors, type Recommendation } from '@/lib/recommendations'
 import { todayLocalIso } from '@/lib/date'
 import { listCoresOut, markCoreReturned, type CoreOut } from '@/lib/cores'
+import { listDueSoon, type ReminderDue } from '@/lib/reminders'
+import { formatMiles } from '@/lib/money'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 
 interface Row extends Recommendation {
@@ -27,6 +29,7 @@ export default function FollowUpsPage() {
   const [filter, setFilter] = useState<Filter>('open')
   const [sharedId, setSharedId] = useState<string | null>(null)
   const [cores, setCores] = useState<CoreOut[]>([])
+  const [dueReminders, setDueReminders] = useState<ReminderDue[]>([])
 
   const load = useCallback(async () => {
     // Inner joins plus the deleted_at filters keep items from binned jobs and
@@ -56,6 +59,11 @@ export default function FollowUpsPage() {
     } catch {
       // Cores are a side panel — a failed load must not take the page down.
     }
+    try {
+      setDueReminders(await listDueSoon(30))
+    } catch {
+      // Same rule for service reminders.
+    }
   }, [])
 
   useEffect(() => {
@@ -80,6 +88,26 @@ export default function FollowUpsPage() {
         .reduce((s, r) => s + (r.estimate_cents ?? 0), 0),
     [rows],
   )
+
+  async function shareReminder(r: ReminderDue) {
+    const who = r.vehicle?.customer?.name?.split(' ')[0] ?? 'there'
+    const what = vehicleLabel(r.vehicle)
+    const when =
+      r.projection.due_miles != null
+        ? `around ${formatDate(r.projection.due_date)} (~${formatMiles(r.projection.due_miles)} mi)`
+        : `around ${formatDate(r.projection.due_date)}`
+    const text =
+      `Hi ${who} — your ${what} is coming up on its ${r.name.toLowerCase()} ${when}. ` +
+      `Want me to get you booked in?`
+    try {
+      if (navigator.share) await navigator.share({ text })
+      else await navigator.clipboard.writeText(text)
+      setSharedId(r.id)
+      setTimeout(() => setSharedId(null), 2500)
+    } catch {
+      /* the customer cancelled the share sheet */
+    }
+  }
 
   async function share(r: Row) {
     const who = r.vehicle?.customer?.name?.split(' ')[0] ?? 'there'
@@ -148,6 +176,51 @@ export default function FollowUpsPage() {
           <p className="text-xs" style={{ color: 'var(--text3)' }}>
             Deposits you&apos;ve paid on old units still in the shop. Mark each one returned when
             it goes back — this is your money until it does.
+          </p>
+        </div>
+      )}
+
+      {dueReminders.length > 0 && (
+        <div className="card space-y-2">
+          <span className="label !mb-0">Due for service</span>
+          {dueReminders.map((r) => {
+            const overdue = r.projection.due_date < todayLocalIso()
+            return (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <div className="min-w-0">
+                  <span className="font-semibold">{r.name}</span>{' '}
+                  <span style={{ color: 'var(--text3)' }}>
+                    {r.vehicle ? (
+                      <Link href={`/vehicles/${r.vehicle.id}`} style={{ color: 'var(--blue)' }}>
+                        {vehicleLabel(r.vehicle)}
+                      </Link>
+                    ) : (
+                      'vehicle removed'
+                    )}
+                    {r.vehicle?.customer && ` · ${r.vehicle.customer.name}`}
+                  </span>
+                  <div className="text-xs" style={overdue ? { color: 'var(--red)', fontWeight: 600 } : { color: 'var(--text3)' }}>
+                    {overdue ? 'was due ' : 'due '}
+                    {formatDate(r.projection.due_date)}
+                    {r.projection.due_miles != null && ` · ~${formatMiles(r.projection.due_miles)} mi`}
+                  </div>
+                </div>
+                <div className="flex flex-none items-center gap-2">
+                  <button className="btn btn-sm btn-primary" onClick={() => shareReminder(r)}>
+                    💬 Text the customer
+                  </button>
+                  {sharedId === r.id && (
+                    <span className="flash-in text-xs" style={{ color: 'var(--green)' }}>
+                      Ready to send ✓
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Projected from each vehicle&apos;s own driving pace. Mark work done from the vehicle
+            page and the date rolls forward.
           </p>
         </div>
       )}
