@@ -225,7 +225,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       // the line is never silently sold at cost. Still fully overridable.
       unit_charge_cents:
         draft.unit_charge.trim() === ''
-          ? markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup)
+          ? markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup, draft.description)
           : parseMoney(draft.unit_charge),
     }
     const result = editingLineId

@@ -183,7 +183,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
             unit_cost_cents: parseMoney(r.unit_cost) ?? 0,
             // Receipt lines carry no customer price, so this is where margin
             // is won or lost — price them off the matrix as they land.
-            unit_charge_cents: markedUpCharge(parseMoney(r.unit_cost) ?? 0, markup),
+            unit_charge_cents: markedUpCharge(parseMoney(r.unit_cost) ?? 0, markup, r.description),
           })),
         )
         if (linesErr) throw linesErr

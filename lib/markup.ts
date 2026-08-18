@@ -29,8 +29,25 @@ export const DEFAULT_TIERS: MarkupTier[] = [
  * Never marks up a credit: a return or a core refund is a negative cost and
  * must come back to the customer at face value.
  */
-export function markedUpCharge(costCents: number, config: MarkupConfig): number | null {
+/**
+ * Lines that are somebody else's money passing through — the tax and freight
+ * the supplier charged, a discount, a refundable core deposit. Marking these up
+ * bills the customer twice for tax and reads badly on an itemised invoice.
+ */
+const PASS_THROUGH =
+  /(saless*)?tax|freight|shipping|delivery|core|discount|credit|refund|deposit|disposal|environmental|fee/i
+
+export function isPassThrough(description: string | null | undefined): boolean {
+  return PASS_THROUGH.test((description ?? '').trim())
+}
+
+export function markedUpCharge(
+  costCents: number,
+  config: MarkupConfig,
+  description?: string | null,
+): number | null {
   if (!config.enabled || costCents <= 0) return null
+  if (isPassThrough(description)) return null
   const tiers = [...config.tiers].sort((a, b) => {
     if (a.up_to_cents == null) return 1
     if (b.up_to_cents == null) return -1
