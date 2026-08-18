@@ -283,10 +283,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     try {
       const [{ data: settings }, { data: sourceQuote }] = await Promise.all([
         supabase.from('settings').select('default_tax_rate_bp, default_invoice_terms_days').single(),
-        // A job born from a quote bills at the tax rate the customer approved.
         supabase.from('quotes').select('tax_rate_bp').eq('job_id', id).limit(1).maybeSingle(),
       ])
-      const taxRateBp = sourceQuote?.tax_rate_bp ?? settings?.default_tax_rate_bp ?? 0
+      // Settings is the rate the shop actually charges, and it is the control
+      // the owner turns — so it wins. A quote's rate used to override it here,
+      // which made setting tax to 0% look broken on any quoted job. The rate
+      // stays editable on the draft invoice for one-off cases.
+      void sourceQuote
+      const taxRateBp = settings?.default_tax_rate_bp ?? 0
       const snapshot = buildInvoiceSnapshot(job!, lines, taxRateBp)
       // Terms from Settings: 0 = due on receipt (due date = issue date).
       const termsDays = settings?.default_invoice_terms_days ?? 0

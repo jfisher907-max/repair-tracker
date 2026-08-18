@@ -1,14 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { use, useCallback, useEffect, useState } from 'react'
 import DocView, { type DocData } from '@/components/DocView'
 import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
-import { quoteStatusColors } from '@/lib/billing'
+import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { PAYMENT_METHODS, recordPayment } from '@/lib/payments'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
-import type { Invoice, Payment, PaymentMethod, Settings } from '@/lib/types'
+import type { Invoice, Job, PartLine, Payment, PaymentMethod, Settings } from '@/lib/types'
 
 function todayIso(): string {
   const d = new Date()
@@ -17,6 +18,7 @@ function todayIso(): string {
 
 export default function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
@@ -26,6 +28,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
   const [payDate, setPayDate] = useState(todayIso())
   const [payBusy, setPayBusy] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [refreshMsg, setRefreshMsg] = useState('')
+  const [editingTax, setEditingTax] = useState(false)
+  const [taxInput, setTaxInput] = useState('')
 
   const load = useCallback(async () => {
     const [{ data: inv }, { data: s }, { data: pays }] = await Promise.all([
@@ -41,6 +47,70 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     load()
   }, [load])
+
+  /**
+   * Never sent and never paid = nobody has seen it, so there is no record to
+   * keep. The status check matters for invoices settled before the payments
+   * ledger existed: they are 'paid' with no ledger rows and no sent_at, and
+   * must never look disposable.
+   */
+  const neverIssued =
+    !!invoice && !invoice.sent_at && payments.length === 0 && invoice.status !== 'paid'
+
+  /**
+   * Re-snapshot the job into this same invoice. A draft has not been sent, so
+   * there is nothing to preserve by voiding and reissuing — this keeps the
+   * number and just brings the figures up to date after a parts change.
+   */
+  async function refreshFromJob(taxRateBpOverride?: number) {
+    if (!invoice) return
+    setRefreshing(true)
+    try {
+      const [{ data: job }, { data: partLines }, { data: quote }] = await Promise.all([
+        supabase.from('jobs').select('*').eq('id', invoice.job_id).single(),
+        supabase.from('part_lines').select('*').eq('job_id', invoice.job_id).order('created_at'),
+        supabase.from('quotes').select('tax_rate_bp').eq('job_id', invoice.job_id).limit(1).maybeSingle(),
+      ])
+      void quote
+      if (!job) throw new Error('The job behind this invoice is gone.')
+      // The invoice owns its tax rate once created — re-deriving it from the
+      // source quote here would silently undo a rate set on this invoice.
+      const taxRateBp = taxRateBpOverride ?? invoice.tax_rate_bp ?? 0
+      const snapshot = buildInvoiceSnapshot(job as Job, (partLines as PartLine[]) ?? [], taxRateBp)
+      const { error } = await supabase
+        .from('invoices')
+        .update({
+          job_title: (job as Job).title,
+          work_performed: (job as Job).work_performed,
+          ...snapshot,
+        })
+        .eq('id', invoice.id)
+      if (error) throw error
+      setRefreshMsg(taxRateBpOverride == null ? 'Updated from the job ✓' : 'Tax rate updated ✓')
+      await load()
+      setTimeout(() => setRefreshMsg(''), 3000)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+    }
+    setRefreshing(false)
+  }
+
+  async function deleteInvoice() {
+    if (!invoice) return
+    if (
+      !confirm(
+        `Delete ${invoice.invoice_number} for good? It was never sent, so nothing the customer has seen changes. The job and its parts are untouched.`,
+      )
+    ) {
+      return
+    }
+    const { error } = await supabase.from('invoices').delete().eq('id', invoice.id)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    router.push('/billing')
+  }
 
   useDocumentTitle(
     invoice ? `${invoice.invoice_number} Invoice — ${invoice.customer_name}` : null,
@@ -129,6 +199,22 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn btn-sm btn-primary" onClick={shareLink}>📤 Send link</button>
           <button className="btn btn-sm" onClick={() => window.print()}>🖨️ Print</button>
+          {invoice.status === 'draft' && (
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setTaxInput(String((invoice.tax_rate_bp ?? 0) / 100))
+                setEditingTax(!editingTax)
+              }}
+            >
+              % Tax ({(invoice.tax_rate_bp ?? 0) / 100}%)
+            </button>
+          )}
+          {invoice.status === 'draft' && (
+            <button className="btn btn-sm" disabled={refreshing} onClick={() => refreshFromJob()}>
+              {refreshing ? 'Updating…' : '↻ Update from job'}
+            </button>
+          )}
           {invoice.status !== 'paid' && invoice.status !== 'void' && (
             <button
               className="btn btn-sm"
@@ -153,7 +239,44 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               Void
             </button>
           )}
+          {neverIssued && (
+            <button className="btn btn-sm btn-danger" onClick={deleteInvoice}>
+              Delete
+            </button>
+          )}
         </div>
+        {editingTax && invoice.status === 'draft' && (
+          <div className="panel-in flex flex-wrap items-center gap-2">
+            <label className="text-sm" style={{ color: 'var(--text2)' }}>Sales tax %</label>
+            <input
+              className="input !min-h-[38px] !w-24"
+              inputMode="decimal"
+              value={taxInput}
+              onChange={(e) => setTaxInput(e.target.value)}
+            />
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={refreshing}
+              onClick={async () => {
+                const pct = Number(taxInput)
+                if (!Number.isFinite(pct) || pct < 0) {
+                  alert('Enter a percentage, like 5 — or 0 for no tax.')
+                  return
+                }
+                await refreshFromJob(Math.round(pct * 100))
+                setEditingTax(false)
+              }}
+            >
+              Apply
+            </button>
+            <span className="text-xs" style={{ color: 'var(--text3)' }}>
+              0 removes the tax line entirely.
+            </span>
+          </div>
+        )}
+        {refreshMsg && (
+          <p className="flash-in text-sm" style={{ color: 'var(--green)' }}>{refreshMsg}</p>
+        )}
         {payOpen && invoice.status !== 'paid' && invoice.status !== 'void' && (
           <div className="panel-in card grid grid-cols-2 gap-2 sm:grid-cols-4">
             <input
