@@ -45,6 +45,11 @@ export interface Job {
   parts_charged_override_cents: number | null
   payment_status: PaymentStatus
   amount_paid_cents: number | null
+  /** Shop warranty on this job's parts and labor. Null = none given. */
+  warranty_months: number | null
+  warranty_miles: number | null
+  /** When the customer was told the vehicle would be ready. */
+  promised_date: string | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -66,6 +71,8 @@ export interface PartLine {
   unit_charge_cents: number | null
   /** Generated: qty × (unit_charge ?? unit_cost). What the customer pays for this line. */
   line_charge_total_cents: number
+  /** For core-charge lines: when the old unit went back. Null on a core line = still in the shop. */
+  core_returned_at: string | null
   notes: string | null
   created_at: string
   updated_at: string

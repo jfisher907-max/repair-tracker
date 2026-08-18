@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import JobRow from '@/components/JobRow'
 import { SkeletonList } from '@/components/Skeleton'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
+import { formatDate, todayLocalIso } from '@/lib/date'
 import { vehicleLabel } from '@/lib/types'
 
 export default function JobsPage() {
@@ -91,9 +92,51 @@ export default function JobsPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((it) => (
-            <JobRow key={it.job.id} item={it} />
-          ))}
+          {/* What was promised and not yet paid off floats to the top, because
+              "what did I commit to this week" is the question this list answers. */}
+          {(() => {
+            const today = todayLocalIso()
+            const weekOut = new Date()
+            weekOut.setDate(weekOut.getDate() + 7)
+            const week = `${weekOut.getFullYear()}-${String(weekOut.getMonth() + 1).padStart(2, '0')}-${String(weekOut.getDate()).padStart(2, '0')}`
+            const promised = filtered.filter(
+              (it) =>
+                it.job.promised_date != null &&
+                it.job.promised_date <= week &&
+                it.job.payment_status !== 'paid',
+            )
+            const rest = filtered.filter((it) => !promised.includes(it))
+            return (
+              <>
+                {promised.length > 0 && (
+                  <>
+                    <div className="label">Promised this week</div>
+                    {promised.map((it) => (
+                      <div key={it.job.id} className="space-y-1">
+                        <JobRow item={it} />
+                        <p
+                          className="rounded-lg px-3 py-1.5 text-xs font-semibold"
+                          style={{
+                            background: 'var(--bg2)',
+                            color: it.job.promised_date! < today ? 'var(--red)' : 'var(--accent2)',
+                            borderLeft: `3px solid ${it.job.promised_date! < today ? 'var(--red)' : 'var(--accent)'}`,
+                          }}
+                        >
+                          {it.job.promised_date! < today ? 'Promised ' : 'Promised back '}
+                          {formatDate(it.job.promised_date)}
+                          {it.job.promised_date! < today && ' — overdue'}
+                        </p>
+                      </div>
+                    ))}
+                    {rest.length > 0 && <div className="label !mt-4">Everything else</div>}
+                  </>
+                )}
+                {rest.map((it) => (
+                  <JobRow key={it.job.id} item={it} />
+                ))}
+              </>
+            )
+          })()}
         </div>
       )}
     </div>

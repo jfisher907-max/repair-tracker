@@ -8,7 +8,8 @@ import { computeTotals } from '@/lib/calc'
 import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
-import { formatDate } from '@/lib/date'
+import { formatDate, todayLocalIso } from '@/lib/date'
+import { saveJobAsTemplate } from '@/lib/templates'
 import JobPhotos from '@/components/JobPhotos'
 import RecommendationList from '@/components/RecommendationList'
 import { listForJob, toMemo, type Recommendation } from '@/lib/recommendations'
@@ -363,9 +364,31 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       <div className="card space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold" style={{ color: 'var(--accent2)' }}>{job.job_number}</span>
               <span className={`chip chip-${job.payment_status}`}>{job.payment_status}</span>
+              {job.promised_date && job.payment_status !== 'paid' && (
+                <span
+                  className="chip"
+                  style={{
+                    background: 'var(--bg3)',
+                    color: job.promised_date < todayLocalIso() ? 'var(--red)' : 'var(--accent2)',
+                  }}
+                >
+                  promised {formatDate(job.promised_date)}
+                </span>
+              )}
+              {(job.warranty_months != null || job.warranty_miles != null) && (
+                <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--green)' }}>
+                  warranty{' '}
+                  {[
+                    job.warranty_months != null ? `${job.warranty_months}mo` : null,
+                    job.warranty_miles != null ? `${formatMiles(job.warranty_miles)}mi` : null,
+                  ]
+                    .filter(Boolean)
+                    .join('/')}
+                </span>
+              )}
             </div>
             <h1 className="text-2xl">{job.title}</h1>
             <div className="text-sm" style={{ color: 'var(--text2)' }}>
@@ -409,6 +432,24 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               🖨️ Print full history
             </Link>
           )}
+          <button
+            className="btn btn-sm"
+            onClick={async () => {
+              const name = prompt(
+                'Template name (what you’d call this job in a list):',
+                job.title,
+              )
+              if (!name?.trim()) return
+              try {
+                await saveJobAsTemplate(name, job, lines)
+                alert(`Saved — "${name.trim()}" is now a starting point on New Job.`)
+              } catch (e) {
+                alert(e instanceof Error ? e.message : String(e))
+              }
+            }}
+          >
+            ♻️ Save as template
+          </button>
           {job.payment_status !== 'paid' && (
             <button
               className="btn btn-sm"

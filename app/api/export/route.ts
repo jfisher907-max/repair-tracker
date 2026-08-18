@@ -28,12 +28,13 @@ const TABLES: Record<string, string[]> = {
   jobs: [
     'id', 'job_number', 'vehicle_id', 'date', 'odometer_miles', 'title', 'work_performed',
     'labor_hours', 'labor_rate_cents', 'parts_charged_override_cents', 'payment_status',
-    'amount_paid_cents', 'notes', 'created_at', 'updated_at', 'deleted_at',
+    'amount_paid_cents', 'warranty_months', 'warranty_miles', 'promised_date',
+    'notes', 'created_at', 'updated_at', 'deleted_at',
   ],
   part_lines: [
     'id', 'job_id', 'receipt_id', 'purchase_date', 'store', 'part_number', 'description', 'qty',
     'unit_cost_cents', 'line_total_cents', 'unit_charge_cents', 'line_charge_total_cents',
-    'notes', 'created_at', 'updated_at',
+    'core_returned_at', 'notes', 'created_at', 'updated_at',
   ],
   receipts: [
     'id', 'job_id', 'storage_path', 'store', 'purchase_date', 'receipt_total_cents',
@@ -68,6 +69,9 @@ const TABLES: Record<string, string[]> = {
   payments: [
     'id', 'job_id', 'invoice_id', 'date', 'method', 'amount_cents', 'note',
     'created_at', 'updated_at',
+  ],
+  job_templates: [
+    'id', 'name', 'title', 'work_performed', 'labor_hours', 'lines', 'created_at', 'updated_at',
   ],
   job_photos: [
     'id', 'job_id', 'storage_path', 'caption', 'customer_visible', 'created_at', 'updated_at',

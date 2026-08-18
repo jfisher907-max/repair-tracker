@@ -8,6 +8,7 @@ import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { ageInDays, statusColors, type Recommendation } from '@/lib/recommendations'
 import { todayLocalIso } from '@/lib/date'
+import { listCoresOut, markCoreReturned, type CoreOut } from '@/lib/cores'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 
 interface Row extends Recommendation {
@@ -25,6 +26,7 @@ export default function FollowUpsPage() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [filter, setFilter] = useState<Filter>('open')
   const [sharedId, setSharedId] = useState<string | null>(null)
+  const [cores, setCores] = useState<CoreOut[]>([])
 
   const load = useCallback(async () => {
     // Inner joins plus the deleted_at filters keep items from binned jobs and
@@ -49,11 +51,21 @@ export default function FollowUpsPage() {
       return
     }
     setRows((data as Row[]) ?? [])
+    try {
+      setCores(await listCoresOut())
+    } catch {
+      // Cores are a side panel — a failed load must not take the page down.
+    }
   }, [])
 
   useEffect(() => {
     load()
   }, [load])
+
+  async function coreReturned(c: CoreOut) {
+    await markCoreReturned(c.id, true)
+    await load()
+  }
 
   const shown = useMemo(() => {
     const all = rows ?? []
@@ -103,6 +115,42 @@ export default function FollowUpsPage() {
           </span>
         )}
       </div>
+
+      {cores.length > 0 && (
+        <div className="card space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="label !mb-0">Cores to return</span>
+            <span className="money text-sm font-bold" style={{ color: 'var(--orange)' }}>
+              {formatCents(cores.reduce((s, c) => s + c.line_total_cents, 0))} out
+            </span>
+          </div>
+          {cores.map((c) => {
+            const days = ageInDays(c)
+            return (
+              <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <div className="min-w-0">
+                  <span className="font-semibold">{c.description}</span>{' '}
+                  <span style={{ color: 'var(--text3)' }}>
+                    {[c.store, c.job?.job_number, days > 0 ? `${days}d ago` : 'today']
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </div>
+                <div className="flex flex-none items-center gap-2">
+                  <span className="money">{formatCents(c.line_total_cents)}</span>
+                  <button className="btn btn-sm" onClick={() => coreReturned(c)}>
+                    ↩ Returned
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Deposits you&apos;ve paid on old units still in the shop. Mark each one returned when
+            it goes back — this is your money until it does.
+          </p>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {(['open', 'booked', 'all'] as Filter[]).map((f) => (

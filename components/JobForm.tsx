@@ -7,6 +7,7 @@ import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 import { syncJobPayment } from '@/lib/payments'
+import { listTemplates, type JobTemplate, type JobTemplateLine } from '@/lib/templates'
 
 interface VehicleOption extends Vehicle {
   customer: Customer | null
@@ -46,6 +47,16 @@ export default function JobForm({ job }: { job?: Job }) {
   const [laborRate, setLaborRate] = useState(job ? centsToInput(job.labor_rate_cents) : '')
   const [workPerformed, setWorkPerformed] = useState(job?.work_performed ?? '')
   const [notes, setNotes] = useState(job?.notes ?? '')
+  const [promisedDate, setPromisedDate] = useState(job?.promised_date ?? '')
+  const [templates, setTemplates] = useState<JobTemplate[]>([])
+  const [templateLines, setTemplateLines] = useState<JobTemplateLine[]>([])
+  const [templateName, setTemplateName] = useState<string | null>(null)
+  const [warrantyMonths, setWarrantyMonths] = useState(
+    job?.warranty_months != null ? String(job.warranty_months) : '',
+  )
+  const [warrantyMiles, setWarrantyMiles] = useState(
+    job?.warranty_miles != null ? String(job.warranty_miles) : '',
+  )
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +79,7 @@ export default function JobForm({ job }: { job?: Job }) {
       .order('name')
       .then(({ data }) => setCustomers((data as Customer[]) ?? []))
     if (!editing) {
+      listTemplates().then(setTemplates)
       supabase
         .from('settings')
         .select('default_labor_rate_cents')
@@ -153,6 +165,9 @@ export default function JobForm({ job }: { job?: Job }) {
         labor_rate_cents: parseMoney(laborRate) ?? 0,
         work_performed: workPerformed.trim() || null,
         notes: notes.trim() || null,
+        promised_date: promisedDate || null,
+        warranty_months: warrantyMonths ? Number(warrantyMonths) : null,
+        warranty_miles: warrantyMiles ? Number(warrantyMiles.replace(/[,\s]/g, '')) : null,
       }
 
       if (editing) {
@@ -167,6 +182,20 @@ export default function JobForm({ job }: { job?: Job }) {
       } else {
         const { data, error } = await supabase.from('jobs').insert(payload).select('id').single()
         if (error) throw error
+        // A template's lines come along as pre-priced charge lines; costs stay
+        // zero until the real parts are bought and the receipt is scanned.
+        if (templateLines.length) {
+          const { error: lineErr } = await supabase.from('part_lines').insert(
+            templateLines.map((l) => ({
+              job_id: data.id,
+              description: l.description,
+              qty: l.qty,
+              unit_cost_cents: 0,
+              unit_charge_cents: l.unit_charge_cents,
+            })),
+          )
+          if (lineErr) throw lineErr
+        }
         router.push(`/jobs/${data.id}`)
       }
     } catch (e) {
@@ -178,6 +207,49 @@ export default function JobForm({ job }: { job?: Job }) {
   return (
     <form onSubmit={submit} className="mx-auto max-w-2xl space-y-4">
       <h1 className="text-2xl">{editing ? `Edit ${job.job_number}` : 'New Job'}</h1>
+
+      {/* Start from a template — the shop's own repeat jobs, two taps. */}
+      {!editing && templates.length > 0 && (
+        <div className="card space-y-2">
+          <span className="label !mb-0">Start from a saved job</span>
+          <div className="flex flex-wrap gap-2">
+            {templates.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`btn btn-sm ${templateName === t.name ? 'btn-primary' : ''}`}
+                onClick={() => {
+                  setTitle(t.title)
+                  setWorkPerformed(t.work_performed ?? '')
+                  setLaborHours(String(Number(t.labor_hours)))
+                  setTemplateLines(t.lines ?? [])
+                  setTemplateName(t.name)
+                }}
+              >
+                {t.name}
+              </button>
+            ))}
+            {templateName && (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => {
+                  setTemplateLines([])
+                  setTemplateName(null)
+                }}
+              >
+                ✕ Clear
+              </button>
+            )}
+          </div>
+          {templateName && (
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              {templateLines.length} pre-priced line{templateLines.length === 1 ? '' : 's'} will be
+              added to the job. Parts costs stay blank until you scan the receipt.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Vehicle picker */}
       {!editing && (
@@ -310,6 +382,37 @@ export default function JobForm({ job }: { job?: Job }) {
             value={odometer}
             onChange={(e) => setOdometer(e.target.value)}
           />
+        </div>
+        <div>
+          <label className="label">Promised back</label>
+          <input
+            className="input"
+            type="date"
+            value={promisedDate}
+            onChange={(e) => setPromisedDate(e.target.value)}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="label">Warranty (months)</label>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="12"
+              value={warrantyMonths}
+              onChange={(e) => setWarrantyMonths(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="label">…or miles</label>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="12,000"
+              value={warrantyMiles}
+              onChange={(e) => setWarrantyMiles(e.target.value)}
+            />
+          </div>
         </div>
         <div className="sm:col-span-2">
           <label className="label">Title *</label>

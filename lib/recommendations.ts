@@ -60,8 +60,8 @@ export function toMemo(items: Recommendation[]): string | null {
   return open.length === 1 ? open[0] : open.map((d) => `• ${d}`).join('\n')
 }
 
-/** How long an open item has been waiting — the worklist sorts on this. */
-export function ageInDays(r: Recommendation): number {
+/** How long an item has been waiting — worklist rows and cores both show this. */
+export function ageInDays(r: Pick<Recommendation, 'created_at'>): number {
   const then = new Date(r.created_at).getTime()
   return Math.max(0, Math.floor((Date.now() - then) / 86_400_000))
 }

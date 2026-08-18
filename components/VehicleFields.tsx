@@ -160,9 +160,11 @@ export default function VehicleFields({
       <div className="flex gap-2">
         <input
           className="input flex-1 uppercase"
-          placeholder="VIN — fastest way: type it and decode"
+          placeholder="VIN — scan it with the camera or type it"
           autoCapitalize="characters"
           autoCorrect="off"
+          autoComplete="off"
+          enterKeyHint="go"
           spellCheck={false}
           value={value.vin}
           onChange={(e) => {
@@ -182,9 +184,14 @@ export default function VehicleFields({
           {decoding ? 'Decoding…' : '⚡ Decode VIN'}
         </button>
       </div>
-      {vinStatus && (
+      {vinStatus ? (
         <p className="text-sm" style={{ color: vinStatus.ok ? 'var(--green)' : 'var(--red)' }}>
           {vinStatus.msg}
+        </p>
+      ) : (
+        <p className="text-xs" style={{ color: 'var(--text3)' }}>
+          📷 On iPhone: tap the field, then the scan-text button on the keyboard, and point the
+          camera at the door-jamb sticker or windshield plate. Decode fills the rest.
         </p>
       )}
       <div className="grid grid-cols-3 gap-2">
