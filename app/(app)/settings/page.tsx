@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [payInstructions, setPayInstructions] = useState('')
   const [stores, setStores] = useState('')
   const [savedMsg, setSavedMsg] = useState('')
+  const [cardPay, setCardPay] = useState<boolean | null>(null)
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
   const [aiTest, setAiTest] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -67,6 +68,10 @@ export default function SettingsPage() {
         setAiConfigured(false)
       }
     })
+    fetch('/api/pay/status')
+      .then((r) => r.json())
+      .then((x) => setCardPay(!!x.enabled))
+      .catch(() => setCardPay(false))
     loadDeleted()
   }, [])
 
@@ -224,6 +229,17 @@ export default function SettingsPage() {
             )}
           </div>
         )}
+      </div>
+
+      <div className="card space-y-2">
+        <div className="label">Card payments</div>
+        <p className="text-sm" style={{ color: 'var(--text2)' }}>
+          {cardPay == null
+            ? 'Checking…'
+            : cardPay
+              ? 'Live — invoices you send show a “Pay by card” button, and paid invoices land in the ledger automatically.'
+              : 'Not set up — invoices are paid by cash, check or Venmo and you record them yourself. To accept cards, add the Stripe keys in the Vercel project settings (see README).'}
+        </p>
       </div>
 
       <div className="card space-y-2">
