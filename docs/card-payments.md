@@ -29,7 +29,7 @@ is one.
 
 Stripe → Developers → Webhooks → **Add endpoint**
 
-- URL: `https://<your-site>/api/pay/webhook`
+- URL: `https://wingsnthings.repair/api/pay/webhook`
 - Event: `checkout.session.completed`
 
 Copy the **Signing secret** it shows into `STRIPE_WEBHOOK_SECRET`, then

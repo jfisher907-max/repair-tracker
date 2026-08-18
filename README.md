@@ -15,6 +15,7 @@ The shop name shown in the app chrome lives in `lib/brand.ts`; the name printed 
 | Database, auth account, receipt photos | Supabase project **repair-tracker** (`kccmalbgfekapedgvhar`), region us-west-1 — [dashboard](https://supabase.com/dashboard/project/kccmalbgfekapedgvhar) |
 | Code | This repo (`jfisher907-max/repair-tracker` on GitHub) |
 | Hosting | Vercel project linked to this repo, auto-deploys `main` |
+| Live site | **https://wingsnthings.repair** — the `repair-tracker-three-psi.vercel.app` address is still attached and must stay: quote and invoice links already sent to customers use it. Customer links are built from whatever domain the app is open on, so use the real domain day to day. |
 | Backups | Settings → "Export all data" downloads a zip of CSVs + all receipt photos. Do this now and then. |
 
 Money is stored as **integer cents** everywhere (`*_cents` columns). Job totals are computed by the `job_totals` Postgres view; the same math is mirrored in `lib/calc.ts`.
