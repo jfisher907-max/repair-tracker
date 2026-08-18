@@ -152,9 +152,21 @@ export default function QuoteForm({
       if (editing) {
         // Editing a sent/decided quote invalidates what the customer saw —
         // drop it back to draft so it must be re-sent.
+        // The authorization details go with it: they describe a document that
+        // no longer exists, and leaving them would let the record card caption
+        // the new version — or relabel a decline as an approval. The permanent
+        // copy lives in quote_approvals, which is append-only.
         const resetStatus =
           quote.status !== 'draft'
-            ? { status: 'draft' as const, decided_at: null }
+            ? {
+                status: 'draft' as const,
+                decided_at: null,
+                approved_by_name: null,
+                approval_consent: null,
+                approval_ip: null,
+                approval_user_agent: null,
+                approved_snapshot: null,
+              }
             : {}
         const { error } = await supabase
           .from('quotes')

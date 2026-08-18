@@ -1,7 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
-import ReceiptPreview from '@/components/ReceiptPreview'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { prepareUpload } from '@/lib/upload'
 
@@ -26,6 +25,23 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [viewing, setViewing] = useState<JobPhoto | null>(null)
+  /** Mirrors `urls` so load() can skip already-signed paths without depending on it. */
+  const signedRef = useRef<Record<string, string>>({})
+
+  // Escape closes the viewer, and the page behind it must not scroll.
+  useEffect(() => {
+    if (!viewing) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewing(null)
+    }
+    window.addEventListener('keydown', onKey)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
+  }, [viewing])
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -35,18 +51,22 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
       .order('created_at')
     const rows = (data as JobPhoto[]) ?? []
     setPhotos(rows)
-    if (rows.length) {
+    const unsigned = rows.filter((p) => !signedRef.current[p.storage_path])
+    if (unsigned.length) {
       const { data: signed } = await supabase.storage
         .from('receipts')
         .createSignedUrls(
-          rows.map((p) => p.storage_path),
+          unsigned.map((p) => p.storage_path),
           3600,
         )
       const map: Record<string, string> = {}
       for (const s of signed ?? []) {
         if (s.signedUrl && s.path) map[s.path] = s.signedUrl
       }
-      setUrls(map)
+      // Merge rather than replace: a caption edit re-runs load(), and swapping
+      // in fresh URLs would make every thumbnail in the grid download again.
+      signedRef.current = { ...signedRef.current, ...map }
+      setUrls((prev) => ({ ...prev, ...map }))
     }
   }, [jobId])
 
@@ -101,6 +121,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
     if (!confirm('Delete this photo? The file is removed for good.')) return
     await supabase.storage.from('receipts').remove([p.storage_path])
     await supabase.from('job_photos').delete().eq('id', p.id)
+    delete signedRef.current[p.storage_path]
     if (viewing?.id === p.id) setViewing(null)
     await load()
   }
@@ -165,7 +186,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
               </button>
               <div className="space-y-1 p-1.5">
                 <input
-                  className="input !min-h-[32px] !text-xs"
+                  className="input !min-h-[44px]" style={{ fontSize: 16 }}
                   placeholder="Caption"
                   defaultValue={p.caption ?? ''}
                   onBlur={(e) => {
@@ -210,14 +231,15 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
             <span className="truncate text-sm font-semibold">{viewing.caption || 'Photo'}</span>
             <button className="btn btn-sm" onClick={() => setViewing(null)}>✕ Close</button>
           </div>
-          <div className="min-h-0 flex-1">
-            <ReceiptPreview
-              url={urls[viewing.storage_path]}
-              kind="image"
-              fileName={viewing.caption || ''}
-              label="Photo"
-            />
-          </div>
+          {/* The image directly, not a card inside a card — the previous
+              version nested a second full-screen viewer and left most of the
+              screen unused. Pinch-zoom works because the viewport allows it. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={urls[viewing.storage_path]}
+            alt={viewing.caption || 'Job photo'}
+            className="min-h-0 w-full flex-1 object-contain"
+          />
         </div>
       )}
     </div>

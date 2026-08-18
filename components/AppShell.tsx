@@ -11,7 +11,7 @@ const tabs = [
   { href: '/jobs', label: 'Jobs', icon: '🗂️' },
   { href: '/jobs/new', label: 'New Job', icon: '➕', primary: true },
   { href: '/billing', label: 'Billing', icon: '🧾' },
-  { href: '/customers', label: 'Customers', icon: '👤' },
+  { href: '/followups', label: 'Follow-ups', icon: '🔔' },
 ]
 
 const sideNav: { label: string; items: { href: string; label: string; icon: string }[] }[] = [

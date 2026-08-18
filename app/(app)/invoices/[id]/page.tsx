@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { use, useCallback, useEffect, useState } from 'react'
 import DocView, { type DocData } from '@/components/DocView'
 import { useDocumentTitle } from '@/lib/title'
+import { listForJob, toMemo } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
 import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
 import { PAYMENT_METHODS, recordPayment } from '@/lib/payments'
@@ -87,7 +88,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           work_performed: (job as Job).work_performed,
           // Only seed notes that were never written here — a memo typed on
           // this invoice is the owner's, and a refresh must not eat it.
-          ...(invoice.memo ? {} : { memo: (job as Job).recommendations }),
+          // From the live recommendation items, not the superseded column.
+          ...(invoice.memo ? {} : { memo: toMemo(await listForJob(invoice.job_id)) }),
           ...snapshot,
         })
         .eq('id', invoice.id)

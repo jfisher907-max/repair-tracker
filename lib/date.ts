@@ -9,3 +9,13 @@ export function formatDate(isoDate: string | null | undefined): string {
   if (Number.isNaN(d.getTime())) return isoDate
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
+
+/**
+ * Today as YYYY-MM-DD in the LOCAL timezone. toISOString() is UTC, which is
+ * already tomorrow for part of the day and made date comparisons fire early.
+ */
+export function todayLocalIso(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}

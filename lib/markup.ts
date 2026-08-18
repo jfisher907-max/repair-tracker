@@ -22,6 +22,45 @@ export const DEFAULT_TIERS: MarkupTier[] = [
 ]
 
 /**
+ * Lines that are somebody else's money passing through — the tax and freight
+ * the supplier charged, a discount, a refundable core deposit. Marking these up
+ * bills the customer twice for tax and reads badly on an itemised invoice.
+ *
+ * Every term is anchored to whole words, and the ambiguous ones must appear as
+ * phrases: plenty of real parts are named after these words. A heater core, a
+ * radiator core support and a diesel delivery valve are parts to be sold at a
+ * margin — only a "core charge" is a deposit.
+ *
+ * Built with `new RegExp` from an array rather than a literal because this file
+ * has been written by tooling that mangled backslash escapes, which silently
+ * turned every \b into a backspace character and disabled the whole rule.
+ */
+const PASS_THROUGH = new RegExp(
+  [
+    '\\b(sales\\s*)?tax\\b',
+    '\\bfreight\\b',
+    '\\bshipping\\b',
+    '\\bdelivery\\s*(fee|charge)\\b',
+    '\\bcore\\s*(charge|chg|deposit|return|refund)\\b',
+    '\\bdiscount\\b',
+    '\\bcredit\\b',
+    '\\brefund\\b',
+    '\\bdeposit\\b',
+    '\\bdisposal\\b',
+    '\\benvironmental\\b',
+    '\\bfee\\b',
+    '\\bshop\\s*suppl',
+    '\\brecycl',
+    '\\bhaz-?mat\\b',
+  ].join('|'),
+  'i',
+)
+
+export function isPassThrough(description: string | null | undefined): boolean {
+  return PASS_THROUGH.test((description ?? '').trim())
+}
+
+/**
  * The charge for one unit at this cost, or null when the matrix is off or has
  * nothing to say. Null keeps the old meaning — charge at cost — so turning the
  * feature off restores exactly the previous behaviour.
@@ -29,18 +68,6 @@ export const DEFAULT_TIERS: MarkupTier[] = [
  * Never marks up a credit: a return or a core refund is a negative cost and
  * must come back to the customer at face value.
  */
-/**
- * Lines that are somebody else's money passing through — the tax and freight
- * the supplier charged, a discount, a refundable core deposit. Marking these up
- * bills the customer twice for tax and reads badly on an itemised invoice.
- */
-const PASS_THROUGH =
-  /(saless*)?tax|freight|shipping|delivery|core|discount|credit|refund|deposit|disposal|environmental|fee/i
-
-export function isPassThrough(description: string | null | undefined): boolean {
-  return PASS_THROUGH.test((description ?? '').trim())
-}
-
 export function markedUpCharge(
   costCents: number,
   config: MarkupConfig,

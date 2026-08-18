@@ -47,7 +47,12 @@ const TABLES: Record<string, string[]> = {
   quotes: [
     'id', 'quote_number', 'customer_id', 'vehicle_id', 'title', 'description', 'labor_hours',
     'labor_rate_cents', 'tax_rate_bp', 'status', 'valid_until', 'notes', 'job_id',
-    'sent_at', 'decided_at', 'created_at', 'updated_at', 'deleted_at',
+    'sent_at', 'decided_at', 'approved_by_name', 'approval_consent', 'approval_ip',
+    'approval_user_agent', 'approved_snapshot', 'created_at', 'updated_at', 'deleted_at',
+  ],
+  quote_approvals: [
+    'id', 'quote_id', 'response', 'by_name', 'consent', 'ip', 'user_agent',
+    'snapshot', 'created_at',
   ],
   quote_lines: [
     'id', 'quote_id', 'description', 'qty', 'unit_charge_cents', 'line_total_cents',
@@ -62,6 +67,9 @@ const TABLES: Record<string, string[]> = {
   payments: [
     'id', 'job_id', 'invoice_id', 'date', 'method', 'amount_cents', 'note',
     'created_at', 'updated_at',
+  ],
+  job_photos: [
+    'id', 'job_id', 'storage_path', 'caption', 'customer_visible', 'created_at', 'updated_at',
   ],
   recommendations: [
     'id', 'job_id', 'vehicle_id', 'description', 'status', 'target_date',

@@ -223,12 +223,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       description: draft.description.trim(),
       qty: draft.qty ? Number(draft.qty) : 1,
       unit_cost_cents: parseMoney(draft.unit_cost) ?? 0,
-      // Blank charge means "price it for me": the markup matrix fills it in so
-      // the line is never silently sold at cost. Still fully overridable.
+      // On a NEW line a blank charge means "price it for me" and the matrix
+      // fills it in. On an EDIT it means "sell this at cost": the box was
+      // pre-populated from the row, so empty is the state that was loaded, not
+      // a request to re-price. Without this split, correcting a store name on
+      // an at-cost line silently multiplied what the customer owes.
       unit_charge_cents:
-        draft.unit_charge.trim() === ''
-          ? markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup, draft.description)
-          : parseMoney(draft.unit_charge),
+        draft.unit_charge.trim() !== ''
+          ? parseMoney(draft.unit_charge)
+          : editingLineId
+            ? null
+            : markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup, draft.description),
     }
     const result = editingLineId
       ? await supabase.from('part_lines').update(payload).eq('id', editingLineId)

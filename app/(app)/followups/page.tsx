@@ -7,6 +7,7 @@ import { SkeletonList } from '@/components/Skeleton'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { ageInDays, statusColors, type Recommendation } from '@/lib/recommendations'
+import { todayLocalIso } from '@/lib/date'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 
 interface Row extends Recommendation {
@@ -26,9 +27,14 @@ export default function FollowUpsPage() {
   const [sharedId, setSharedId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
+    // Inner joins plus the deleted_at filters keep items from binned jobs and
+    // vehicles out of the worklist — chasing a customer about a job that was
+    // deleted is worse than not chasing at all.
     const { data } = await supabase
       .from('recommendations')
-      .select('*, vehicle:vehicles(*, customer:customers(*))')
+      .select('*, job:jobs!inner(deleted_at), vehicle:vehicles!inner(*, customer:customers(*))')
+      .is('job.deleted_at', null)
+      .is('vehicle.deleted_at', null)
       .order('created_at')
     setRows((data as Row[]) ?? [])
   }, [])
@@ -110,7 +116,7 @@ export default function FollowUpsPage() {
         <div className="space-y-2">
           {shown.map((r) => {
             const days = ageInDays(r)
-            const overdue = r.target_date != null && r.target_date < new Date().toISOString().slice(0, 10)
+            const overdue = r.target_date != null && r.target_date < todayLocalIso()
             return (
               <div key={r.id} className="card space-y-2">
                 <div className="flex items-start justify-between gap-3">
