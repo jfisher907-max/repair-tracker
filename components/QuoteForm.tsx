@@ -19,6 +19,12 @@ function plusDays(days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** An open recommendation offered as a one-tap quote line. */
+export interface QuoteSuggestion {
+  description: string
+  estimate_cents: number | null
+}
+
 /** The job an add-on quote authorizes extra work for. */
 export interface AddOnJobContext {
   id: string
@@ -36,6 +42,7 @@ export default function QuoteForm({
   existingLines,
   onSaved,
   addOnJob,
+  suggestions,
 }: {
   quote?: Quote
   existingLines?: QuoteLine[]
@@ -46,6 +53,8 @@ export default function QuoteForm({
       vehicle, and labor rate come from the job, and approval applies lines to
       that job instead of creating a new one. */
   addOnJob?: AddOnJobContext
+  /** Open recommendations for the vehicle — tappable prefill lines. */
+  suggestions?: QuoteSuggestion[]
 }) {
   const router = useRouter()
   const editing = !!quote
@@ -253,8 +262,15 @@ export default function QuoteForm({
           new job. Labor bills at the job&apos;s rate.
         </div>
       )}
+      {editing && quote.job_id && (
+        <div className="card !py-2 text-sm" style={{ color: 'var(--text2)' }}>
+          This quote is linked to a job, so the customer and vehicle are fixed.
+        </div>
+      )}
 
-      {!(addOnJob && !editing) && (
+      {/* A job-linked quote must never be repointed at another customer or
+          vehicle — the job it lands on wouldn't follow. */}
+      {!(addOnJob || quote?.job_id) && (
       <div className="card space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -337,6 +353,33 @@ export default function QuoteForm({
 
       <div className="card space-y-2">
         <div className="label">Parts & materials (estimated, customer prices)</div>
+        {!editing && (suggestions?.length ?? 0) > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {suggestions!.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                className="chip"
+                style={{ background: 'var(--bg3)', cursor: 'pointer' }}
+                title="From this vehicle's open recommendations — tap to add as a line"
+                onClick={() => {
+                  const newLine: LineDraft = {
+                    description: s.description,
+                    qty: '1',
+                    unit_charge: s.estimate_cents != null ? centsToInput(s.estimate_cents) : '',
+                  }
+                  // Replace the single untouched starter line instead of
+                  // stacking under it.
+                  const isBlank = (l: LineDraft) => !l.description.trim() && !l.unit_charge.trim()
+                  setLines(lines.length === 1 && isBlank(lines[0]) ? [newLine] : [...lines, newLine])
+                }}
+              >
+                💡 {s.description.length > 42 ? `${s.description.slice(0, 42)}…` : s.description}
+                {s.estimate_cents != null && ` · ${formatCents(s.estimate_cents)}`}
+              </button>
+            ))}
+          </div>
+        )}
         {lines.map((l, i) => (
           <div key={i} className="grid grid-cols-[1fr_64px_96px_36px] items-center gap-1.5">
             <input

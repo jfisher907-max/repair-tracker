@@ -137,6 +137,8 @@ export interface Quote {
   /** When this quote's lines landed on a job — conversion for regular quotes,
       apply for add-ons. Guards against applying twice. */
   applied_at: string | null
+  /** First time the customer opened the public link. Null = never viewed. */
+  viewed_at: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null

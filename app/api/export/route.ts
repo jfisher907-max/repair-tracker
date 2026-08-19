@@ -52,7 +52,7 @@ const TABLES: Record<string, string[]> = {
   quotes: [
     'id', 'quote_number', 'customer_id', 'vehicle_id', 'title', 'description', 'labor_hours',
     'labor_rate_cents', 'tax_rate_bp', 'status', 'valid_until', 'notes', 'job_id',
-    'sent_at', 'decided_at', 'approved_by_name', 'approval_consent', 'approval_ip',
+    'sent_at', 'decided_at', 'applied_at', 'approved_by_name', 'approval_consent', 'approval_ip',
     'approval_user_agent', 'approved_snapshot', 'created_at', 'updated_at', 'deleted_at',
   ],
   quote_approvals: [

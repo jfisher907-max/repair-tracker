@@ -23,6 +23,8 @@ interface PublicQuote {
   labor_rate_cents: number
   tax_rate_bp: number
   lines: PublicQuoteLine[]
+  /** Customer-visible photos of the job this quote belongs to (add-on quotes). */
+  photos: { path: string; caption: string | null }[]
   business: { name: string; phone: string; address: string; email: string }
 }
 
@@ -42,11 +44,34 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   const [respondError, setRespondError] = useState<string | null>(null)
   /** Line ids the customer has unticked while deciding. */
   const [unchecked, setUnchecked] = useState<Record<string, boolean>>({})
+  /** Signed URLs for the job's customer-visible photos, keyed by path. */
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
+    // Fire-and-forget: stamps first-view time so the shop can tell "never
+    // opened it" from "opened it and went quiet". Must never block the page.
+    supabase.rpc('mark_quote_viewed', { token }).then(
+      () => {},
+      () => {},
+    )
     const { data, error } = await supabase.rpc('get_public_quote', { token })
-    if (error || !data) setQuote('missing')
-    else setQuote(data as PublicQuote)
+    if (error || !data) {
+      setQuote('missing')
+      return
+    }
+    const q = data as PublicQuote
+    setQuote(q)
+    if (q.photos?.length) {
+      // Signing is allowed for customer-visible photos only (storage policy).
+      // If the policy isn't in place or signing fails, the section just
+      // doesn't render — photos are evidence, never a blocker.
+      const { data: signed } = await supabase.storage
+        .from('receipts')
+        .createSignedUrls(q.photos.map((p) => p.path), 3600)
+      const map: Record<string, string> = {}
+      for (const s of signed ?? []) if (s.signedUrl && s.path) map[s.path] = s.signedUrl
+      setPhotoUrls(map)
+    }
   }, [token])
 
   useEffect(() => {
@@ -255,6 +280,43 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
               Left out for now: {declinedAfterDecision.map((l) => l.description).join(', ')}
             </div>
           )}
+        </div>
+      )}
+      {quote.photos?.length > 0 && Object.keys(photoUrls).length > 0 && (
+        <div className="mx-auto max-w-2xl px-4 pb-2">
+          <div className="card space-y-2">
+            <span className="label !mb-0">What we found</span>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {quote.photos
+                .filter((p) => photoUrls[p.path])
+                .map((p) => (
+                  <a
+                    key={p.path}
+                    href={photoUrls[p.path]}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block overflow-hidden rounded-lg border"
+                    style={{ borderColor: 'var(--border)' }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photoUrls[p.path]}
+                      alt={p.caption || 'Photo from the shop'}
+                      loading="lazy"
+                      className="aspect-square w-full object-cover"
+                    />
+                    {p.caption && (
+                      <span className="block px-2 py-1 text-xs" style={{ color: 'var(--text2)' }}>
+                        {p.caption}
+                      </span>
+                    )}
+                  </a>
+                ))}
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              Tap a photo to see it full size.
+            </p>
+          </div>
         </div>
       )}
       <DocView doc={doc} />
