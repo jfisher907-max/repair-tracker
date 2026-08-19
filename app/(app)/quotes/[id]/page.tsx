@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useCallback, useEffect, useState } from 'react'
+import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import QuoteForm from '@/components/QuoteForm'
 import DocView, { type DocData } from '@/components/DocView'
@@ -30,6 +30,11 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const [editing, setEditing] = useState(false)
   const [shareMsg, setShareMsg] = useState('')
   const [converting, setConverting] = useState(false)
+  // Retry safety for the multi-write apply: if it fails partway, resubmitting
+  // must not repeat the writes that already landed (same rule as JobForm).
+  const appliedPartsRef = useRef(false)
+  const appliedRecsRef = useRef(false)
+  const appliedLaborRef = useRef(false)
 
   const load = useCallback(async () => {
     const [{ data: q }, { data: l }, { data: s }] = await Promise.all([
@@ -153,13 +158,100 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     setTimeout(() => setShareMsg(''), 3000)
   }
 
+  /** Add-on path: the job already exists — approved lines and labor go onto it. */
+  async function applyToJob() {
+    const { data: job, error: jobErr } = await supabase
+      .from('jobs')
+      .select('id, job_number, labor_hours, labor_rate_cents, work_performed')
+      .eq('id', quote!.job_id!)
+      .single()
+    if (jobErr || !job) {
+      alert(`Couldn't load the job this quote belongs to: ${jobErr?.message ?? 'not found'}`)
+      return
+    }
+    const approved = lines.filter((l) => !l.declined)
+    const declined = lines.filter((l) => l.declined)
+    const hours = Number(quote!.labor_hours) || 0
+    const rateMismatch =
+      hours > 0 && job.labor_rate_cents !== quote!.labor_rate_cents
+        ? `\n\nHeads up: the job bills at ${formatCents(job.labor_rate_cents)}/hr but this quote used ${formatCents(quote!.labor_rate_cents)}/hr — added hours bill at the JOB's rate.`
+        : ''
+    const unapproved =
+      quote!.status !== 'approved'
+        ? `\n\nThis quote is ${quote!.status.toUpperCase()} — the customer hasn't approved it through their link. Apply only if you have their OK some other way.`
+        : ''
+    if (
+      !confirm(
+        `Add ${approved.length} approved line${approved.length === 1 ? '' : 's'}${
+          hours ? ` and ${hours} hr labor` : ''
+        } to ${job.job_number}?${declined.length ? ` ${declined.length} declined line${declined.length === 1 ? '' : 's'} go to Follow-ups.` : ''}${rateMismatch}${unapproved}`,
+      )
+    )
+      return
+    setConverting(true)
+    try {
+      if (approved.length && !appliedPartsRef.current) {
+        const { error } = await supabase.from('part_lines').insert(
+          approved.map((l) => ({
+            job_id: job.id,
+            description: l.description,
+            qty: Number(l.qty),
+            unit_cost_cents: 0,
+            unit_charge_cents: l.unit_charge_cents,
+          })),
+        )
+        if (error) throw error
+        appliedPartsRef.current = true
+      }
+      if (declined.length && !appliedRecsRef.current) {
+        const { error } = await supabase.from('recommendations').insert(
+          declined.map((l) => ({
+            job_id: job.id,
+            vehicle_id: quote!.vehicle_id,
+            description: `${l.description} (declined on ${quote!.quote_number})`,
+            estimate_cents: l.line_total_cents,
+            status: 'open',
+          })),
+        )
+        if (error) throw error
+        appliedRecsRef.current = true
+      }
+      if (!appliedLaborRef.current) {
+        const addedScope = `+ ${quote!.title} (authorized via ${quote!.quote_number})`
+        const { error } = await supabase
+          .from('jobs')
+          .update({
+            labor_hours: Number(job.labor_hours) + hours,
+            work_performed: job.work_performed
+              ? `${job.work_performed}\n${addedScope}`
+              : addedScope,
+          })
+          .eq('id', job.id)
+        if (error) throw error
+        appliedLaborRef.current = true
+      }
+      const { error: doneErr } = await supabase
+        .from('quotes')
+        .update({ applied_at: new Date().toISOString() })
+        .eq('id', id)
+      if (doneErr) throw doneErr
+      router.push(`/jobs/${job.id}`)
+    } catch (e) {
+      alert(
+        `Apply didn't finish: ${e instanceof Error ? e.message : String(e)} — tap the button again; completed steps won't repeat.`,
+      )
+      setConverting(false)
+    }
+  }
+
   async function convertToJob() {
     if (!quote!.vehicle_id) {
       alert('Set a vehicle on this quote first (Edit) — jobs are always tied to a vehicle.')
       return
     }
     if (quote!.job_id) {
-      router.push(`/jobs/${quote!.job_id}`)
+      if (quote!.applied_at) router.push(`/jobs/${quote!.job_id}`)
+      else await applyToJob()
       return
     }
     if (!confirm(`Create a job from ${quote!.quote_number}? Quoted lines become the job's customer pricing; you'll add actual parts costs as you buy them.`)) return
@@ -207,7 +299,10 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         )
         if (recErr) throw recErr
       }
-      await supabase.from('quotes').update({ job_id: job.id }).eq('id', id)
+      await supabase
+        .from('quotes')
+        .update({ job_id: job.id, applied_at: new Date().toISOString() })
+        .eq('id', id)
       router.push(`/jobs/${job.id}`)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))
@@ -266,7 +361,13 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             </>
           )}
           <button className="btn btn-sm" disabled={converting} onClick={convertToJob}>
-            {quote.job_id ? '→ Open job' : converting ? 'Converting…' : '🔧 Convert to job'}
+            {quote.job_id && quote.applied_at
+              ? '→ Open job'
+              : converting
+                ? 'Working…'
+                : quote.job_id
+                  ? '➕ Apply to job'
+                  : '🔧 Convert to job'}
           </button>
           <button className="btn btn-sm btn-danger" onClick={softDelete}>Delete</button>
         </div>

@@ -22,6 +22,7 @@ import {
   type PartLine,
   type Payment,
   type PaymentMethod,
+  type Quote,
   type Receipt,
   type Vehicle,
 } from '@/lib/types'
@@ -79,6 +80,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [laborRateInput, setLaborRateInput] = useState('')
   const [editingOverride, setEditingOverride] = useState(false)
   const [overrideInput, setOverrideInput] = useState('')
+  const [linkedQuotes, setLinkedQuotes] = useState<(Quote & { total_cents: number | null })[]>([])
 
   const load = useCallback(async () => {
     const { data: j, error: jErr } = await supabase
@@ -124,6 +126,26 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       )
       setReceiptUrls(urls)
     }
+
+    // Quotes tied to this job: the one it came from plus any add-on quotes
+    // for extra work found mid-job.
+    const { data: lq } = await supabase
+      .from('quotes')
+      .select('*')
+      .eq('job_id', id)
+      .is('deleted_at', null)
+      .order('created_at')
+    const quoteRows = (lq as Quote[]) ?? []
+    const totalsByQuote: Record<string, number> = {}
+    if (quoteRows.length) {
+      const { data: qt } = await supabase
+        .from('quote_totals')
+        .select('*')
+        .in('quote_id', quoteRows.map((q) => q.id))
+      for (const t of (qt as { quote_id: string; total_cents: number }[]) ?? [])
+        totalsByQuote[t.quote_id] = t.total_cents
+    }
+    setLinkedQuotes(quoteRows.map((q) => ({ ...q, total_cents: totalsByQuote[q.id] ?? null })))
   }, [id])
 
   useEffect(() => {
@@ -450,6 +472,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           >
             ♻️ Save as template
           </button>
+          <Link href={`/quotes/new?job=${id}`} className="btn btn-sm">
+            ➕ Quote extra work
+          </Link>
           {job.payment_status !== 'paid' && (
             <button
               className="btn btn-sm"
@@ -487,6 +512,37 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       )}
 
       <JobPhotos jobId={id} />
+
+      {/* Quotes tied to this job — the originating quote and any add-on
+          authorizations for extra work found mid-job. */}
+      {linkedQuotes.length > 0 && (
+        <div className="card space-y-2">
+          <span className="label !mb-0">Quotes on this job</span>
+          {linkedQuotes.map((q) => (
+            <div key={q.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <div className="min-w-0">
+                <Link href={`/quotes/${q.id}`} style={{ color: 'var(--blue)' }}>
+                  {q.quote_number}
+                </Link>{' '}
+                <span className="truncate" style={{ color: 'var(--text2)' }}>{q.title}</span>
+              </div>
+              <div className="flex flex-none items-center gap-2">
+                {q.total_cents != null && <span className="money">{formatCents(q.total_cents)}</span>}
+                <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[q.status] }}>
+                  {q.status}
+                </span>
+                <span className="text-xs" style={{ color: q.applied_at ? 'var(--green)' : 'var(--text3)' }}>
+                  {q.applied_at ? '✓ on job' : 'not applied'}
+                </span>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Found more while you&apos;re in there? “➕ Quote extra work” sends the customer the
+            usual approval link, and approved lines land on this job.
+          </p>
+        </div>
+      )}
 
       {/* Recommendations — trackable items that follow the vehicle and seed
           the invoice the customer receives. */}

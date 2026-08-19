@@ -134,6 +134,9 @@ export interface Quote {
   approval_ip: string | null
   approval_user_agent: string | null
   approved_snapshot: unknown | null
+  /** When this quote's lines landed on a job — conversion for regular quotes,
+      apply for add-ons. Guards against applying twice. */
+  applied_at: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null

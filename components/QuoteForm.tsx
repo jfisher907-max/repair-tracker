@@ -19,32 +19,56 @@ function plusDays(days: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/** The job an add-on quote authorizes extra work for. */
+export interface AddOnJobContext {
+  id: string
+  job_number: string
+  labor_rate_cents: number
+  customer_id: string
+  customer_name: string
+  vehicle_id: string
+  vehicle_label: string
+}
+
 /** New/edit quote editor. Quotes are estimates — everything here is charge-side. */
 export default function QuoteForm({
   quote,
   existingLines,
   onSaved,
+  addOnJob,
 }: {
   quote?: Quote
   existingLines?: QuoteLine[]
   /** Embedded-edit mode: called after save instead of navigating (pushing the
       current route is a no-op, which would leave the button stuck on "Saving…"). */
   onSaved?: (quoteId: string) => void
+  /** Present = this quote authorizes EXTRA work on an existing job: customer,
+      vehicle, and labor rate come from the job, and approval applies lines to
+      that job instead of creating a new one. */
+  addOnJob?: AddOnJobContext
 }) {
   const router = useRouter()
   const editing = !!quote
 
   const [customers, setCustomers] = useState<Customer[]>([])
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
-  const [customerId, setCustomerId] = useState<string>(quote?.customer_id ?? '')
+  const [customerId, setCustomerId] = useState<string>(
+    quote?.customer_id ?? addOnJob?.customer_id ?? '',
+  )
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
-  const [vehicleId, setVehicleId] = useState<string>(quote?.vehicle_id ?? '')
+  const [vehicleId, setVehicleId] = useState<string>(quote?.vehicle_id ?? addOnJob?.vehicle_id ?? '')
 
   const [title, setTitle] = useState(quote?.title ?? '')
   const [description, setDescription] = useState(quote?.description ?? '')
   const [laborHours, setLaborHours] = useState(quote ? String(quote.labor_hours) : '')
-  const [laborRate, setLaborRate] = useState(quote ? centsToInput(quote.labor_rate_cents) : '')
+  const [laborRate, setLaborRate] = useState(
+    quote
+      ? centsToInput(quote.labor_rate_cents)
+      : addOnJob
+        ? centsToInput(addOnJob.labor_rate_cents)
+        : '',
+  )
   const [taxRate, setTaxRate] = useState(quote ? String(quote.tax_rate_bp / 100) : '')
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? plusDays(30))
   const [notes, setNotes] = useState(quote?.notes ?? '')
@@ -80,11 +104,13 @@ export default function QuoteForm({
         .single()
         .then(({ data }) => {
           if (!data) return
-          setLaborRate(centsToInput(data.default_labor_rate_cents))
+          // An add-on bills at ITS JOB's rate, not the shop default — the
+          // quoted total must match what lands on the job.
+          if (!addOnJob) setLaborRate(centsToInput(data.default_labor_rate_cents))
           setTaxRate(String((data.default_tax_rate_bp ?? 0) / 100))
         })
     }
-  }, [editing])
+  }, [editing, addOnJob])
 
   const customerVehicles = vehicles.filter((v) => v.customer_id === customerId)
 
@@ -139,6 +165,9 @@ export default function QuoteForm({
       const payload = {
         customer_id: cid,
         vehicle_id: vehicleId || null,
+        // Born linked: an add-on quote carries its job from creation, which is
+        // what makes "convert" become "apply to that job" on approval.
+        ...(addOnJob && !editing ? { job_id: addOnJob.id } : {}),
         title: title.trim(),
         description: description.trim() || null,
         labor_hours: Number(laborHours) || 0,
@@ -209,8 +238,23 @@ export default function QuoteForm({
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <h1 className="text-2xl">{editing ? `Edit ${quote.quote_number}` : 'New Quote'}</h1>
+      <h1 className="text-2xl">
+        {editing
+          ? `Edit ${quote.quote_number}`
+          : addOnJob
+            ? `Extra work on ${addOnJob.job_number}`
+            : 'New Quote'}
+      </h1>
 
+      {addOnJob && !editing && (
+        <div className="card !py-2 text-sm" style={{ color: 'var(--text2)' }}>
+          <b>{addOnJob.customer_name}</b> · {addOnJob.vehicle_label} — when the customer
+          approves, the approved lines and labor go onto <b>{addOnJob.job_number}</b>, not a
+          new job. Labor bills at the job&apos;s rate.
+        </div>
+      )}
+
+      {!(addOnJob && !editing) && (
       <div className="card space-y-3">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -257,6 +301,7 @@ export default function QuoteForm({
           )}
         </div>
       </div>
+      )}
 
       <div className="card grid gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
