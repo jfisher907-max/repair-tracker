@@ -10,6 +10,7 @@ const tabs = [
   { href: '/', label: 'Home', icon: '🏠' },
   { href: '/jobs', label: 'Jobs', icon: '🗂️' },
   { href: '/jobs/new', label: 'New Job', icon: '➕', primary: true },
+  { href: '/customers', label: 'People', icon: '👤' },
   { href: '/billing', label: 'Billing', icon: '🧾' },
   { href: '/followups', label: 'Follow-ups', icon: '🔔' },
 ]

@@ -41,9 +41,10 @@ not the same thing. Three engineering rules drive it:
 3. **Build foundations before the things that stand on them**, and do work that touches the
    same code in one pass rather than two.
 
-> **Status (2026-08-19):** Phases 1–5 shipped except the video half of Phase 3 and
+> **Status (2026-08-20):** Phases 1–5 shipped except the video half of Phase 3 and
 > Phase 4's deposits (blocked on Phase 0's Stripe keys). Phase 0 remains open (owner
-> errands: Stripe keys, review link). Shipped beyond the plan: mid-job add-on quotes with
+> errands: Stripe keys, review link). Phase 6 (customer-driven intake) committed to the
+> build order, queued after deposits. Shipped beyond the plan: mid-job add-on quotes with
 > atomic apply, verbal-OK method capture, quote viewed-signal, re-quote chips, photos on
 > the public quote page (dark until the storage policy runs).
 
@@ -97,33 +98,38 @@ Core charge tracking and a "cores out" list · VIN scan via iOS Live Text · war
 months/miles on the job · promised-back date with a this-week view · job templates from
 completed jobs · mileage-projected reminders.
 
+### Phase 6 — customer-driven intake (committed 2026-08-20; build after Stripe/deposits)
+
+The front door: customers start the job instead of the phone. Design settled by the
+2026-08-20 competitor research (precedents: MaintainX/Limble/UpKeep request portals, Jobber
+Requests, Shopmonkey Work Request Forms, Autoflow QR kiosk check-in). Two entrances, one
+inbox:
+
+- **6a — the request inbox.** `job_requests` table + owner UI: dashboard badge, one-tap
+  dismiss or convert (same pattern as quote conversion; convert stamps `promised_date`).
+  Requests never touch the calendar or the job list directly — the human inbox IS the spam
+  filter (plus honeypot + rate limit on the public write; CMMS vendors ship no captcha and
+  it works). Build this first; both entrances depend on it.
+- **6b — the anonymous QR entrance.** Public `/request` page, no login. PHONE NUMBER FIRST
+  as the identity key (dedupe against customers → returning customers land pre-linked);
+  required fields brutally minimal (name, phone, what's wrong — plate/vehicle and photos
+  optional; ask plate, not VIN); the tag URL carries its source (`?src=door|dropbox|card`);
+  a "my car is in your lot" checkbox self-verifies key-drop requests; instant "got it, Jake
+  will text you" confirmation (duplicate-prevention, not polish); NEVER show a price —
+  "not sure what's wrong" routes toward a diagnostic as the first job. Settings card renders
+  the printable QR. NFC is garnish — no vendor does NFC for anonymous customers; QR must
+  stand alone. WHITE SPACE we claim: the tag on the key-drop box (the incumbent is the paper
+  night-drop envelope whose own vendors admit customers skip it).
+- **6c — the customer portal entrance.** NO login accounts — the whole industry avoids them
+  and a second RLS tier is the riskiest change this schema can take; revisit only if fleet
+  clients appear. Instead `customers.public_token` (the statement link) grows into a
+  no-password portal: their vehicles + balance + "report an issue" form (vehicle pre-picked,
+  photo, optional time-preference chips — preference, never a slot picker). Portal requests
+  arrive pre-matched to customer + vehicle. QR confirmations text new customers their
+  personal link, which enrolls them for next time.
+
 ### Later, or never
 
-- **QR/NFC job-request intake** (Jake, 2026-08-19 — wanted, not yet; design sharpened by the
-  2026-08-20 competitor research). One public page (`/request`, no login) → `job_requests`
-  inbox — never directly a job or the calendar — one-tap dismiss or convert (same pattern as
-  quote conversion). Research-settled details: PHONE NUMBER FIRST as the identity key
-  (dedupe against customers → returning customers land pre-linked, Autoflow's pattern);
-  required fields brutally minimal (name, phone, what's wrong — plate/vehicle and photos
-  optional; ask plate, not VIN); the tag URL carries its source (`?src=door|dropbox|card`)
-  and a "my car is in your lot" checkbox self-verifies key-drop requests; instant "got it,
-  Jake will text you" confirmation (duplicate-prevention, not polish); NEVER show a price —
-  "not sure what's wrong" routes toward a diagnostic as the first job; the human inbox IS the
-  spam filter (plus honeypot + rate limit; CMMS vendors ship no captcha and it works).
-  Precedents: MaintainX/Limble/UpKeep request portals (one-for-one flow, QR included), Jobber
-  Requests, Shopmonkey Work Request Forms, Autoflow QR kiosk check-in. NFC is garnish — no
-  vendor does NFC for anonymous customers; QR must stand alone. WHITE SPACE: nobody pairs the
-  tag with the key-drop box; the incumbent is the paper night-drop envelope whose own vendors
-  admit customers skip it. Slot after Stripe/deposits.
-  **Evolution (Jake, 2026-08-20): request-to-schedule + "customer accounts."** Decision: NO
-  login accounts — the whole industry (Tekmetric/Shopmonkey/AutoVitals) avoids them, and a
-  second RLS tier is the riskiest change this schema can take. Instead the existing
-  `customers.public_token` (statement link) grows into a no-password portal: their vehicles +
-  balance + "report an issue" form (vehicle pre-picked, photo, optional time-preference
-  chips — preference, never a slot picker). Requests from a personal link arrive pre-matched
-  to customer + vehicle; the anonymous QR page and the portal feed ONE job_requests inbox;
-  convert can stamp promised_date. QR confirmations text new customers their personal link,
-  which enrolls them. Revisit real logins only if fleet clients appear.
 - **Lite inspection on the customer link** — after photos. Smallest version only: short
   editable checklist, three statuses, a photo and a line of text per finding, on the existing
   public-link machinery.
