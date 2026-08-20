@@ -99,15 +99,22 @@ completed jobs · mileage-projected reminders.
 
 ### Later, or never
 
-- **QR/NFC job-request intake** (Jake, 2026-08-19 — wanted, not yet). One public page
-  (`/request`, no login): name, phone, vehicle, what's wrong, later a photo. Lands in a
-  `job_requests` inbox — never directly a job — with one-tap dismiss or convert
-  (phone-number match against customers, else create customer+vehicle+job, same pattern as
-  quote conversion). Settings card renders the QR for printing/saving; NFC tags are just the
-  same URL written to a $1 sticker, no software needed. Needs: rate limit + honeypot on the
-  public write (SECURITY DEFINER RPC like respond_public_quote), notification story (dashboard
-  badge first, web push later). Slot after Stripe/deposits — it's a front door, most valuable
-  once the pipe behind it is complete.
+- **QR/NFC job-request intake** (Jake, 2026-08-19 — wanted, not yet; design sharpened by the
+  2026-08-20 competitor research). One public page (`/request`, no login) → `job_requests`
+  inbox — never directly a job or the calendar — one-tap dismiss or convert (same pattern as
+  quote conversion). Research-settled details: PHONE NUMBER FIRST as the identity key
+  (dedupe against customers → returning customers land pre-linked, Autoflow's pattern);
+  required fields brutally minimal (name, phone, what's wrong — plate/vehicle and photos
+  optional; ask plate, not VIN); the tag URL carries its source (`?src=door|dropbox|card`)
+  and a "my car is in your lot" checkbox self-verifies key-drop requests; instant "got it,
+  Jake will text you" confirmation (duplicate-prevention, not polish); NEVER show a price —
+  "not sure what's wrong" routes toward a diagnostic as the first job; the human inbox IS the
+  spam filter (plus honeypot + rate limit; CMMS vendors ship no captcha and it works).
+  Precedents: MaintainX/Limble/UpKeep request portals (one-for-one flow, QR included), Jobber
+  Requests, Shopmonkey Work Request Forms, Autoflow QR kiosk check-in. NFC is garnish — no
+  vendor does NFC for anonymous customers; QR must stand alone. WHITE SPACE: nobody pairs the
+  tag with the key-drop box; the incumbent is the paper night-drop envelope whose own vendors
+  admit customers skip it. Slot after Stripe/deposits.
 - **Lite inspection on the customer link** — after photos. Smallest version only: short
   editable checklist, three statuses, a photo and a line of text per finding, on the existing
   public-link machinery.
