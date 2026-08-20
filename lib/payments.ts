@@ -85,9 +85,13 @@ export async function syncJobPayment(
 
   const invoices = invoicesRes.data ?? []
   const paid = payments.reduce((s, p) => s + p.amount_cents, 0)
+  // Every invoice snapshots the WHOLE job, so multiple live invoices are
+  // revisions of the same debt, never installments — summing them counted a
+  // duplicate draft as doubling what the customer owed and stranded fully
+  // paid jobs at "partial". The largest one is the real ask.
   const invoicedTotal = invoices
     .filter((i) => i.status !== 'void')
-    .reduce((s, i) => s + i.total_cents, 0)
+    .reduce((s, i) => Math.max(s, i.total_cents), 0)
   const target = Math.max(totalsRes.data?.total_charged_cents ?? 0, invoicedTotal)
 
   const status = paid <= 0 ? 'unpaid' : paid >= target && target > 0 ? 'paid' : 'partial'

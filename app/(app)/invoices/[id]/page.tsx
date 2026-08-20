@@ -8,7 +8,7 @@ import { useDocumentTitle } from '@/lib/title'
 import { listForJob, toMemo } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
 import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
-import { PAYMENT_METHODS, recordPayment } from '@/lib/payments'
+import { PAYMENT_METHODS, recordPayment, syncJobPayment } from '@/lib/payments'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import type { Invoice, Job, PartLine, Payment, PaymentMethod, Settings } from '@/lib/types'
 
@@ -117,6 +117,12 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       alert(error.message)
       return
     }
+    // The set of live invoices changed, which can change what the job's
+    // payment status should be — a stale-cache bug (J006 stuck at "partial")
+    // came from skipping this.
+    try {
+      await syncJobPayment(invoice.job_id)
+    } catch {}
     router.push('/billing')
   }
 
@@ -166,6 +172,13 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     if (alsoJob === 'paid') {
       // One-way sync: an invoice marked paid settles its job.
       await supabase.from('jobs').update({ payment_status: 'paid' }).eq('id', invoice!.job_id)
+    }
+    if (fields.status === 'void') {
+      // Voiding shrinks the set of live invoices — what the job's payment
+      // status should be may change with it.
+      try {
+        await syncJobPayment(invoice!.job_id)
+      } catch {}
     }
     await load()
   }
