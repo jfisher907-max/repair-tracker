@@ -269,7 +269,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
                 />
                 <div className="flex items-center justify-between gap-1">
                   <button
-                    className="btn btn-sm !min-h-[30px] !px-1.5 !text-[0.65rem]"
+                    className="btn btn-sm !px-1.5 !text-[0.65rem]"
                     style={
                       p.customer_visible
                         ? { borderColor: 'var(--green)', color: 'var(--green)' }
@@ -281,7 +281,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
                     {p.customer_visible ? '👁 Customer' : 'Internal'}
                   </button>
                   <button
-                    className="btn btn-sm btn-danger !min-h-[30px] !px-1.5"
+                    className="btn btn-sm btn-danger !px-1.5"
                     aria-label="Delete photo"
                     onClick={() => remove(p)}
                   >

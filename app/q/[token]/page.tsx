@@ -184,7 +184,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
               {quote.lines.map((l) => (
                 <label
                   key={l.id}
-                  className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm"
+                  className="flex min-h-[44px] items-center justify-between gap-2 rounded-md px-2 py-2 text-sm"
                   style={{
                     background: unchecked[l.id] ? 'transparent' : '#1f2937',
                     color: unchecked[l.id] ? '#6b7280' : '#e5e7eb',

@@ -302,7 +302,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
               {rows.map((r, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-[1fr_64px_88px_36px] items-end gap-1.5 rounded-lg p-1.5"
+                  className="grid grid-cols-[1fr_64px_88px_44px] items-end gap-1.5 rounded-lg p-1.5"
                   style={r.confidence === 'low' ? { background: '#3d2f1466', outline: '1px solid var(--accent-dim)' } : undefined}
                 >
                   <div className="space-y-1">
@@ -312,8 +312,11 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
                       value={r.description}
                       onChange={(e) => setRow(i, { description: e.target.value })}
                     />
+                    {/* 16px font (the .input default) — anything smaller makes
+                        iOS zoom the viewport on focus, on the one screen that
+                        is entirely typing next to the receipt photo. */}
                     <input
-                      className="input !min-h-[34px] text-xs"
+                      className="input"
                       placeholder="Part #"
                       value={r.part_number}
                       onChange={(e) => setRow(i, { part_number: e.target.value })}

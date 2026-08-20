@@ -52,7 +52,7 @@ export default function ReceiptPreview({
       {isImage && (
         <>
           <button
-            className="btn btn-sm !min-h-[34px] !px-2"
+            className="btn btn-sm !px-2"
             aria-label="Zoom out"
             disabled={zoom <= ZOOMS[0]}
             onClick={() => setZoom((z) => ZOOMS[Math.max(0, ZOOMS.indexOf(z) - 1)] ?? ZOOMS[0])}
@@ -63,7 +63,7 @@ export default function ReceiptPreview({
             {Math.round(zoom * 100)}%
           </span>
           <button
-            className="btn btn-sm !min-h-[34px] !px-2"
+            className="btn btn-sm !px-2"
             aria-label="Zoom in"
             disabled={zoom >= ZOOMS[ZOOMS.length - 1]}
             onClick={() =>
@@ -73,7 +73,7 @@ export default function ReceiptPreview({
             +
           </button>
           <button
-            className="btn btn-sm !min-h-[34px] !px-2"
+            className="btn btn-sm !px-2"
             aria-label="Rotate"
             title="Rotate"
             onClick={() => setRot((r) => (r + 90) % 360)}
@@ -85,7 +85,7 @@ export default function ReceiptPreview({
       {url && (
         <>
           <button
-            className="btn btn-sm !min-h-[34px] !px-2"
+            className="btn btn-sm !px-2"
             aria-label={full ? 'Exit full screen' : 'Full screen'}
             title={full ? 'Exit full screen' : 'Full screen'}
             onClick={() => setFull(!full)}
@@ -93,7 +93,7 @@ export default function ReceiptPreview({
             {full ? '✕' : '⛶'}
           </button>
           <a
-            className="btn btn-sm !min-h-[34px] !px-2"
+            className="btn btn-sm !px-2"
             href={url}
             target="_blank"
             rel="noopener noreferrer"

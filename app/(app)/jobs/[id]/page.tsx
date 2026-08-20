@@ -936,13 +936,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       </div>
                     </div>
                   </a>
+                  {/* 44px hit area kept clear of the open-receipt link's
+                      corner — a ~22px ✕ overlapping the link was a coin flip
+                      with gloves on. */}
                   <button
-                    className="absolute right-1 top-1 rounded-full px-1.5 text-xs"
-                    style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--red)' }}
+                    className="absolute -right-1 -top-1 flex min-h-[44px] min-w-[44px] items-center justify-center"
                     onClick={() => deleteReceipt(r)}
                     aria-label="Delete receipt"
                   >
-                    ✕
+                    <span
+                      className="rounded-full px-2 py-0.5 text-xs"
+                      style={{ background: 'rgba(0,0,0,0.7)', color: 'var(--red)' }}
+                    >
+                      ✕
+                    </span>
                   </button>
                 </div>
               )
@@ -1065,7 +1072,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 {formatCents(p.amount_cents)}
               </span>
               <button
-                className="btn btn-sm btn-danger !min-h-[30px] !px-1.5 text-xs"
+                className="btn btn-sm btn-danger !px-1.5 text-xs"
                 aria-label="Delete payment"
                 onClick={async () => {
                   if (!confirm('Delete this payment record?')) return

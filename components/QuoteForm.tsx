@@ -400,7 +400,7 @@ export default function QuoteForm({
           </div>
         )}
         {lines.map((l, i) => (
-          <div key={i} className="grid grid-cols-[1fr_64px_96px_36px] items-center gap-1.5">
+          <div key={i} className="grid grid-cols-[1fr_64px_96px_44px] items-center gap-1.5">
             <input
               className="input !min-h-[40px]"
               placeholder="Description"

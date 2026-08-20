@@ -123,6 +123,13 @@ a.card:active {
 
 .btn-sm { min-height: 36px; padding: 0.25rem 0.7rem; font-size: 0.85rem; }
 
+/* Greasy-thumb rule: on touch screens every button meets the 44px minimum.
+   Desktop pointers keep the denser 36px. Compactness comes from padding and
+   font size, never from shrinking the hit area. */
+@media (pointer: coarse) {
+  .btn-sm { min-height: 44px; }
+}
+
 .input, .select, .textarea {
   width: 100%;
   min-height: 44px;

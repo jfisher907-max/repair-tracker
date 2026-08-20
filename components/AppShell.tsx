@@ -123,7 +123,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
           <Link
             href="/settings"
-            className="text-2xl transition-opacity"
+            className="-m-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl transition-opacity"
             aria-label="Settings"
             style={{ opacity: pathname.startsWith('/settings') ? 1 : 0.6 }}
           >

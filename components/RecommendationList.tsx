@@ -136,7 +136,7 @@ export default function RecommendationList({
             {RECOMMENDATION_STATUSES.map((s) => (
               <button
                 key={s.value}
-                className="btn btn-sm !min-h-[32px] !px-2 !text-xs"
+                className="btn btn-sm !px-2 !text-xs"
                 style={r.status === s.value ? { borderColor: statusColors[s.value], color: statusColors[s.value] } : undefined}
                 onClick={() => setStatus(r, s.value)}
               >
