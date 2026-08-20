@@ -308,10 +308,15 @@ export default function ExpensesPage() {
                     className="btn btn-sm"
                     aria-label="View receipt"
                     onClick={async () => {
+                      // Open the window synchronously — iOS discards the tap's
+                      // popup permission across an await, which left this
+                      // button silently dead on the phone.
+                      const win = window.open('about:blank', '_blank')
                       const { data } = await supabase.storage
                         .from('receipts')
                         .createSignedUrl(e.storage_path!, 3600)
-                      if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+                      if (data?.signedUrl && win) win.location.href = data.signedUrl
+                      else win?.close()
                     }}
                   >
                     📎

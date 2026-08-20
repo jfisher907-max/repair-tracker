@@ -207,8 +207,8 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   async function shareLink() {
-    // Sharing implies sending — auto-advance a draft.
-    if (quote!.status === 'draft') await setStatus('sent')
+    // Sharing implies sending — but only a share that actually HAPPENED.
+    // Cancelling the share sheet used to leave a draft marked "sent".
     try {
       if (navigator.share) {
         await navigator.share({
@@ -221,6 +221,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         await navigator.clipboard.writeText(publicUrl)
         setShareMsg('Link copied — text it to the customer ✓')
       }
+      if (quote!.status === 'draft') await setStatus('sent')
     } catch {
       setShareMsg('')
     }

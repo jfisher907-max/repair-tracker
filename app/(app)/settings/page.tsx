@@ -5,12 +5,13 @@ import { getAccessToken, supabase } from '@/lib/supabase'
 import { BRAND_SLUG } from '@/lib/brand'
 import { DEFAULT_TIERS, type MarkupTier } from '@/lib/markup'
 import { centsToInput, parseMoney } from '@/lib/money'
-import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
+import { vehicleLabel, type Customer, type Job, type Quote, type Vehicle } from '@/lib/types'
 
 interface DeletedItems {
   customers: Customer[]
   vehicles: Vehicle[]
   jobs: Job[]
+  quotes: Quote[]
 }
 
 export default function SettingsPage() {
@@ -37,18 +38,27 @@ export default function SettingsPage() {
   const [aiTest, setAiTest] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [deleted, setDeleted] = useState<DeletedItems>({ customers: [], vehicles: [], jobs: [] })
+  const [deleted, setDeleted] = useState<DeletedItems>({
+    customers: [],
+    vehicles: [],
+    jobs: [],
+    quotes: [],
+  })
 
   async function loadDeleted() {
-    const [c, v, j] = await Promise.all([
+    const [c, v, j, q] = await Promise.all([
       supabase.from('customers').select('*').not('deleted_at', 'is', null),
       supabase.from('vehicles').select('*').not('deleted_at', 'is', null),
       supabase.from('jobs').select('*').not('deleted_at', 'is', null),
+      // Quotes soft-delete too — and they carry approval records, which makes
+      // them the LAST thing the trash should quietly lose.
+      supabase.from('quotes').select('*').not('deleted_at', 'is', null),
     ])
     setDeleted({
       customers: (c.data as Customer[]) ?? [],
       vehicles: (v.data as Vehicle[]) ?? [],
       jobs: (j.data as Job[]) ?? [],
+      quotes: (q.data as Quote[]) ?? [],
     })
   }
 
@@ -151,13 +161,14 @@ export default function SettingsPage() {
     setExporting(false)
   }
 
-  async function restore(table: 'customers' | 'vehicles' | 'jobs', id: string) {
+  async function restore(table: 'customers' | 'vehicles' | 'jobs' | 'quotes', id: string) {
     const { error } = await supabase.from(table).update({ deleted_at: null }).eq('id', id)
     if (error) alert(error.message)
     else loadDeleted()
   }
 
-  const deletedCount = deleted.customers.length + deleted.vehicles.length + deleted.jobs.length
+  const deletedCount =
+    deleted.customers.length + deleted.vehicles.length + deleted.jobs.length + deleted.quotes.length
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -397,6 +408,9 @@ export default function SettingsPage() {
           <div className="space-y-1 text-sm">
             {deleted.jobs.map((j) => (
               <RestoreRow key={j.id} label={`Job ${j.job_number} — ${j.title}`} onRestore={() => restore('jobs', j.id)} />
+            ))}
+            {deleted.quotes.map((q) => (
+              <RestoreRow key={q.id} label={`Quote ${q.quote_number} — ${q.title}`} onRestore={() => restore('quotes', q.id)} />
             ))}
             {deleted.vehicles.map((v) => (
               <RestoreRow key={v.id} label={`Vehicle — ${vehicleLabel(v)}`} onRestore={() => restore('vehicles', v.id)} />

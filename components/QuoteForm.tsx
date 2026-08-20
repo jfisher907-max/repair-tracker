@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import { computeQuoteTotals } from '@/lib/billing'
+import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 import { vehicleLabel, type Customer, type Quote, type QuoteLine, type Vehicle } from '@/lib/types'
 
 interface LineDraft {
@@ -66,6 +67,7 @@ export default function QuoteForm({
   )
   const [newCustomerName, setNewCustomerName] = useState('')
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
+  const [newVehicle, setNewVehicle] = useState(emptyVehicleDraft)
   const [vehicleId, setVehicleId] = useState<string>(quote?.vehicle_id ?? addOnJob?.vehicle_id ?? '')
 
   const [title, setTitle] = useState(quote?.title ?? '')
@@ -158,6 +160,7 @@ export default function QuoteForm({
     setBusy(true)
     try {
       let cid = customerId
+      let vid = vehicleId || null
       if (!cid) {
         const { data, error } = await supabase
           .from('customers')
@@ -169,11 +172,23 @@ export default function QuoteForm({
           .single()
         if (error) throw error
         cid = data.id
+        // A quote without a vehicle can never convert to a job, and editing
+        // later to add one resets an approved quote to draft — so a new
+        // customer's vehicle comes along right here, like the job form does.
+        if (Object.values(newVehicle).some((v) => v.trim() !== '')) {
+          const { data: veh, error: vehErr } = await supabase
+            .from('vehicles')
+            .insert({ customer_id: cid, ...vehiclePayload(newVehicle) })
+            .select('id')
+            .single()
+          if (vehErr) throw vehErr
+          vid = veh.id
+        }
       }
 
       const payload = {
         customer_id: cid,
-        vehicle_id: vehicleId || null,
+        vehicle_id: vid,
         // Born linked: an add-on quote carries its job from creation, which is
         // what makes "convert" become "apply to that job" on approval.
         ...(addOnJob && !editing ? { job_id: addOnJob.id } : {}),
@@ -312,6 +327,10 @@ export default function QuoteForm({
               <div>
                 <label className="label">Phone</label>
                 <input className="input" type="tel" value={newCustomerPhone} onChange={(e) => setNewCustomerPhone(e.target.value)} />
+              </div>
+              <div className="sm:col-span-2">
+                <div className="label">Vehicle (optional, but a quote needs one to become a job)</div>
+                <VehicleFields value={newVehicle} onChange={setNewVehicle} />
               </div>
             </>
           )}

@@ -184,9 +184,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }
 
   async function shareLink() {
-    if (invoice!.status === 'draft') {
-      await patch({ status: 'sent', sent_at: new Date().toISOString() })
-    }
+    // The status flips to "sent" only AFTER the share actually happens —
+    // cancelling the share sheet used to stamp sent_at anyway, starting
+    // overdue math on a document the customer never received.
     try {
       if (navigator.share) {
         await navigator.share({
@@ -198,6 +198,9 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       } else {
         await navigator.clipboard.writeText(publicUrl)
         setShareMsg('Link copied — text it to the customer ✓')
+      }
+      if (invoice!.status === 'draft') {
+        await patch({ status: 'sent', sent_at: new Date().toISOString() })
       }
     } catch {
       setShareMsg('')

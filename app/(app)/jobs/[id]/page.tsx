@@ -67,6 +67,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   const [addingPart, setAddingPart] = useState(false)
   const [editingLineId, setEditingLineId] = useState<string | null>(null)
+  const [savingLine, setSavingLine] = useState(false)
+  const [busyLineId, setBusyLineId] = useState<string | null>(null)
+  const [lineMsg, setLineMsg] = useState<string | null>(null)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(false)
+  const [templateName, setTemplateName] = useState('')
+  const [payQuickOpen, setPayQuickOpen] = useState(false)
+  const [payQuickMethod, setPayQuickMethod] = useState<PaymentMethod>('cash')
+  const [actionMsg, setActionMsg] = useState<string | null>(null)
   const [draft, setDraft] = useState<LineDraft>(emptyDraft)
   const [addedFlash, setAddedFlash] = useState<string | null>(null)
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set())
@@ -234,10 +243,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   }
 
   async function saveLine() {
+    if (savingLine) return
     if (!draft.description.trim()) {
-      alert('Description is required.')
+      setLineMsg('Description is required.')
       return
     }
+    setLineMsg(null)
+    setSavingLine(true)
     const payload = {
       job_id: id,
       purchase_date: draft.purchase_date || null,
@@ -262,7 +274,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       ? await supabase.from('part_lines').update(payload).eq('id', editingLineId)
       : await supabase.from('part_lines').insert(payload)
     if (result.error) {
-      alert(result.error.message)
+      setLineMsg(result.error.message)
+      setSavingLine(false)
       return
     }
     if (editingLineId) {
@@ -282,19 +295,24 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       await syncJobPayment(id)
     } catch {}
     await load()
+    setSavingLine(false)
   }
 
   async function deleteLine(lineId: string) {
+    if (busyLineId) return
     if (!confirm('Delete this part line?')) return
+    setBusyLineId(lineId)
     const { error } = await supabase.from('part_lines').delete().eq('id', lineId)
     if (error) {
       alert(error.message)
+      setBusyLineId(null)
       return
     }
     try {
       await syncJobPayment(id)
     } catch {}
     await load()
+    setBusyLineId(null)
   }
 
   async function deleteReceipt(r: Receipt) {
@@ -316,12 +334,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   }
 
   async function createInvoice() {
+    // With an invoice already open the button reads "Open INV-xxx" and just
+    // navigates — no dialog whose Cancel secretly navigated anyway. Creating
+    // a second open invoice for the same job was never a good idea; drafts
+    // have "Update from job" instead.
     const openInvoice = invoices.find((i) => i.status === 'draft' || i.status === 'sent')
     if (openInvoice) {
-      if (!confirm(`${openInvoice.invoice_number} is already open for this job. Create another anyway?`)) {
-        router.push(`/invoices/${openInvoice.id}`)
-        return
-      }
+      router.push(`/invoices/${openInvoice.id}`)
+      return
     }
     setInvoicing(true)
     try {
@@ -439,68 +459,149 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               setAddingPart(true)
               setEditingLineId(null)
               setDraft(emptyDraft)
+              // The panel lives in the Parts card far below the fold — a tap
+              // that visibly does nothing gets tapped twice.
+              setTimeout(() => {
+                descriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                descriptionRef.current?.focus({ preventScroll: true })
+              }, 60)
             }}
           >
             + Add part manually
           </button>
           <button className="btn btn-sm" disabled={invoicing || !customer} onClick={createInvoice}>
-            {invoicing ? 'Creating…' : '🧾 Create invoice'}
+            {invoicing
+              ? 'Creating…'
+              : openInvoice
+                ? `🧾 Open ${openInvoice.invoice_number}`
+                : '🧾 Create invoice'}
           </button>
-          <Link href={`/report?job=${id}`} className="btn btn-sm">
-            🖨️ Print this job
-          </Link>
-          {customer && (
-            <Link href={`/report?customer=${customer.id}`} className="btn btn-sm">
-              🖨️ Print full history
-            </Link>
-          )}
-          <button
-            className="btn btn-sm"
-            onClick={async () => {
-              const name = prompt(
-                'Template name (what you’d call this job in a list):',
-                job.title,
-              )
-              if (!name?.trim()) return
-              try {
-                await saveJobAsTemplate(name, job, lines)
-                alert(`Saved — "${name.trim()}" is now a starting point on New Job.`)
-              } catch (e) {
-                alert(e instanceof Error ? e.message : String(e))
-              }
-            }}
-          >
-            ♻️ Save as template
-          </button>
-          <Link href={`/quotes/new?job=${id}`} className="btn btn-sm">
-            ➕ Quote extra work
-          </Link>
-          {job.payment_status !== 'paid' && (
+          {job.payment_status !== 'paid' && balanceDue > 0 && (
             <button
               className="btn btn-sm"
               style={{ borderColor: 'var(--green)', color: 'var(--green)' }}
-              onClick={async () => {
-                if (balanceDue <= 0) return
-                if (!confirm(`Record a ${formatCents(balanceDue)} payment settling this job?`)) return
-                try {
-                  await ensureLegacyCredit()
-                  await recordPayment({
-                    jobId: id,
-                    invoiceId: openInvoice?.id ?? null,
-                    amountCents: balanceDue,
-                    method: 'cash',
-                    date: todayIso(),
-                  })
-                  await load()
-                } catch (e) {
-                  alert(e instanceof Error ? e.message : String(e))
-                }
-              }}
+              onClick={() => setPayQuickOpen(!payQuickOpen)}
             >
               ✓ Mark paid
             </button>
           )}
+          <button className="btn btn-sm" onClick={() => setMoreOpen(!moreOpen)} aria-expanded={moreOpen}>
+            {moreOpen ? '⋯ Less' : '⋯ More'}
+          </button>
         </div>
+
+        {moreOpen && (
+          <div className="panel-in flex flex-wrap gap-2 pt-2">
+            <Link href={`/report?job=${id}`} className="btn btn-sm">
+              🖨️ Print this job
+            </Link>
+            {customer && (
+              <Link href={`/report?customer=${customer.id}`} className="btn btn-sm">
+                🖨️ Print full history
+              </Link>
+            )}
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setTemplateName(job!.title)
+                setTemplateOpen(!templateOpen)
+              }}
+            >
+              ♻️ Save as template
+            </button>
+            <Link href={`/quotes/new?job=${id}`} className="btn btn-sm">
+              + Quote extra work
+            </Link>
+          </div>
+        )}
+
+        {templateOpen && (
+          <div className="panel-in space-y-2 pt-2">
+            <label className="label !mb-0">Template name (what you’d call this job in a list)</label>
+            <input
+              className="input"
+              value={templateName}
+              onChange={(e) => setTemplateName(e.target.value)}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={!templateName.trim()}
+                onClick={async () => {
+                  try {
+                    await saveJobAsTemplate(templateName, job!, lines)
+                    setTemplateOpen(false)
+                    setActionMsg(`Saved — “${templateName.trim()}” is now a starting point on New Job.`)
+                    setTimeout(() => setActionMsg(null), 4000)
+                  } catch (e) {
+                    setActionMsg(e instanceof Error ? e.message : String(e))
+                  }
+                }}
+              >
+                Save template
+              </button>
+              <button className="btn btn-sm" onClick={() => setTemplateOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        )}
+
+        {payQuickOpen && job.payment_status !== 'paid' && (
+          <div className="panel-in space-y-2 pt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="label !mb-0">Settle {formatCents(balanceDue)} by</span>
+              {PAYMENT_METHODS.map((m) => (
+                <button
+                  key={m.value}
+                  className="btn btn-sm"
+                  style={
+                    payQuickMethod === m.value
+                      ? { borderColor: 'var(--accent)', color: 'var(--accent2)' }
+                      : undefined
+                  }
+                  onClick={() => setPayQuickMethod(m.value)}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="btn btn-primary btn-sm"
+                disabled={payingBusy}
+                onClick={async () => {
+                  if (balanceDue <= 0) return
+                  setPayingBusy(true)
+                  try {
+                    await ensureLegacyCredit()
+                    await recordPayment({
+                      jobId: id,
+                      invoiceId: openInvoice?.id ?? null,
+                      amountCents: balanceDue,
+                      method: payQuickMethod,
+                      date: todayIso(),
+                    })
+                    setPayQuickOpen(false)
+                    await load()
+                  } catch (e) {
+                    setActionMsg(e instanceof Error ? e.message : String(e))
+                  } finally {
+                    setPayingBusy(false)
+                  }
+                }}
+              >
+                {payingBusy ? 'Recording…' : `Record ${formatCents(balanceDue)}`}
+              </button>
+              <button className="btn btn-sm" onClick={() => setPayQuickOpen(false)}>Cancel</button>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              Partial payment or a different date? Use the Payments card below.
+            </p>
+          </div>
+        )}
+
+        {actionMsg && (
+          <p className="flash-in pt-1 text-sm" style={{ color: 'var(--green)' }}>{actionMsg}</p>
+        )}
       </div>
 
       {/* Work performed */}
@@ -680,8 +781,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                 )}
               </div>
-              <button className="btn btn-sm" onClick={() => startEditLine(l)}>✎</button>
-              <button className="btn btn-sm btn-danger" onClick={() => deleteLine(l.id)}>✕</button>
+              <button className="btn btn-sm" aria-label="Edit part" onClick={() => startEditLine(l)}>✎</button>
+              <button
+                className="btn btn-sm btn-danger"
+                aria-label="Delete part"
+                disabled={busyLineId === l.id}
+                onClick={() => deleteLine(l.id)}
+              >
+                {busyLineId === l.id ? '…' : '✕'}
+              </button>
             </div>
           </div>
         ))}
@@ -757,9 +865,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 />
               </div>
             </div>
+            {lineMsg && (
+              <p className="text-sm" style={{ color: 'var(--red)' }}>{lineMsg}</p>
+            )}
             <div className="flex items-center gap-2">
-              <button className="btn btn-primary btn-sm" onClick={saveLine}>
-                {editingLineId ? 'Save part' : '+ Add this part'}
+              <button className="btn btn-primary btn-sm" disabled={savingLine} onClick={saveLine}>
+                {savingLine ? 'Adding…' : editingLineId ? 'Save part' : '+ Add this part'}
               </button>
               <button
                 className="btn btn-sm"

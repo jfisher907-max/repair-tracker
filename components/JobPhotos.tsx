@@ -199,8 +199,10 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
             <input
               type="file"
               accept="image/*"
-              // Opens the camera directly on a phone rather than the library.
-              capture="environment"
+              // No `capture` attribute: iOS then offers Camera AND Photo
+              // Library in one sheet. Forcing the camera locked out the
+              // shoot-first-attach-later habit (photos taken with the native
+              // camera app could never be attached).
               multiple
               className="hidden"
               disabled={busy}
