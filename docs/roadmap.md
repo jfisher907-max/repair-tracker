@@ -115,6 +115,15 @@ completed jobs · mileage-projected reminders.
   vendor does NFC for anonymous customers; QR must stand alone. WHITE SPACE: nobody pairs the
   tag with the key-drop box; the incumbent is the paper night-drop envelope whose own vendors
   admit customers skip it. Slot after Stripe/deposits.
+  **Evolution (Jake, 2026-08-20): request-to-schedule + "customer accounts."** Decision: NO
+  login accounts — the whole industry (Tekmetric/Shopmonkey/AutoVitals) avoids them, and a
+  second RLS tier is the riskiest change this schema can take. Instead the existing
+  `customers.public_token` (statement link) grows into a no-password portal: their vehicles +
+  balance + "report an issue" form (vehicle pre-picked, photo, optional time-preference
+  chips — preference, never a slot picker). Requests from a personal link arrive pre-matched
+  to customer + vehicle; the anonymous QR page and the portal feed ONE job_requests inbox;
+  convert can stamp promised_date. QR confirmations text new customers their personal link,
+  which enrolls them. Revisit real logins only if fleet clients appear.
 - **Lite inspection on the customer link** — after photos. Smallest version only: short
   editable checklist, three statuses, a photo and a line of text per finding, on the existing
   public-link machinery.
