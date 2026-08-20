@@ -6,7 +6,9 @@ import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { quoteStatusColors } from '@/lib/billing'
+import { syncJobPayment } from '@/lib/payments'
 import { SkeletonList } from '@/components/Skeleton'
+import SwipeableRow from '@/components/SwipeableRow'
 import type { Customer, Invoice, Quote } from '@/lib/types'
 
 interface QuoteRow extends Quote {
@@ -59,6 +61,34 @@ export default function BillingPage() {
     load()
   }, [])
 
+  async function deleteQuote(q: QuoteRow) {
+    const { error } = await supabase
+      .from('quotes')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', q.id)
+    if (error) throw new Error(error.message)
+    setQuotes((prev) => (prev ?? []).filter((x) => x.id !== q.id))
+  }
+
+  async function deleteInvoice(inv: Invoice) {
+    // The swipe affordance already excludes sent/paid invoices; this re-check
+    // catches a payment recorded since the page loaded.
+    const { data: pays, error: pErr } = await supabase
+      .from('payments')
+      .select('id')
+      .eq('invoice_id', inv.id)
+      .limit(1)
+    if (pErr) throw new Error(pErr.message)
+    if (pays?.length) throw new Error('A payment was recorded against this invoice — it stays.')
+    const { error } = await supabase.from('invoices').delete().eq('id', inv.id)
+    if (error) throw new Error(error.message)
+    // The set of live invoices changed — re-derive the job's payment status.
+    try {
+      await syncJobPayment(inv.job_id)
+    } catch {}
+    setInvoices((prev) => (prev ?? []).filter((x) => x.id !== inv.id))
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -94,8 +124,12 @@ export default function BillingPage() {
         ) : (
           <div className="space-y-2">
             {quotes.map((q) => (
-              <Link
+              <SwipeableRow
                 key={q.id}
+                confirmText={`Delete quote ${q.quote_number}? It disappears from lists but the record isn't destroyed.`}
+                onDelete={() => deleteQuote(q)}
+              >
+              <Link
                 href={`/quotes/${q.id}`}
                 className="card flex items-center gap-3 !py-3"
                 style={{ borderLeft: `3px solid ${quoteStatusColors[q.status] ?? 'var(--border)'}` }}
@@ -115,6 +149,7 @@ export default function BillingPage() {
                   </span>
                 </div>
               </Link>
+              </SwipeableRow>
             ))}
           </div>
         )
@@ -127,8 +162,13 @@ export default function BillingPage() {
       ) : (
         <div className="space-y-2">
           {invoices.map((inv) => (
-            <Link
+            <SwipeableRow
               key={inv.id}
+              enabled={!inv.sent_at && inv.status !== 'paid'}
+              confirmText={`Delete ${inv.invoice_number} for good? It was never sent, so nothing the customer has seen changes. The job and its parts are untouched.`}
+              onDelete={() => deleteInvoice(inv)}
+            >
+            <Link
               href={`/invoices/${inv.id}`}
               className="card flex items-center gap-3 !py-3"
               style={{ borderLeft: `3px solid ${quoteStatusColors[inv.status] ?? 'var(--border)'}` }}
@@ -154,6 +194,7 @@ export default function BillingPage() {
                 )}
               </div>
             </Link>
+            </SwipeableRow>
           ))}
         </div>
       )}
