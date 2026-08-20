@@ -93,6 +93,15 @@ completed jobs · mileage-projected reminders.
 
 ### Later, or never
 
+- **QR/NFC job-request intake** (Jake, 2026-08-19 — wanted, not yet). One public page
+  (`/request`, no login): name, phone, vehicle, what's wrong, later a photo. Lands in a
+  `job_requests` inbox — never directly a job — with one-tap dismiss or convert
+  (phone-number match against customers, else create customer+vehicle+job, same pattern as
+  quote conversion). Settings card renders the QR for printing/saving; NFC tags are just the
+  same URL written to a $1 sticker, no software needed. Needs: rate limit + honeypot on the
+  public write (SECURITY DEFINER RPC like respond_public_quote), notification story (dashboard
+  badge first, web push later). Slot after Stripe/deposits — it's a front door, most valuable
+  once the pipe behind it is complete.
 - **Lite inspection on the customer link** — after photos. Smallest version only: short
   editable checklist, three statuses, a photo and a line of text per finding, on the existing
   public-link machinery.
