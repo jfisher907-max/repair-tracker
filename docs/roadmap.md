@@ -41,6 +41,12 @@ not the same thing. Three engineering rules drive it:
 3. **Build foundations before the things that stand on them**, and do work that touches the
    same code in one pass rather than two.
 
+> **Status (2026-08-19):** Phases 1–5 shipped except the video half of Phase 3 and
+> Phase 4's deposits (blocked on Phase 0's Stripe keys). Phase 0 remains open (owner
+> errands: Stripe keys, review link). Shipped beyond the plan: mid-job add-on quotes with
+> atomic apply, verbal-OK method capture, quote viewed-signal, re-quote chips, photos on
+> the public quote page (dark until the storage policy runs).
+
 ### Phase 0 — external dependencies, start the clock (no engineering)
 
 Lead time, not build time. Start these before anything else so they are not the blocker later.
