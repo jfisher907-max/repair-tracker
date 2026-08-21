@@ -29,6 +29,8 @@ export default function Dashboard() {
   const [taxableInvoices, setTaxableInvoices] = useState<
     { id: string; tax_cents: number; total_cents: number }[]
   >([])
+  /** Overhead — the spending that isn't parts for a specific job. */
+  const [expenses, setExpenses] = useState<{ amount_cents: number; date: string }[]>([])
 
   useEffect(() => {
     fetchJobsWithContext().then(setItems).catch((e) => setError(String(e.message ?? e)))
@@ -80,6 +82,10 @@ export default function Dashboard() {
       .neq('status', 'void')
       .then(({ data }) => setTaxableInvoices(data ?? []))
     supabase
+      .from('expenses')
+      .select('amount_cents, date')
+      .then(({ data }) => setExpenses(data ?? []))
+    supabase
       .from('settings')
       .select('business_name')
       .single()
@@ -126,13 +132,22 @@ export default function Dashboard() {
     let hours = 0
     let charged = 0
     let unpaid = 0
+    // The two places a job's money is earned: hours sold, and the margin
+    // between what parts cost and what they were charged at.
+    let laborCharged = 0
+    let partsCharged = 0
+    let partsCostOnJobs = 0
     for (const it of scoped) {
       hours += Number(it.job.labor_hours)
       const t = it.totals
       if (!t) continue
       charged += t.total_charged_cents
+      laborCharged += t.labor_charge_cents
+      partsCharged += t.parts_charged_cents
+      partsCostOnJobs += t.parts_cost_cents
       unpaid += unpaidBalanceCents(it.job, t.total_charged_cents)
     }
+    const partsMarkup = partsCharged - partsCostOnJobs
 
     // Cash, not accrual. The old "profit" counted every job as if it were
     // paid, so an unpaid $2,000 job read as money in the bank.
@@ -161,6 +176,8 @@ export default function Dashboard() {
       taxCollected += Math.round(inv.tax_cents * Math.min(1, paidOnInvoice / inv.total_cents))
     }
 
+    const overhead = expenses.filter((e) => inYear(e.date)).reduce((s, e) => s + e.amount_cents, 0)
+
     return {
       count: scoped.length,
       hours,
@@ -170,8 +187,15 @@ export default function Dashboard() {
       taxCollected,
       cashProfit: collected - partsSpend - taxCollected,
       unpaid,
+      laborCharged,
+      partsCharged,
+      partsCostOnJobs,
+      partsMarkup,
+      // What the work earned, paid or not: hours sold plus parts margin.
+      earned: laborCharged + partsMarkup,
+      overhead,
     }
-  }, [scoped, payments, partOutflows, taxableInvoices, year])
+  }, [scoped, payments, partOutflows, taxableInvoices, expenses, year])
 
   const unpaidJobs = scoped.filter((it) => it.job.payment_status !== 'paid')
   const recent = scoped.slice(0, 6)
@@ -242,7 +266,7 @@ export default function Dashboard() {
           label="Cash profit"
           value={formatCents(stats.cashProfit)}
           accent={stats.cashProfit >= 0 ? 'var(--green)' : 'var(--red)'}
-          hint={stats.taxCollected > 0 ? 'collected − parts − tax' : 'collected − parts'}
+          hint="money in − parts, before overhead"
         />
         <StatTile
           icon="⚠️"
@@ -251,6 +275,40 @@ export default function Dashboard() {
           accent={stats.unpaid > 0 ? 'var(--red)' : 'var(--green)'}
           hint="still owed to you"
         />
+      </div>
+
+      {/* Where the money is actually earned — the labor/markup split lives
+          nowhere else in the app, and it's the number that says whether the
+          markup matrix is pulling its weight. */}
+      <div className="card space-y-1.5">
+        <div className="label !mb-0">Where your money comes from</div>
+        <MoneyRow label="Labor billed" value={stats.laborCharged} />
+        <MoneyRow label="Parts billed" value={stats.partsCharged} />
+        <MoneyRow label="What the parts cost you" value={-stats.partsCostOnJobs} muted />
+        <MoneyRow label="Parts markup" value={stats.partsMarkup} accent="var(--accent2)" />
+        <div className="border-t pt-1.5" style={{ borderColor: 'var(--border)' }}>
+          <MoneyRow
+            label="Earned on the work"
+            value={stats.earned}
+            accent="var(--green)"
+            bold
+          />
+        </div>
+        {stats.overhead > 0 && (
+          <>
+            <MoneyRow label="Overhead (expenses)" value={-stats.overhead} muted />
+            <MoneyRow
+              label="After overhead"
+              value={stats.earned - stats.overhead}
+              accent={stats.earned - stats.overhead >= 0 ? 'var(--green)' : 'var(--red)'}
+              bold
+            />
+          </>
+        )}
+        <p className="text-xs" style={{ color: 'var(--text3)' }}>
+          Labor + parts markup = what the work earned, whether or not it&apos;s been paid yet.
+          The tiles above are cash: what has actually reached you.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:hidden">
@@ -310,6 +368,33 @@ export default function Dashboard() {
           <JobRow key={it.job.id} item={it} />
         ))}
       </section>
+    </div>
+  )
+}
+
+/** One line of the money breakdown: label left, figure right. */
+function MoneyRow({
+  label,
+  value,
+  accent,
+  muted,
+  bold,
+}: {
+  label: string
+  value: number
+  accent?: string
+  muted?: boolean
+  bold?: boolean
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 text-sm">
+      <span style={{ color: muted ? 'var(--text3)' : 'var(--text2)' }}>{label}</span>
+      <span
+        className={`money ${bold ? 'font-bold' : ''}`}
+        style={{ color: accent ?? (muted ? 'var(--text3)' : undefined) }}
+      >
+        {value < 0 ? `−${formatCents(Math.abs(value))}` : formatCents(value)}
+      </span>
     </div>
   )
 }
