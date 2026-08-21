@@ -89,3 +89,16 @@ export const quoteStatusColors: Record<string, string> = {
   paid: 'var(--green)',
   void: 'var(--text3)',
 }
+
+/**
+ * The tinted chip class for a status. The .chip-{status} classes in
+ * globals.css are the single source of status colors, so 'paid' (and every
+ * other word) looks identical on every screen.
+ */
+export function statusChipClass(status: string): string {
+  const known = [
+    'draft', 'sent', 'approved', 'declined', 'expired', 'paid', 'void',
+    'unpaid', 'partial', 'open', 'booked', 'done', 'overdue',
+  ]
+  return known.includes(status) ? `chip chip-${status}` : 'chip'
+}

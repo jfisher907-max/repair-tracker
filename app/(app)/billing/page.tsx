@@ -1,11 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { use, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
-import { quoteStatusColors } from '@/lib/billing'
+import { quoteStatusColors, statusChipClass } from '@/lib/billing'
 import { syncJobPayment } from '@/lib/payments'
 import { SkeletonList } from '@/components/Skeleton'
 import SwipeableRow from '@/components/SwipeableRow'
@@ -31,8 +31,17 @@ function overdueDays(inv: Invoice): number {
   )
 }
 
-export default function BillingPage() {
-  const [tab, setTab] = useState<'quotes' | 'invoices'>('quotes')
+export default function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string }>
+}) {
+  // ?tab=invoices lets the dashboard's "unpaid invoices" banner and every
+  // "← Billing" back-link land on the list the user came to see.
+  const { tab: tabParam } = use(searchParams)
+  const [tab, setTab] = useState<'quotes' | 'invoices'>(
+    tabParam === 'invoices' ? 'invoices' : 'quotes',
+  )
   const [quotes, setQuotes] = useState<QuoteRow[] | null>(null)
   const [invoices, setInvoices] = useState<Invoice[] | null>(null)
 
@@ -144,9 +153,7 @@ export default function BillingPage() {
                 </div>
                 <div className="text-right">
                   <div className="money font-semibold">{formatCents(q.totals?.total_cents)}</div>
-                  <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[q.status] }}>
-                    {q.status}
-                  </span>
+                  <span className={statusChipClass(q.status)}>{q.status}</span>
                 </div>
               </Link>
               </SwipeableRow>
@@ -184,13 +191,9 @@ export default function BillingPage() {
               <div className="text-right">
                 <div className="money font-semibold">{formatCents(inv.total_cents)}</div>
                 {isOverdue(inv) ? (
-                  <span className="chip" style={{ background: '#3d1b1b', color: 'var(--red)' }}>
-                    overdue {overdueDays(inv)}d
-                  </span>
+                  <span className="chip chip-overdue">overdue {overdueDays(inv)}d</span>
                 ) : (
-                  <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[inv.status] ?? 'var(--text3)' }}>
-                    {inv.status}
-                  </span>
+                  <span className={statusChipClass(inv.status)}>{inv.status}</span>
                 )}
               </div>
             </Link>

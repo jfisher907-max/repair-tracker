@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import JobRow from '@/components/JobRow'
 import { SkeletonDashboard } from '@/components/Skeleton'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
-import { unpaidBalanceCents } from '@/lib/calc'
+import { collectedForJob, unpaidBalanceCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
 import { supabase } from '@/lib/supabase'
 
@@ -19,9 +19,17 @@ export default function Dashboard() {
     overdue: number
   } | null>(null)
   const [businessName, setBusinessName] = useState('')
+  /** The money actually received, by payment date — the cash side of the tiles. */
+  const [payments, setPayments] = useState<
+    { amount_cents: number; date: string; job_id: string }[]
+  >([])
 
   useEffect(() => {
     fetchJobsWithContext().then(setItems).catch((e) => setError(String(e.message ?? e)))
+    supabase
+      .from('payments')
+      .select('amount_cents, date, job_id')
+      .then(({ data }) => setPayments(data ?? []))
     supabase
       .from('settings')
       .select('business_name')
@@ -65,7 +73,6 @@ export default function Dashboard() {
     let hours = 0
     let charged = 0
     let partsSpend = 0
-    let profit = 0
     let unpaid = 0
     for (const it of scoped) {
       hours += Number(it.job.labor_hours)
@@ -73,11 +80,33 @@ export default function Dashboard() {
       if (!t) continue
       charged += t.total_charged_cents
       partsSpend += t.parts_cost_cents
-      profit += t.profit_cents
       unpaid += unpaidBalanceCents(it.job, t.total_charged_cents)
     }
-    return { count: scoped.length, hours, charged, partsSpend, profit, unpaid }
-  }, [scoped])
+    // Cash, not accrual: money that actually landed. The old "profit" counted
+    // every job as if it were paid, so an unpaid $2,000 job read as profit
+    // sitting in the bank.
+    //
+    // Ledger payments are scoped by PAYMENT date (a 2025 job paid in 2026 is
+    // 2026 cash); jobs settled before the ledger existed have no payment rows,
+    // so they contribute their cached amount, scoped by job date.
+    const jobsWithLedger = new Set(payments.map((p) => p.job_id))
+    let collected = payments
+      .filter((p) => year === 'all' || Number(p.date.slice(0, 4)) === year)
+      .reduce((s, p) => s + p.amount_cents, 0)
+    for (const it of scoped) {
+      if (jobsWithLedger.has(it.job.id) || !it.totals) continue
+      collected += collectedForJob(it.job, it.totals.total_charged_cents, 0, false)
+    }
+    return {
+      count: scoped.length,
+      hours,
+      charged,
+      partsSpend,
+      collected,
+      cashProfit: collected - partsSpend,
+      unpaid,
+    }
+  }, [scoped, payments, year])
 
   const unpaidJobs = scoped.filter((it) => it.job.payment_status !== 'paid')
   const recent = scoped.slice(0, 6)
@@ -132,17 +161,25 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <StatTile icon="🔧" label="Jobs" value={String(stats.count)} />
         <StatTile icon="⏱️" label="Labor hours" value={stats.hours.toFixed(1)} />
-        <StatTile icon="💵" label="Total charged" value={formatCents(stats.charged)} />
-        <StatTile icon="🛒" label="Parts spend" value={formatCents(stats.partsSpend)} />
-        <StatTile icon="📈" label="Profit" value={formatCents(stats.profit)} accent="var(--green)" />
+        <StatTile icon="💵" label="Billed" value={formatCents(stats.charged)} hint="what the work came to" />
+        <StatTile icon="🏦" label="Collected" value={formatCents(stats.collected)} hint="payments received" />
+        <StatTile icon="🛒" label="Parts spend" value={formatCents(stats.partsSpend)} hint="your cost" />
+        <StatTile
+          icon="📈"
+          label="Cash profit"
+          value={formatCents(stats.cashProfit)}
+          accent={stats.cashProfit >= 0 ? 'var(--green)' : 'var(--red)'}
+          hint="collected − parts"
+        />
         <StatTile
           icon="⚠️"
           label="Unpaid balance"
           value={formatCents(stats.unpaid)}
           accent={stats.unpaid > 0 ? 'var(--red)' : 'var(--green)'}
+          hint="still owed to you"
         />
       </div>
 
@@ -162,7 +199,11 @@ export default function Dashboard() {
       </div>
 
       {billing && (billing.openQuotes > 0 || billing.unpaidInvoices > 0) && (
-        <Link href="/billing" className="card flex items-center justify-between !py-3 hover:brightness-110">
+        <Link
+          // Land on the list that matches the number that made him tap.
+          href={billing.unpaidInvoices > 0 ? '/billing?tab=invoices' : '/billing'}
+          className="card flex items-center justify-between !py-3 hover:brightness-110"
+        >
           <span className="font-semibold">🧾 Billing</span>
           <span className="text-sm" style={{ color: 'var(--text2)' }}>
             {billing.openQuotes > 0 && (
@@ -208,11 +249,14 @@ function StatTile({
   label,
   value,
   accent,
+  hint,
 }: {
   icon: string
   label: string
   value: string
   accent?: string
+  /** One line under the number, for what the number does and doesn't count. */
+  hint?: string
 }) {
   return (
     <div className="stat-tile" style={accent ? { borderTop: `2px solid ${accent}` } : undefined}>
@@ -223,6 +267,11 @@ function StatTile({
       <div className="stat-value money" style={accent ? { color: accent } : undefined}>
         {value}
       </div>
+      {hint && (
+        <div className="text-[0.7rem] leading-tight" style={{ color: 'var(--text3)' }}>
+          {hint}
+        </div>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import type { JobWithContext } from '@/lib/data'
 import { formatCents } from '@/lib/money'
+import { formatDateShort } from '@/lib/date'
 import { vehicleLabel } from '@/lib/types'
 
 const stripeColors: Record<string, string> = {
@@ -25,7 +26,7 @@ export default function JobRow({ item }: { item: JobWithContext }) {
             {job.job_number}
           </span>
           <span className="text-xs" style={{ color: 'var(--text3)' }}>
-            {job.date}
+            {formatDateShort(job.date)}
           </span>
         </div>
         <div className="truncate font-semibold">{job.title}</div>

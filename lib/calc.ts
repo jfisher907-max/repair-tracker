@@ -31,6 +31,25 @@ export function computeTotals(
   }
 }
 
+/**
+ * What a job has actually brought in.
+ *
+ * The payments ledger is the source of truth, but jobs settled before the
+ * ledger existed have no rows — only a cached status. Ignoring those would
+ * under-report real cash and break the identity collected + unpaid = billed,
+ * so a job with no ledger entries falls back to its cached amount (or its
+ * full total when simply marked paid). Same rule the job page uses.
+ */
+export function collectedForJob(
+  job: Pick<Job, 'payment_status' | 'amount_paid_cents'>,
+  totalChargedCents: number,
+  ledgerPaidCents: number,
+  hasLedgerEntries: boolean,
+): number {
+  if (hasLedgerEntries) return ledgerPaidCents
+  return job.amount_paid_cents ?? (job.payment_status === 'paid' ? totalChargedCents : 0)
+}
+
 /** Outstanding balance for a job given its total: full total when unpaid, remainder when partial. */
 export function unpaidBalanceCents(
   job: Pick<Job, 'payment_status' | 'amount_paid_cents'>,

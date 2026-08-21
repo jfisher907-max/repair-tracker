@@ -283,7 +283,9 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
         </div>
       )}
       {quote.photos?.length > 0 && Object.keys(photoUrls).length > 0 && (
-        <div className="mx-auto max-w-2xl px-4 pb-2">
+        // no-print: the frozen document below is the record; "tap a photo"
+        // means nothing on paper.
+        <div className="no-print mx-auto max-w-2xl px-4 pb-2">
           <div className="card space-y-2">
             <span className="label !mb-0">What we found</span>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">

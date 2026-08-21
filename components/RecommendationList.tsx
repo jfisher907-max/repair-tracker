@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
+import { statusChipClass } from '@/lib/billing'
 import { formatDate } from '@/lib/date'
 import {
   RECOMMENDATION_STATUSES,
@@ -102,9 +103,7 @@ export default function RecommendationList({
             <div className="min-w-0 flex-1">
               <p className="whitespace-pre-wrap text-sm">{r.description}</p>
               <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" style={{ color: 'var(--text3)' }}>
-                <span className="chip" style={{ background: 'var(--bg3)', color: statusColors[r.status] }}>
-                  {r.status}
-                </span>
+                <span className={statusChipClass(r.status)}>{r.status}</span>
                 {r.target_date && <span>by {formatDate(r.target_date)}</span>}
                 {r.estimate_cents != null && (
                   <span className="money">~{formatCents(r.estimate_cents)}</span>

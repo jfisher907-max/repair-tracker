@@ -7,7 +7,7 @@ import QuoteForm from '@/components/QuoteForm'
 import DocView, { type DocData } from '@/components/DocView'
 import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
-import { computeQuoteTotals, quoteStatusColors } from '@/lib/billing'
+import { computeQuoteTotals, statusChipClass } from '@/lib/billing'
 import { syncJobPayment } from '@/lib/payments'
 import { formatCents } from '@/lib/money'
 import {
@@ -392,9 +392,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                   : 'not viewed yet'}
               </span>
             )}
-            <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[quote.status] }}>
-              {quote.status}
-            </span>
+            <span className={statusChipClass(quote.status)}>{quote.status}</span>
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">

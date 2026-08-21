@@ -10,6 +10,14 @@ export function formatDate(isoDate: string | null | undefined): string {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+/** "2026-07-22" -> "Jul 22, 2026". For list rows, where the long month runs wide. */
+export function formatDateShort(isoDate: string | null | undefined): string {
+  if (!isoDate) return '—'
+  const d = new Date(`${isoDate}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return isoDate
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
 /**
  * Today as YYYY-MM-DD in the LOCAL timezone. toISOString() is UTC, which is
  * already tomorrow for part of the day and made date comparisons fire early.

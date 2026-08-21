@@ -7,7 +7,7 @@ import DocView, { type DocData } from '@/components/DocView'
 import { useDocumentTitle } from '@/lib/title'
 import { listForJob, toMemo } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
-import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
+import { buildInvoiceSnapshot, statusChipClass } from '@/lib/billing'
 import { PAYMENT_METHODS, recordPayment, syncJobPayment } from '@/lib/payments'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import type { Invoice, Job, PartLine, Payment, PaymentMethod, Settings } from '@/lib/types'
@@ -213,12 +213,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       <div className="no-print space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Link href="/billing" className="btn btn-sm">← Billing</Link>
+            <Link href="/billing?tab=invoices" className="btn btn-sm">← Billing</Link>
             <Link href={`/jobs/${invoice.job_id}`} className="btn btn-sm">Job →</Link>
           </div>
-          <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[invoice.status] ?? 'var(--text3)' }}>
-            {invoice.status}
-          </span>
+          <span className={statusChipClass(invoice.status)}>{invoice.status}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn btn-sm btn-primary" onClick={shareLink}>📤 Send link</button>
@@ -421,8 +419,17 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         )}
         {shareMsg && <p className="text-sm" style={{ color: 'var(--green)' }}>{shareMsg}</p>}
         <p className="text-xs" style={{ color: 'var(--text3)' }}>
-          Invoices are frozen when created — editing the job won&apos;t change this document.
-          If the job changed, void this and create a fresh invoice.
+          {invoice.status === 'draft' ? (
+            <>
+              This draft hasn&apos;t been sent — <b>↻ Update from job</b> pulls the latest parts
+              and labor into it, keeping the same number. It freezes once you send it.
+            </>
+          ) : (
+            <>
+              Invoices freeze once sent — editing the job won&apos;t change this document. If the
+              job changed, void this and create a fresh invoice.
+            </>
+          )}
         </p>
       </div>
 

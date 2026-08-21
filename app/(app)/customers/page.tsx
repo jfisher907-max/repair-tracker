@@ -182,7 +182,18 @@ export default function CustomersPage() {
                       : 'No vehicles yet'}
                   </div>
                 </div>
-                <div className="text-sm" style={{ color: 'var(--text3)' }}>{c.phone}</div>
+                {c.phone && (
+                  // Tappable straight from the list — finding a number was
+                  // costing a trip through the detail page.
+                  <a
+                    href={`tel:${c.phone.replace(/[^\d+]/g, '')}`}
+                    className="flex min-h-[44px] items-center px-1 text-sm"
+                    style={{ color: 'var(--blue)' }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {c.phone}
+                  </a>
+                )}
               </Link>
             )
           })}

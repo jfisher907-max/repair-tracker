@@ -171,9 +171,22 @@ a.card:active {
   letter-spacing: 0.04em;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
+/* One color per word, everywhere: the chip family is the app's status
+   language. Muted statuses use --text2, not --text3 — 12px text on the tinted
+   backgrounds needs the contrast (draft/void measured 3.7:1 with text3). */
 .chip-unpaid { background: #3d1b1b; color: var(--red); }
 .chip-partial { background: #3d2f14; color: var(--accent2); }
 .chip-paid { background: #143d26; color: var(--green); }
+.chip-draft { background: #232d3b; color: var(--text2); }
+.chip-void { background: #232d3b; color: var(--text2); }
+.chip-sent { background: #14283d; color: var(--blue); }
+.chip-approved { background: #143d26; color: var(--green); }
+.chip-declined { background: #3d1b1b; color: var(--red); }
+.chip-expired { background: #3d2f14; color: var(--orange); }
+.chip-open { background: #3d2f14; color: var(--accent2); }
+.chip-booked { background: #14283d; color: var(--blue); }
+.chip-done { background: #143d26; color: var(--green); }
+.chip-overdue { background: #3d1b1b; color: var(--red); }
 
 .stat-tile {
   background: linear-gradient(180deg, #151b25 0%, var(--bg1) 100%);

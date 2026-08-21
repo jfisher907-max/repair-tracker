@@ -5,7 +5,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { computeTotals } from '@/lib/calc'
-import { buildInvoiceSnapshot, quoteStatusColors } from '@/lib/billing'
+import { buildInvoiceSnapshot, statusChipClass } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate, todayLocalIso } from '@/lib/date'
@@ -629,9 +629,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               </div>
               <div className="flex flex-none items-center gap-2">
                 {q.total_cents != null && <span className="money">{formatCents(q.total_cents)}</span>}
-                <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[q.status] }}>
-                  {q.status}
-                </span>
+                <span className={statusChipClass(q.status)}>{q.status}</span>
                 <span className="text-xs" style={{ color: q.applied_at ? 'var(--green)' : 'var(--text3)' }}>
                   {q.applied_at ? '✓ on job' : 'not applied'}
                 </span>
@@ -728,7 +726,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </div>
           </div>
         ) : (
-          <div className="row-interactive flex items-center justify-between gap-2 rounded-lg px-1 py-1">
+          <div className="flex items-center justify-between gap-2 rounded-lg px-1 py-1">
             <div className="min-w-0">
               <div className="font-semibold">Labor</div>
               <div className="text-xs" style={{ color: 'var(--text3)' }}>
@@ -1035,9 +1033,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <span className="font-semibold">{inv.invoice_number}</span>
               <span className="flex items-center gap-2">
                 <span className="money">{formatCents(inv.total_cents)}</span>
-                <span className="chip" style={{ background: 'var(--bg3)', color: quoteStatusColors[inv.status] ?? 'var(--text3)' }}>
-                  {inv.status}
-                </span>
+                <span className={statusChipClass(inv.status)}>{inv.status}</span>
               </span>
             </Link>
           ))}
