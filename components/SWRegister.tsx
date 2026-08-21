@@ -9,6 +9,9 @@ import { useEffect } from 'react'
  */
 const CUSTOMER_PREFIXES = ['/q/', '/i/', '/s/']
 
+/** /reset exists to tear the worker down — it must never re-register it. */
+const NO_WORKER_PATHS = ['/reset']
+
 /** At most one reload a minute, so a reload can never chain into a loop. */
 const RELOAD_COOLDOWN_MS = 60_000
 
@@ -28,7 +31,9 @@ function isStaleBundleError(message: string): boolean {
 
 export default function SWRegister() {
   const pathname = usePathname()
-  const isCustomerPage = CUSTOMER_PREFIXES.some((p) => pathname?.startsWith(p))
+  const isCustomerPage =
+    CUSTOMER_PREFIXES.some((p) => pathname?.startsWith(p)) ||
+    NO_WORKER_PATHS.some((p) => pathname === p)
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
