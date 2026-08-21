@@ -19,6 +19,22 @@ export default function Dashboard() {
     overdue: number
   } | null>(null)
   const [businessName, setBusinessName] = useState('')
+  // Collapsed by default — it's a "how am I really doing" panel, not a
+  // glance panel. The choice sticks per device.
+  const [moneyOpen, setMoneyOpen] = useState(false)
+  useEffect(() => {
+    try {
+      setMoneyOpen(localStorage.getItem('dash-money-open') === '1')
+    } catch {}
+  }, [])
+  function toggleMoney() {
+    setMoneyOpen((v) => {
+      try {
+        localStorage.setItem('dash-money-open', v ? '0' : '1')
+      } catch {}
+      return !v
+    })
+  }
   /** The money actually received, by payment date — the cash side of the tiles. */
   const [payments, setPayments] = useState<
     { amount_cents: number; date: string; job_id: string; invoice_id: string | null }[]
@@ -279,9 +295,27 @@ export default function Dashboard() {
 
       {/* Where the money is actually earned — the labor/markup split lives
           nowhere else in the app, and it's the number that says whether the
-          markup matrix is pulling its weight. */}
+          markup matrix is pulling its weight. Collapsed to one line until
+          asked. */}
       <div className="card space-y-1.5">
-        <div className="label !mb-0">Where your money comes from</div>
+        <button
+          type="button"
+          className="flex min-h-[44px] w-full items-center justify-between gap-2 text-left"
+          onClick={toggleMoney}
+          aria-expanded={moneyOpen}
+        >
+          <span className="label !mb-0">Where your money comes from</span>
+          <span className="flex items-center gap-2">
+            {!moneyOpen && (
+              <span className="money text-sm font-bold" style={{ color: 'var(--green)' }}>
+                {formatCents(stats.earned)}
+              </span>
+            )}
+            <span style={{ color: 'var(--text3)' }}>{moneyOpen ? '▾' : '▸'}</span>
+          </span>
+        </button>
+        {moneyOpen && (
+          <>
         <MoneyRow label="Labor billed" value={stats.laborCharged} />
         <MoneyRow label="Parts billed" value={stats.partsCharged} />
         <MoneyRow label="What the parts cost you" value={-stats.partsCostOnJobs} muted />
@@ -309,6 +343,8 @@ export default function Dashboard() {
           Labor + parts markup = what the work earned, whether or not it&apos;s been paid yet.
           The tiles above are cash: what has actually reached you.
         </p>
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:hidden">
