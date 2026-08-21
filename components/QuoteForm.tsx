@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
@@ -95,6 +95,11 @@ export default function QuoteForm({
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Retry safety: if the save fails after the customer (or vehicle) landed,
+  // resubmitting must reuse them instead of creating twins. Same pattern as
+  // JobForm.
+  const createdCustomerId = useRef<string | null>(null)
+  const createdVehicleId = useRef<string | null>(null)
 
   useEffect(() => {
     supabase
@@ -162,27 +167,37 @@ export default function QuoteForm({
       let cid = customerId
       let vid = vehicleId || null
       if (!cid) {
-        const { data, error } = await supabase
-          .from('customers')
-          .insert({
-            name: newCustomerName.trim(),
-            phone: newCustomerPhone.trim() || null,
-          })
-          .select('id')
-          .single()
-        if (error) throw error
-        cid = data.id
+        if (createdCustomerId.current) {
+          cid = createdCustomerId.current
+        } else {
+          const { data, error } = await supabase
+            .from('customers')
+            .insert({
+              name: newCustomerName.trim(),
+              phone: newCustomerPhone.trim() || null,
+            })
+            .select('id')
+            .single()
+          if (error) throw error
+          createdCustomerId.current = data.id
+          cid = data.id
+        }
         // A quote without a vehicle can never convert to a job, and editing
         // later to add one resets an approved quote to draft — so a new
         // customer's vehicle comes along right here, like the job form does.
         if (Object.values(newVehicle).some((v) => v.trim() !== '')) {
-          const { data: veh, error: vehErr } = await supabase
-            .from('vehicles')
-            .insert({ customer_id: cid, ...vehiclePayload(newVehicle) })
-            .select('id')
-            .single()
-          if (vehErr) throw vehErr
-          vid = veh.id
+          if (createdVehicleId.current) {
+            vid = createdVehicleId.current
+          } else {
+            const { data: veh, error: vehErr } = await supabase
+              .from('vehicles')
+              .insert({ customer_id: cid, ...vehiclePayload(newVehicle) })
+              .select('id')
+              .single()
+            if (vehErr) throw vehErr
+            createdVehicleId.current = veh.id
+            vid = veh.id
+          }
         }
       }
 

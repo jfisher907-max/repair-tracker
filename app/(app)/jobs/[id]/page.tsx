@@ -75,7 +75,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [templateName, setTemplateName] = useState('')
   const [payQuickOpen, setPayQuickOpen] = useState(false)
   const [payQuickMethod, setPayQuickMethod] = useState<PaymentMethod>('cash')
-  const [actionMsg, setActionMsg] = useState<string | null>(null)
+  const [actionMsg, setActionMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [savingTemplate, setSavingTemplate] = useState(false)
   const [draft, setDraft] = useState<LineDraft>(emptyDraft)
   const [addedFlash, setAddedFlash] = useState<string | null>(null)
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set())
@@ -174,9 +175,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       : 0
   // What the customer actually owes: an issued invoice can add sales tax on
   // top of the job's charge math, so the balance targets the larger figure.
+  //
+  // LARGEST live invoice, never the sum — every invoice snapshots the WHOLE
+  // job, so two live invoices are revisions of one debt, not two debts.
+  // (Same rule as syncJobPayment; summing here made the quick-settle panel
+  // offer to collect double.)
   const invoicedTotal = invoices
     .filter((i) => i.status !== 'void')
-    .reduce((s, i) => s + i.total_cents, 0)
+    .reduce((s, i) => Math.max(s, i.total_cents), 0)
   const owedTarget = Math.max(totals.total_charged_cents, invoicedTotal)
   const balanceDue = Math.max(0, owedTarget - paidFromLedger - legacyPaid)
   // Payments recorded here default onto the job's open invoice so it settles.
@@ -299,7 +305,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   }
 
   async function deleteLine(lineId: string) {
-    if (busyLineId) return
+    if (busyLineId === lineId) return
     if (!confirm('Delete this part line?')) return
     setBusyLineId(lineId)
     const { error } = await supabase.from('part_lines').delete().eq('id', lineId)
@@ -480,7 +486,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <button
               className="btn btn-sm"
               style={{ borderColor: 'var(--green)', color: 'var(--green)' }}
-              onClick={() => setPayQuickOpen(!payQuickOpen)}
+              onClick={() => {
+                setActionMsg(null)
+                setPayQuickOpen(!payQuickOpen)
+              }}
             >
               ✓ Mark paid
             </button>
@@ -504,6 +513,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               className="btn btn-sm"
               onClick={() => {
                 setTemplateName(job!.title)
+                setActionMsg(null)
                 setTemplateOpen(!templateOpen)
               }}
             >
@@ -515,7 +525,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
         )}
 
-        {templateOpen && (
+        {templateOpen && moreOpen && (
           <div className="panel-in space-y-2 pt-2">
             <label className="label !mb-0">Template name (what you’d call this job in a list)</label>
             <input
@@ -526,19 +536,26 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <div className="flex items-center gap-2">
               <button
                 className="btn btn-primary btn-sm"
-                disabled={!templateName.trim()}
+                disabled={!templateName.trim() || savingTemplate}
                 onClick={async () => {
+                  setSavingTemplate(true)
+                  setActionMsg(null)
                   try {
                     await saveJobAsTemplate(templateName, job!, lines)
                     setTemplateOpen(false)
-                    setActionMsg(`Saved — “${templateName.trim()}” is now a starting point on New Job.`)
+                    setActionMsg({
+                      text: `Saved — “${templateName.trim()}” is now a starting point on New Job.`,
+                      ok: true,
+                    })
                     setTimeout(() => setActionMsg(null), 4000)
                   } catch (e) {
-                    setActionMsg(e instanceof Error ? e.message : String(e))
+                    setActionMsg({ text: e instanceof Error ? e.message : String(e), ok: false })
+                  } finally {
+                    setSavingTemplate(false)
                   }
                 }}
               >
-                Save template
+                {savingTemplate ? 'Saving…' : 'Save template'}
               </button>
               <button className="btn btn-sm" onClick={() => setTemplateOpen(false)}>Cancel</button>
             </div>
@@ -583,7 +600,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                     setPayQuickOpen(false)
                     await load()
                   } catch (e) {
-                    setActionMsg(e instanceof Error ? e.message : String(e))
+                    setActionMsg({ text: e instanceof Error ? e.message : String(e), ok: false })
                   } finally {
                     setPayingBusy(false)
                   }
@@ -600,7 +617,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         )}
 
         {actionMsg && (
-          <p className="flash-in pt-1 text-sm" style={{ color: 'var(--green)' }}>{actionMsg}</p>
+          <p
+            className="flash-in pt-1 text-sm"
+            style={{ color: actionMsg.ok ? 'var(--green)' : 'var(--red)' }}
+          >
+            {actionMsg.text}
+          </p>
         )}
       </div>
 

@@ -81,14 +81,17 @@ export default function BillingPage({
 
   async function deleteInvoice(inv: Invoice) {
     // The swipe affordance already excludes sent/paid invoices; this re-check
-    // catches a payment recorded since the page loaded.
+    // catches a payment recorded since the page loaded. Money against the JOB
+    // counts, not just money tagged with this invoice id — a payment recorded
+    // from the job page carries no invoice_id when no invoice was open yet.
     const { data: pays, error: pErr } = await supabase
       .from('payments')
       .select('id')
-      .eq('invoice_id', inv.id)
+      .eq('job_id', inv.job_id)
       .limit(1)
     if (pErr) throw new Error(pErr.message)
-    if (pays?.length) throw new Error('A payment was recorded against this invoice — it stays.')
+    if (pays?.length)
+      throw new Error('This job has payments recorded against it — the invoice stays.')
     const { error } = await supabase.from('invoices').delete().eq('id', inv.id)
     if (error) throw new Error(error.message)
     // The set of live invoices changed — re-derive the job's payment status.

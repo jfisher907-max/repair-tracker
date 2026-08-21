@@ -21,15 +21,64 @@ export default function Dashboard() {
   const [businessName, setBusinessName] = useState('')
   /** The money actually received, by payment date — the cash side of the tiles. */
   const [payments, setPayments] = useState<
-    { amount_cents: number; date: string; job_id: string }[]
+    { amount_cents: number; date: string; job_id: string; invoice_id: string | null }[]
+  >([])
+  /** Parts money going out, by PURCHASE date — the other half of cash basis. */
+  const [partOutflows, setPartOutflows] = useState<{ date: string; cents: number }[]>([])
+  /** Sales tax rides along in payments but belongs to the state, never to profit. */
+  const [taxableInvoices, setTaxableInvoices] = useState<
+    { id: string; tax_cents: number; total_cents: number }[]
   >([])
 
   useEffect(() => {
     fetchJobsWithContext().then(setItems).catch((e) => setError(String(e.message ?? e)))
+    // Payments on binned jobs must not count — their billed/parts/unpaid all
+    // vanish with the job, so leaving their cash in would inflate profit and
+    // break collected + unpaid = billed. (Reports already filters this way.)
     supabase
       .from('payments')
-      .select('amount_cents, date, job_id')
-      .then(({ data }) => setPayments(data ?? []))
+      .select('amount_cents, date, job_id, invoice_id, job:jobs(deleted_at)')
+      .then(({ data }) => {
+        const rows =
+          (data as unknown as {
+            amount_cents: number
+            date: string
+            job_id: string
+            invoice_id: string | null
+            job: { deleted_at: string | null } | null
+          }[]) ?? []
+        setPayments(
+          rows
+            .filter((p) => !p.job?.deleted_at)
+            .map((p) => ({
+              amount_cents: p.amount_cents,
+              date: p.date,
+              job_id: p.job_id,
+              invoice_id: p.invoice_id,
+            })),
+        )
+      })
+    supabase
+      .from('part_lines')
+      .select('line_total_cents, purchase_date, job:jobs(date, deleted_at)')
+      .then(({ data }) => {
+        const rows =
+          (data as unknown as {
+            line_total_cents: number
+            purchase_date: string | null
+            job: { date: string; deleted_at: string | null } | null
+          }[]) ?? []
+        setPartOutflows(
+          rows
+            .filter((r) => r.job && !r.job.deleted_at)
+            .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents })),
+        )
+      })
+    supabase
+      .from('invoices')
+      .select('id, tax_cents, total_cents, status')
+      .neq('status', 'void')
+      .then(({ data }) => setTaxableInvoices(data ?? []))
     supabase
       .from('settings')
       .select('business_name')
@@ -60,8 +109,11 @@ export default function Dashboard() {
   const years = useMemo(() => {
     const set = new Set<number>()
     for (const it of items ?? []) set.add(new Date(it.job.date + 'T00:00:00').getFullYear())
+    // A year whose only activity is cash landing on last year's jobs still
+    // has to be selectable.
+    for (const p of payments) set.add(Number(p.date.slice(0, 4)))
     return [...set].sort((a, b) => b - a)
-  }, [items])
+  }, [items, payments])
 
   const scoped = useMemo(() => {
     if (!items) return []
@@ -70,43 +122,56 @@ export default function Dashboard() {
   }, [items, year])
 
   const stats = useMemo(() => {
+    const inYear = (iso: string) => year === 'all' || Number(iso.slice(0, 4)) === year
     let hours = 0
     let charged = 0
-    let partsSpend = 0
     let unpaid = 0
     for (const it of scoped) {
       hours += Number(it.job.labor_hours)
       const t = it.totals
       if (!t) continue
       charged += t.total_charged_cents
-      partsSpend += t.parts_cost_cents
       unpaid += unpaidBalanceCents(it.job, t.total_charged_cents)
     }
-    // Cash, not accrual: money that actually landed. The old "profit" counted
-    // every job as if it were paid, so an unpaid $2,000 job read as profit
-    // sitting in the bank.
+
+    // Cash, not accrual. The old "profit" counted every job as if it were
+    // paid, so an unpaid $2,000 job read as money in the bank.
     //
-    // Ledger payments are scoped by PAYMENT date (a 2025 job paid in 2026 is
-    // 2026 cash); jobs settled before the ledger existed have no payment rows,
-    // so they contribute their cached amount, scoped by job date.
+    // BOTH sides are cash-dated or the number is nonsense: payments by
+    // PAYMENT date, parts by PURCHASE date. Mixing them (parts by job date)
+    // made a December job paid in January show a false loss for the year.
     const jobsWithLedger = new Set(payments.map((p) => p.job_id))
-    let collected = payments
-      .filter((p) => year === 'all' || Number(p.date.slice(0, 4)) === year)
-      .reduce((s, p) => s + p.amount_cents, 0)
+    let collected = payments.filter((p) => inYear(p.date)).reduce((s, p) => s + p.amount_cents, 0)
     for (const it of scoped) {
       if (jobsWithLedger.has(it.job.id) || !it.totals) continue
       collected += collectedForJob(it.job, it.totals.total_charged_cents, 0, false)
     }
+    const partsSpend = partOutflows.filter((o) => inYear(o.date)).reduce((s, o) => s + o.cents, 0)
+
+    // Sales tax arrives inside those payments but is the state's money, so it
+    // is neither revenue nor profit. Each invoice's tax counts in proportion
+    // to how much of that invoice has been paid.
+    let taxCollected = 0
+    for (const inv of taxableInvoices) {
+      if (inv.tax_cents <= 0 || inv.total_cents <= 0) continue
+      const paidOnInvoice = payments
+        .filter((p) => p.invoice_id === inv.id && inYear(p.date))
+        .reduce((s, p) => s + p.amount_cents, 0)
+      if (paidOnInvoice <= 0) continue
+      taxCollected += Math.round(inv.tax_cents * Math.min(1, paidOnInvoice / inv.total_cents))
+    }
+
     return {
       count: scoped.length,
       hours,
       charged,
       partsSpend,
       collected,
-      cashProfit: collected - partsSpend,
+      taxCollected,
+      cashProfit: collected - partsSpend - taxCollected,
       unpaid,
     }
-  }, [scoped, payments, year])
+  }, [scoped, payments, partOutflows, taxableInvoices, year])
 
   const unpaidJobs = scoped.filter((it) => it.job.payment_status !== 'paid')
   const recent = scoped.slice(0, 6)
@@ -166,13 +231,18 @@ export default function Dashboard() {
         <StatTile icon="⏱️" label="Labor hours" value={stats.hours.toFixed(1)} />
         <StatTile icon="💵" label="Billed" value={formatCents(stats.charged)} hint="what the work came to" />
         <StatTile icon="🏦" label="Collected" value={formatCents(stats.collected)} hint="payments received" />
-        <StatTile icon="🛒" label="Parts spend" value={formatCents(stats.partsSpend)} hint="your cost" />
+        <StatTile
+          icon="🛒"
+          label="Parts spend"
+          value={formatCents(stats.partsSpend)}
+          hint="your cost, when bought"
+        />
         <StatTile
           icon="📈"
           label="Cash profit"
           value={formatCents(stats.cashProfit)}
           accent={stats.cashProfit >= 0 ? 'var(--green)' : 'var(--red)'}
-          hint="collected − parts"
+          hint={stats.taxCollected > 0 ? 'collected − parts − tax' : 'collected − parts'}
         />
         <StatTile
           icon="⚠️"
