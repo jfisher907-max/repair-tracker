@@ -8,6 +8,7 @@ import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { collectedForJob, unpaidBalanceCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
 import { supabase } from '@/lib/supabase'
+import { docState, listBusinessDocuments, type BusinessDocument } from '@/components/BusinessDocuments'
 
 export default function Dashboard() {
   const [items, setItems] = useState<JobWithContext[] | null>(null)
@@ -45,6 +46,8 @@ export default function Dashboard() {
   const [taxableInvoices, setTaxableInvoices] = useState<
     { id: string; tax_cents: number; total_cents: number }[]
   >([])
+  /** Licenses and policies close to lapsing — surfaced here so they can't sneak up. */
+  const [docAlerts, setDocAlerts] = useState<BusinessDocument[]>([])
   /** Overhead — the spending that isn't parts for a specific job. */
   const [expenses, setExpenses] = useState<{ amount_cents: number; date: string }[]>([])
 
@@ -101,6 +104,9 @@ export default function Dashboard() {
       .from('expenses')
       .select('amount_cents, date')
       .then(({ data }) => setExpenses(data ?? []))
+    listBusinessDocuments()
+      .then((docs) => setDocAlerts(docs.filter((d) => docState(d) !== 'ok')))
+      .catch(() => {})
     supabase
       .from('settings')
       .select('business_name')
@@ -361,6 +367,26 @@ export default function Dashboard() {
           🧰 Expenses
         </Link>
       </div>
+
+      {docAlerts.length > 0 && (
+        <Link
+          href="/settings"
+          className="card flex items-center justify-between gap-3 !py-3 hover:brightness-110"
+          style={{ borderLeft: `3px solid ${docAlerts.some((d) => docState(d) === 'expired') ? 'var(--red)' : 'var(--orange)'}` }}
+        >
+          <span className="font-semibold">📄 Paperwork</span>
+          <span className="text-sm" style={{ color: 'var(--text2)' }}>
+            {docAlerts.map((d, i) => (
+              <span key={d.id}>
+                {i > 0 && ' · '}
+                <span style={{ color: docState(d) === 'expired' ? 'var(--red)' : 'var(--orange)' }}>
+                  {d.name} {docState(d) === 'expired' ? 'expired' : 'expires soon'}
+                </span>
+              </span>
+            ))}
+          </span>
+        </Link>
+      )}
 
       {billing && (billing.openQuotes > 0 || billing.unpaidInvoices > 0) && (
         <Link

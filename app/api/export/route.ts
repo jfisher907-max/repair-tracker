@@ -91,6 +91,9 @@ const TABLES: Record<string, string[]> = {
     'id', 'date', 'category', 'vendor', 'description', 'amount_cents', 'storage_path',
     'created_at', 'updated_at',
   ],
+  business_documents: [
+    'id', 'name', 'storage_path', 'mime_type', 'expires_at', 'notes', 'created_at', 'updated_at',
+  ],
 }
 
 /** Supabase caps a single select at 1000 rows — page through so the backup is never silently partial. */
@@ -117,10 +120,12 @@ export async function GET(request: Request) {
   const zip = new JSZip()
 
   let allReceiptRows: Record<string, unknown>[] = []
+  let allDocRows: Record<string, unknown>[] = []
   try {
     for (const [table, columns] of Object.entries(TABLES)) {
       const rows = await fetchAllRows(supabase, table)
       if (table === 'receipts') allReceiptRows = rows
+      if (table === 'business_documents') allDocRows = rows
       zip.file(`${table}.csv`, toCsv(rows, columns))
     }
   } catch (e) {
@@ -136,6 +141,18 @@ export async function GET(request: Request) {
     }
   }
 
+  // The shop's own paperwork — license, insurance — is the LAST thing a
+  // backup should leave behind.
+  for (const r of allDocRows) {
+    const path = r.storage_path as string
+    const { data: blob } = await supabase.storage.from('receipts').download(path)
+    if (blob) {
+      const safeName = String(r.name ?? 'document').replace(/[^a-zA-Z0-9._-]+/g, '_')
+      const ext = path.split('.').pop() ?? 'bin'
+      zip.file(`business-documents/${safeName}.${ext}`, await blob.arrayBuffer())
+    }
+  }
+
   zip.file(
     'README.txt',
     [
@@ -144,6 +161,7 @@ export async function GET(request: Request) {
       '',
       'All *_cents columns are money in integer US cents (divide by 100 for dollars).',
       'receipts/ contains the original receipt photos, organized by job id.',
+      'business-documents/ contains the shop licensing and insurance files.',
     ].join('\r\n'),
   )
 

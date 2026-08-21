@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { getAccessToken, supabase } from '@/lib/supabase'
+import BusinessDocuments from '@/components/BusinessDocuments'
 import { BRAND_SLUG } from '@/lib/brand'
 import { DEFAULT_TIERS, type MarkupTier } from '@/lib/markup'
 import { centsToInput, parseMoney } from '@/lib/money'
@@ -399,6 +400,8 @@ export default function SettingsPage() {
           {exporting ? 'Building zip…' : '⬇️ Export all data'}
         </button>
       </div>
+
+      <BusinessDocuments />
 
       <div className="card space-y-2">
         <div className="label">Recently deleted{deletedCount ? ` (${deletedCount})` : ''}</div>

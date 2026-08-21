@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120">
+  <g transform="translate(10,20) scale(2)">
+  <rect width="40" height="40" rx="9" fill="#f59e0b"/>
+  <polygon fill="#1c1917" points="8,21.5 8,17.5 32,4.5 32,8.5"/>
+  <polygon fill="#1c1917" points="8,28 8,24 25.5,14.5 25.5,18.5"/>
+  <polygon fill="#1c1917" points="8,34.5 8,30.5 19,24.5 19,28.5"/></g>
+  <text x="112" y="80" font-family="Space Grotesk, Barlow, Arial, Helvetica, sans-serif"
+        font-size="54" font-weight="700" letter-spacing="-1.5" fill="#ffffff">Wings N Things</text>
+</svg>
