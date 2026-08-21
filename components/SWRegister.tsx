@@ -12,6 +12,20 @@ const CUSTOMER_PREFIXES = ['/q/', '/i/', '/s/']
 /** At most one reload a minute, so a reload can never chain into a loop. */
 const RELOAD_COOLDOWN_MS = 60_000
 
+/**
+ * A dead app looks alive: press animations are CSS, so taps still flash while
+ * the router silently fails on a chunk that no longer exists (yesterday's
+ * cached shell against today's deploy). Recover once, automatically, instead
+ * of leaving the owner tapping a screen that goes nowhere.
+ */
+function isStaleBundleError(message: string): boolean {
+  return (
+    /ChunkLoadError|Loading chunk \d+ failed|Failed to fetch dynamically imported module|Importing a module script failed/i.test(
+      message,
+    )
+  )
+}
+
 export default function SWRegister() {
   const pathname = usePathname()
   const isCustomerPage = CUSTOMER_PREFIXES.some((p) => pathname?.startsWith(p))
@@ -52,6 +66,37 @@ export default function SWRegister() {
     }
     navigator.serviceWorker.addEventListener('controllerchange', onControllerChange)
 
+    // Self-heal a wedged bundle: drop the caches and the worker, then reload
+    // once (the cooldown key is shared with the update reload, so the two can
+    // never ping-pong).
+    async function recoverFromStaleBundle() {
+      let last = 0
+      try {
+        last = Number(sessionStorage.getItem('sw-reloaded-at') || 0)
+      } catch {}
+      if (Date.now() - last < RELOAD_COOLDOWN_MS) return
+      try {
+        sessionStorage.setItem('sw-reloaded-at', String(Date.now()))
+      } catch {}
+      try {
+        const keys = await caches.keys()
+        await Promise.all(keys.map((k) => caches.delete(k)))
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map((r) => r.unregister()))
+      } catch {}
+      window.location.reload()
+    }
+    const onError = (e: ErrorEvent) => {
+      if (isStaleBundleError(String(e.message ?? ''))) recoverFromStaleBundle()
+    }
+    const onRejection = (e: PromiseRejectionEvent) => {
+      const reason = e.reason
+      const msg = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason)
+      if (isStaleBundleError(msg)) recoverFromStaleBundle()
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+
     let removeVisibility = () => {}
     navigator.serviceWorker
       .register('/sw.js')
@@ -71,6 +116,8 @@ export default function SWRegister() {
 
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange)
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
       removeVisibility()
     }
   }, [isCustomerPage])
