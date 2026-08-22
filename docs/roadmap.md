@@ -50,6 +50,16 @@ not the same thing. Three engineering rules drive it:
 > viewed-signal, re-quote chips, photos on the public quote page (dark until the storage
 > policy runs).
 >
+> **2026-08-22: the public site shipped.** '/' is now a static customer-facing landing
+> page (Juneau, AK positioning, no phone/address by design — the request form is the only
+> contact channel); the app lives at /dashboard. Phase 6a (requests inbox at /requests) and
+> a slim 6b (the public intake form) are LIVE; what remains of Phase 6 is pointing QR codes /
+> NFC tags at /?src=qr | /?src=nfc (they already tag the source) and, later, the token-link
+> customer portal (6c). Owner email notification for new requests activates when
+> RESEND_API_KEY + OWNER_NOTIFY_EMAIL are set in Vercel. The aviation side (boutique
+> private-jet AOG support) gets its own public page later — the (public) route group and
+> nav were built to take a second page without rework.
+>
 > Deposits also rebuilt the money core: the "paid to date" on any invoice is now the job
 > total minus **every** payment on that job (migrations 0017–0019), so a deposit, a
 > pre-invoice "Mark paid", or a void-and-reissue can never be re-billed. `syncJobPayment`
