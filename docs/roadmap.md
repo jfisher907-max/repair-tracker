@@ -41,12 +41,19 @@ not the same thing. Three engineering rules drive it:
 3. **Build foundations before the things that stand on them**, and do work that touches the
    same code in one pass rather than two.
 
-> **Status (2026-08-20):** Phases 1–5 shipped except the video half of Phase 3 and
-> Phase 4's deposits (blocked on Phase 0's Stripe keys). Phase 0 remains open (owner
-> errands: Stripe keys, review link). Phase 6 (customer-driven intake) committed to the
-> build order, queued after deposits. Shipped beyond the plan: mid-job add-on quotes with
-> atomic apply, verbal-OK method capture, quote viewed-signal, re-quote chips, photos on
-> the public quote page (dark until the storage policy runs).
+> **Status (2026-08-21):** Phases 1–5 shipped except the video half of Phase 3.
+> **Deposits (Phase 4) are now built** — code is dormant until the owner adds the
+> Stripe keys (see docs/card-payments.md); everything else about the app is unchanged
+> without them. Phase 0 remains open only for the owner errands: Stripe keys + the
+> Google review link. Phase 6 (customer-driven intake) is queued next. Shipped beyond
+> the plan: mid-job add-on quotes with atomic apply, verbal-OK method capture, quote
+> viewed-signal, re-quote chips, photos on the public quote page (dark until the storage
+> policy runs).
+>
+> Deposits also rebuilt the money core: the "paid to date" on any invoice is now the job
+> total minus **every** payment on that job (migrations 0017–0019), so a deposit, a
+> pre-invoice "Mark paid", or a void-and-reissue can never be re-billed. `syncJobPayment`
+> and the SQL `refresh_job_payment_cache` mirror one rule; keep them identical.
 
 ### Phase 0 — external dependencies, start the clock (no engineering)
 

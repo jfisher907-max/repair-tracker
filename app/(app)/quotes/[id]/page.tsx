@@ -7,12 +7,13 @@ import QuoteForm from '@/components/QuoteForm'
 import DocView, { type DocData } from '@/components/DocView'
 import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
-import { computeQuoteTotals, statusChipClass } from '@/lib/billing'
+import { computeQuoteTotals, statusChipClass, depositForRule, depositRuleLabel, DEPOSIT_KINDS } from '@/lib/billing'
 import { syncJobPayment } from '@/lib/payments'
 import { formatCents } from '@/lib/money'
 import {
   vehicleLabel,
   type Customer,
+  type DepositKind,
   type Quote,
   type QuoteLine,
   type QuoteStatus,
@@ -37,6 +38,21 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const [recordMethod, setRecordMethod] = useState<'phone' | 'in_person' | 'text'>('phone')
   const [recordBusy, setRecordBusy] = useState(false)
   const [lastMethod, setLastMethod] = useState<string | null>(null)
+  /** Money already put down against this quote (any method), from the ledger. */
+  const [depositPaid, setDepositPaid] = useState(0)
+  /** Owner editing the deposit term after send/approval. */
+  const [depEditing, setDepEditing] = useState(false)
+  const [depKind, setDepKind] = useState<DepositKind>('none')
+  const [depFixed, setDepFixed] = useState('')
+  const [depName, setDepName] = useState('')
+  const [depMethod, setDepMethod] = useState<'phone' | 'in_person' | 'text'>('phone')
+  const [depBusy, setDepBusy] = useState(false)
+  const [depMsg, setDepMsg] = useState('')
+  /** Attaching a vehicle to an approved-but-vehicleless quote so it can convert. */
+  const [attaching, setAttaching] = useState(false)
+  const [custVehicles, setCustVehicles] = useState<Vehicle[]>([])
+  const [attachId, setAttachId] = useState('')
+  const [attachBusy, setAttachBusy] = useState(false)
 
   const load = useCallback(async () => {
     const [{ data: q }, { data: l }, { data: s }, { data: a }] = await Promise.all([
@@ -51,10 +67,16 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         .from('quote_approvals')
         .select('method')
         .eq('quote_id', id)
+        .in('response', ['approved', 'declined'])
         .order('created_at', { ascending: false })
         .limit(1),
     ])
     setLastMethod((a as { method: string }[] | null)?.[0]?.method ?? null)
+    const { data: dep } = await supabase
+      .from('payments')
+      .select('amount_cents')
+      .eq('quote_id', id)
+    setDepositPaid(((dep as { amount_cents: number }[] | null) ?? []).reduce((s, p) => s + p.amount_cents, 0))
     if (q) {
       const { customer: c, vehicle: v, ...row } = q as Quote & {
         customer: Customer | null
@@ -71,6 +93,17 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (!quote) return
+    setDepKind(quote.deposit_kind ?? 'none')
+    setDepFixed(
+      quote.deposit_kind === 'fixed' && quote.deposit_value != null
+        ? String((quote.deposit_value / 100).toFixed(2))
+        : '',
+    )
+    setDepName(customer?.name ?? '')
+  }, [quote, customer])
 
   useDocumentTitle(
     quote ? `${quote.quote_number} Quote — ${customer?.name ?? ''}`.replace(/—\s*$/, '').trim() : null,
@@ -126,6 +159,10 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     taxRateBp: quote.tax_rate_bp,
     taxCents: totals.tax_cents,
     totalCents: totals.total_cents,
+    depositCents:
+      quote.status === 'approved'
+        ? (quote.deposit_cents ?? null)
+        : depositForRule(quote.deposit_kind, quote.deposit_value, totals),
     memo: null,
     paymentInstructions: null,
     paidDate: null,
@@ -149,6 +186,12 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     if (!name) return alert('Whose OK is this? Put a name on it.')
     setRecordBusy(true)
     try {
+      // Resolve the deposit against what is actually being approved (declined
+      // lines already carry their flag), same rule the online path freezes.
+      const deposit =
+        recording === 'approved'
+          ? depositForRule(quote!.deposit_kind, quote!.deposit_value, totals)
+          : null
       const snapshot = {
         quote_number: quote!.quote_number,
         title: quote!.title,
@@ -163,6 +206,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           declined: l.declined,
         })),
         total_cents: totals.total_cents,
+        deposit_kind: quote!.deposit_kind,
+        deposit_value: quote!.deposit_value,
+        deposit_cents: deposit,
         response: recording,
         by_name: name,
         method: recordMethod,
@@ -184,6 +230,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           decided_at: new Date().toISOString(),
           approved_by_name: name,
           approved_snapshot: snapshot,
+          deposit_cents: deposit,
         })
         .eq('id', id)
       if (qErr) throw qErr
@@ -294,7 +341,17 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
 
   async function convertToJob() {
     if (!quote!.vehicle_id) {
-      alert('Set a vehicle on this quote first (Edit) — jobs are always tied to a vehicle.')
+      // A job needs a vehicle, but editing an approved quote to add one would
+      // wipe the approval. The vehicle isn't part of the frozen pricing, so
+      // attach it in place instead — no reset. (Opens the picker below.)
+      setAttaching(true)
+      const { data } = await supabase
+        .from('vehicles')
+        .select('*')
+        .eq('customer_id', quote!.customer_id)
+        .is('deleted_at', null)
+        .order('year', { ascending: false })
+      setCustVehicles((data as Vehicle[]) ?? [])
       return
     }
     if (quote!.job_id) {
@@ -305,63 +362,59 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     if (!confirm(`Create a job from ${quote!.quote_number}? Quoted lines become the job's customer pricing; you'll add actual parts costs as you buy them.`)) return
     setConverting(true)
     try {
-      const { data: job, error } = await supabase
-        .from('jobs')
-        .insert({
-          vehicle_id: quote!.vehicle_id,
-          title: quote!.title,
-          work_performed: quote!.description,
-          labor_hours: Number(quote!.labor_hours),
-          labor_rate_cents: quote!.labor_rate_cents,
-          notes: `From quote ${quote!.quote_number}`,
-        })
-        .select('id')
-        .single()
+      // One transaction: the job, its lines, the declined-line follow-ups,
+      // and the link-back all land together — a failed or repeated tap can
+      // never leave a twin job behind (the old client-side flow could).
+      const { data: jobId, error } = await supabase.rpc('convert_quote_to_job', { p_quote_id: id })
       if (error) throw error
-      // Only what the customer agreed to becomes work on the job.
-      const approved = lines.filter((l) => !l.declined)
-      if (approved.length) {
-        const { error: lineErr } = await supabase.from('part_lines').insert(
-          approved.map((l) => ({
-            job_id: job.id,
-            description: l.description,
-            qty: Number(l.qty),
-            unit_cost_cents: 0,
-            unit_charge_cents: l.unit_charge_cents,
-          })),
-        )
-        if (lineErr) throw lineErr
-      }
-      // What they skipped isn't lost — it lands in Follow-ups as an open
-      // recommendation with the quoted price attached.
-      const declined = lines.filter((l) => l.declined)
-      if (declined.length) {
-        const { error: recErr } = await supabase.from('recommendations').insert(
-          declined.map((l) => ({
-            job_id: job.id,
-            vehicle_id: quote!.vehicle_id,
-            description: `${l.description} (declined on ${quote!.quote_number})`,
-            estimate_cents: l.line_total_cents,
-            status: 'open',
-          })),
-        )
-        if (recErr) throw recErr
-      }
-      const { error: stampErr } = await supabase
-        .from('quotes')
-        .update({ job_id: job.id, applied_at: new Date().toISOString() })
-        .eq('id', id)
-      // The job exists either way — but if the link-back failed, converting
-      // again would create a twin, so say so instead of failing silently.
-      if (stampErr) {
-        alert(
-          `The job was created but the quote couldn't be marked converted (${stampErr.message}). Don't convert again — open the job from the Jobs list.`,
-        )
-      }
-      router.push(`/jobs/${job.id}`)
+      router.push(`/jobs/${jobId}`)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))
       setConverting(false)
+    }
+  }
+
+  /** Attach a vehicle to a vehicleless quote, then convert. Touches only
+   *  vehicle_id — the approval and its snapshot are untouched. */
+  async function attachVehicleAndConvert() {
+    if (!attachId || attachBusy) return
+    setAttachBusy(true)
+    try {
+      const { error } = await supabase.from('quotes').update({ vehicle_id: attachId }).eq('id', id)
+      if (error) throw error
+      const { data: jobId, error: cErr } = await supabase.rpc('convert_quote_to_job', { p_quote_id: id })
+      if (cErr) throw cErr
+      router.push(`/jobs/${jobId}`)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : String(e))
+      setAttachBusy(false)
+    }
+  }
+
+  /** Set or change the deposit term without disturbing the approval record. */
+  async function saveDeposit() {
+    if (depBusy) return
+    setDepBusy(true)
+    setDepMsg('')
+    try {
+      const value =
+        depKind === 'percent' ? 5000 : depKind === 'fixed' ? Math.round((Number(depFixed) || 0) * 100) : null
+      const { error } = await supabase.rpc('set_quote_deposit', {
+        p_quote_id: id,
+        p_kind: depKind,
+        p_value: value,
+        p_by_name: depName.trim() || null,
+        p_method: quote!.status === 'approved' ? depMethod : null,
+      })
+      if (error) throw error
+      setDepEditing(false)
+      setDepMsg('Deposit updated ✓')
+      await load()
+      setTimeout(() => setDepMsg(''), 3000)
+    } catch (e) {
+      setDepMsg(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDepBusy(false)
     }
   }
 
@@ -492,6 +545,162 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
               </button>
               <button className="btn btn-sm" onClick={() => setRecording(null)}>Cancel</button>
             </div>
+          </div>
+        )}
+        {attaching && (
+          <div className="card space-y-2">
+            <span className="label !mb-0">Which vehicle is this job for?</span>
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              This quote has no vehicle yet, and a job needs one. Picking it here keeps the
+              customer&apos;s approval intact — it doesn&apos;t reset the quote.
+            </p>
+            {custVehicles.length > 0 ? (
+              <>
+                <select
+                  className="select"
+                  value={attachId}
+                  onChange={(e) => setAttachId(e.target.value)}
+                >
+                  <option value="">Choose a vehicle…</option>
+                  {custVehicles.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {vehicleLabel(v)}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex gap-2">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={!attachId || attachBusy}
+                    onClick={attachVehicleAndConvert}
+                  >
+                    {attachBusy ? 'Creating job…' : 'Attach & create job'}
+                  </button>
+                  <button className="btn btn-sm" onClick={() => setAttaching(false)}>Cancel</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm" style={{ color: 'var(--text2)' }}>
+                  {customer?.name ?? 'This customer'} has no vehicles on file. Add one from their
+                  customer page, then come back and convert.
+                </p>
+                <div className="flex gap-2">
+                  {customer && (
+                    <Link className="btn btn-sm" href={`/customers/${customer.id}`}>
+                      Open customer
+                    </Link>
+                  )}
+                  <button className="btn btn-sm" onClick={() => setAttaching(false)}>Cancel</button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        {/* Deposit term — set up front on the quote form, or added/changed
+            here after send/approval without disturbing the approval record.
+            Locks once any deposit money has been recorded. */}
+        {(quote.deposit_kind !== 'none' ||
+          quote.status === 'sent' ||
+          quote.status === 'approved' ||
+          depEditing) && (
+          <div className="card space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="label !mb-0">Deposit</span>
+              {!depEditing && depositPaid === 0 && quote.status !== 'declined' && (
+                <button className="btn btn-sm" onClick={() => setDepEditing(true)}>
+                  {quote.deposit_kind === 'none' ? '+ Add deposit' : 'Change'}
+                </button>
+              )}
+            </div>
+            {!depEditing && (
+              <p className="text-sm">
+                {quote.deposit_kind === 'none' ? (
+                  <span style={{ color: 'var(--text3)' }}>No deposit on this quote.</span>
+                ) : (
+                  <>
+                    <b className="money">
+                      {formatCents(
+                        quote.status === 'approved'
+                          ? (quote.deposit_cents ?? 0)
+                          : (depositForRule(quote.deposit_kind, quote.deposit_value, totals) ?? 0),
+                      )}
+                    </b>{' '}
+                    requested ({depositRuleLabel(quote.deposit_kind, quote.deposit_value)})
+                    {depositPaid > 0 && (
+                      <span style={{ color: 'var(--green)' }}>
+                        {' '}· {formatCents(depositPaid)} received
+                      </span>
+                    )}
+                  </>
+                )}
+              </p>
+            )}
+            {depEditing && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1">
+                  {DEPOSIT_KINDS.map((k) => (
+                    <button
+                      key={k.value}
+                      type="button"
+                      className="chip"
+                      style={{
+                        background: depKind === k.value ? 'var(--accent)' : 'var(--bg3)',
+                        color: depKind === k.value ? '#111' : undefined,
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => setDepKind(k.value)}
+                    >
+                      {k.label}
+                    </button>
+                  ))}
+                </div>
+                {depKind === 'fixed' && (
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="Amount, e.g. 200"
+                    value={depFixed}
+                    onChange={(e) => setDepFixed(e.target.value)}
+                  />
+                )}
+                {quote.status === 'approved' && (
+                  <>
+                    <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                      This quote is approved — a change is logged as agreed by the customer.
+                    </p>
+                    <input
+                      className="input"
+                      placeholder="Who agreed to the change"
+                      value={depName}
+                      onChange={(e) => setDepName(e.target.value)}
+                    />
+                    <select
+                      className="select"
+                      value={depMethod}
+                      onChange={(e) => setDepMethod(e.target.value as 'phone' | 'in_person' | 'text')}
+                    >
+                      <option value="phone">By phone call</option>
+                      <option value="in_person">In person</option>
+                      <option value="text">By text message</option>
+                    </select>
+                  </>
+                )}
+                <div className="flex gap-2">
+                  <button className="btn btn-primary btn-sm" disabled={depBusy} onClick={saveDeposit}>
+                    {depBusy ? 'Saving…' : 'Save deposit'}
+                  </button>
+                  <button className="btn btn-sm" onClick={() => { setDepEditing(false); setDepMsg('') }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {depMsg && (
+              <p className="text-sm" style={{ color: depMsg.includes('✓') ? 'var(--green)' : 'var(--red)' }}>
+                {depMsg}
+              </p>
+            )}
           </div>
         )}
         {quote.notes && (

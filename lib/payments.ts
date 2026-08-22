@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { PaymentMethod } from './types'
+import type { Payment, PaymentMethod } from './types'
 
 export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -31,6 +31,8 @@ export const EXPENSE_CATEGORIES = [
 export async function recordPayment(input: {
   jobId: string
   invoiceId?: string | null
+  /** Set when the money is a deposit put down against a quote. */
+  quoteId?: string | null
   amountCents: number
   method: PaymentMethod
   date: string
@@ -39,6 +41,7 @@ export async function recordPayment(input: {
   const { error } = await supabase.from('payments').insert({
     job_id: input.jobId,
     invoice_id: input.invoiceId ?? null,
+    quote_id: input.quoteId ?? null,
     amount_cents: input.amountCents,
     method: input.method,
     date: input.date,
@@ -56,16 +59,29 @@ export async function deletePayment(paymentId: string, jobId: string): Promise<v
 }
 
 /**
+ * THE paid-to-date rule, mirrored from SQL invoice_paid_cents (keep identical):
+ * every payment on a job counts toward any of its invoices. Invoices are
+ * whole-job snapshots — revisions of one debt, never installments — so a
+ * deposit taken on the quote, a "Mark paid" tapped before the invoice
+ * existed, or money taken against an invoice that was later voided and
+ * reissued all belong to the live invoice. payments.invoice_id / quote_id
+ * only record which document the customer had in hand.
+ */
+export function invoicePaidCents(jobPayments: Pick<Payment, 'amount_cents'>[]): number {
+  return jobPayments.reduce((s, p) => s + p.amount_cents, 0)
+}
+
+/**
  * Re-derive job payment_status/amount_paid_cents and linked invoice statuses
- * from the ledger.
+ * from the ledger. Mirrors SQL refresh_job_payment_cache — keep identical.
  *
  * - Every read is error-checked: a transient failed read must throw, never be
  *   treated as "zero payments" (which would flip a paid job back to unpaid).
  * - An empty ledger is a no-op by default so jobs settled before payment
  *   tracking existed keep their cached status; pass allowEmpty when emptiness
  *   is meaningful (deleting the last payment).
- * - The amount owed is the greater of the job's charge math and its open
- *   invoice total — invoices can add sales tax on top of the job total.
+ * - The amount owed is the greater of the job's charge math and its largest
+ *   live invoice total — invoices can add sales tax on top of the job total.
  */
 export async function syncJobPayment(
   jobId: string,
@@ -74,7 +90,7 @@ export async function syncJobPayment(
   const [paymentsRes, totalsRes, invoicesRes] = await Promise.all([
     supabase.from('payments').select('amount_cents, invoice_id, date').eq('job_id', jobId),
     supabase.from('job_totals').select('total_charged_cents').eq('job_id', jobId).single(),
-    supabase.from('invoices').select('id, total_cents, status').eq('job_id', jobId),
+    supabase.from('invoices').select('id, total_cents, status, sent_at').eq('job_id', jobId),
   ])
   if (paymentsRes.error) throw paymentsRes.error
   if (totalsRes.error) throw totalsRes.error
@@ -101,28 +117,26 @@ export async function syncJobPayment(
     .eq('id', jobId)
   if (jobErr) throw jobErr
 
-  // Settle (or unsettle) invoices this job's ledger covers.
+  // Settle (or unsettle) invoices this job's ledger covers — all job money
+  // counts toward every live invoice (see invoicePaidCents).
+  const invPaid = invoicePaidCents(payments)
+  const lastDate = payments.map((p) => p.date).sort().pop()
   for (const inv of invoices) {
     if (inv.status === 'void') continue
-    const invPaid = payments
-      .filter((p) => p.invoice_id === inv.id)
-      .reduce((s, p) => s + p.amount_cents, 0)
     const covered = invPaid >= inv.total_cents && inv.total_cents > 0
     if (covered && inv.status !== 'paid') {
-      const lastDate = payments
-        .filter((p) => p.invoice_id === inv.id)
-        .map((p) => p.date)
-        .sort()
-        .pop()
       const { error } = await supabase
         .from('invoices')
         .update({ status: 'paid', paid_at: lastDate ? `${lastDate}T00:00:00Z` : new Date().toISOString() })
         .eq('id', inv.id)
       if (error) throw error
     } else if (!covered && inv.status === 'paid') {
+      // Mirror SQL refresh_job_payment_cache: a never-sent invoice reverts to
+      // 'draft', not 'sent' — otherwise it starts overdue math and reads as
+      // issued on a document the customer never received.
       const { error } = await supabase
         .from('invoices')
-        .update({ status: 'sent', paid_at: null })
+        .update({ status: inv.sent_at ? 'sent' : 'draft', paid_at: null })
         .eq('id', inv.id)
       if (error) throw error
     }

@@ -6,6 +6,7 @@ import { formatCents } from '@/lib/money'
 import { BRAND_NAME } from '@/lib/brand'
 import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
+import { useCheckoutReturn } from '@/lib/checkout-return'
 import type { DocLine } from '@/lib/types'
 
 interface PublicInvoice {
@@ -45,7 +46,6 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
   const [cardEnabled, setCardEnabled] = useState(false)
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
-  const [justPaid, setJustPaid] = useState(false)
 
   const reload = useCallback(() => {
     supabase.rpc('get_public_invoice', { token }).then(({ data, error }) => {
@@ -65,22 +65,15 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
       .catch(() => {})
   }, [])
 
-  // Coming back from Checkout, the payment is confirmed by Stripe's webhook,
-  // which can land a moment after the customer does — so re-check for a few
-  // seconds rather than claiming anything the ledger hasn't recorded yet.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (!params.has('paid')) return
-    setJustPaid(true)
-    window.history.replaceState({}, '', window.location.pathname)
-    let tries = 0
-    const timer = setInterval(() => {
-      tries += 1
-      reload()
-      if (tries >= 5) clearInterval(timer)
-    }, 2000)
-    return () => clearInterval(timer)
-  }, [reload])
+  // Back from Checkout: confirm with Stripe directly (the webhook can land
+  // a beat after the customer does), then let the balance catch up. While
+  // that is in flight the pay button stays hidden — never offer a second
+  // charge over money that already moved.
+  const checkoutReturn = useCheckoutReturn({ token, kind: 'invoice', flag: 'paid', reload })
+  // Anything other than idle (never came back) or none (backed out / not
+  // confirmed) means money is moving or has moved — 'recorded' included, which
+  // is the normal instant-card outcome. Keep the pay button hidden throughout.
+  const paymentInFlight = checkoutReturn !== 'idle' && checkoutReturn !== 'none'
 
   async function payByCard() {
     setPaying(true)
@@ -154,15 +147,25 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
           ✓ This invoice has been paid — thank you!
         </div>
       )}
-      {justPaid && invoice.status !== 'paid' && (
+      {paymentInFlight && invoice.status !== 'paid' && (
         <div
           className="no-print px-4 py-3 text-center font-semibold"
           style={{ background: '#dbeafe', color: '#1e40af' }}
         >
-          Thanks — your payment is going through. This page will update in a moment.
+          {checkoutReturn === 'processing'
+            ? 'Your payment is processing — this page will update once it clears.'
+            : '✓ Payment received — thank you. This page will update in a moment.'}
         </div>
       )}
-      {cardEnabled && invoice.status !== 'paid' && invoice.status !== 'void' && balanceCents > 0 && (
+      {checkoutReturn === 'none' && invoice.status !== 'paid' && (
+        <div
+          className="no-print px-4 py-2 text-center text-sm"
+          style={{ background: '#f3f4f6', color: '#374151' }}
+        >
+          No charge was made.
+        </div>
+      )}
+      {cardEnabled && !paymentInFlight && invoice.status !== 'paid' && invoice.status !== 'void' && balanceCents > 0 && (
         <div className="no-print flex flex-col items-center gap-2 px-4 py-4" style={{ background: '#111827' }}>
           <button
             className="btn btn-primary w-full max-w-sm !min-h-[48px] text-base"

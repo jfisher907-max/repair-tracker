@@ -6,7 +6,9 @@ import { BRAND_NAME } from '@/lib/brand'
 import { useDocumentTitle } from '@/lib/title'
 import { formatCents } from '@/lib/money'
 import { supabase } from '@/lib/supabase'
-import type { DocLine } from '@/lib/types'
+import { depositForRule } from '@/lib/billing'
+import { useCheckoutReturn } from '@/lib/checkout-return'
+import type { DepositKind, DocLine } from '@/lib/types'
 
 type PublicQuoteLine = DocLine & { id: string; declined: boolean }
 
@@ -25,6 +27,16 @@ interface PublicQuote {
   lines: PublicQuoteLine[]
   /** Customer-visible photos of the job this quote belongs to (add-on quotes). */
   photos: { path: string; caption: string | null }[]
+  /** The deposit rule (so the figure can follow the tick-list while deciding). */
+  deposit_kind: DepositKind
+  deposit_value: number | null
+  /** Frozen at approval; a projection before it. */
+  deposit_cents: number | null
+  /** What is still owed on the deposit, counting every payment since approval. */
+  deposit_outstanding_cents: number
+  /** False until the shop has put a vehicle on the quote (a deposit books a job). */
+  deposit_payable: boolean
+  approved_at: string | null
   business: { name: string; phone: string; address: string; email: string }
 }
 
@@ -46,6 +58,9 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   const [unchecked, setUnchecked] = useState<Record<string, boolean>>({})
   /** Signed URLs for the job's customer-visible photos, keyed by path. */
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({})
+  const [cardEnabled, setCardEnabled] = useState(false)
+  const [paying, setPaying] = useState(false)
+  const [payError, setPayError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     // Fire-and-forget: stamps first-view time so the shop can tell "never
@@ -77,6 +92,35 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    fetch('/api/pay/status')
+      .then((r) => r.json())
+      .then((b) => setCardEnabled(!!b.enabled))
+      .catch(() => {})
+  }, [])
+
+  // Back from Stripe: confirm with Stripe directly, then let the figures
+  // catch up. Never show "Pay deposit" again over money that already moved.
+  const checkoutReturn = useCheckoutReturn({ token, kind: 'quote', flag: 'deposit', reload: load })
+
+  async function payDeposit() {
+    setPaying(true)
+    setPayError(null)
+    try {
+      const res = await fetch('/api/pay/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteToken: token }),
+      })
+      const body = await res.json()
+      if (!res.ok || !body.url) throw new Error(body.error || 'Could not start checkout')
+      window.location.href = body.url
+    } catch (e) {
+      setPayError(e instanceof Error ? e.message : String(e))
+      setPaying(false)
+    }
+  }
 
   const loaded = quote && quote !== 'missing' ? quote : null
   useDocumentTitle(
@@ -113,6 +157,20 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   const nothingKept = labor === 0 && keptSum === 0 && quote.lines.length > 0
   const declinedAfterDecision = quote.lines.filter((l) => l.declined)
 
+  // While deciding, the deposit follows the tick-list (same rule the server
+  // freezes at approval — mirrored, never sent up). Once approved, the frozen
+  // figure is the only one that exists.
+  const depositDue = isSent
+    ? (depositForRule(quote.deposit_kind, quote.deposit_value, {
+        lines_cents: keptSum,
+        total_cents: keptTotal,
+      }) ?? 0)
+    : (quote.deposit_cents ?? 0)
+  const depositOutstanding = quote.status === 'approved' ? quote.deposit_outstanding_cents : 0
+  // 'recorded' (instant-card success) included — anything but idle/none means
+  // the deposit is moving or has moved; keep the pay button suppressed.
+  const depositInFlight = checkoutReturn !== 'idle' && checkoutReturn !== 'none'
+
   const doc: DocData = {
     docType: 'Quote',
     number: quote.quote_number,
@@ -131,6 +189,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
     taxRateBp: quote.tax_rate_bp,
     taxCents: docTax,
     totalCents: labor + docLineSum + docTax,
+    depositCents: depositDue > 0 ? depositDue : null,
     memo: null,
     paymentInstructions: null,
     paidDate: null,
@@ -143,7 +202,11 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
       response === 'approved' && skippedCount > 0
         ? ` (leaving out ${skippedCount} item${skippedCount === 1 ? '' : 's'})`
         : ''
-    if (!confirm(`${verb} this quote${detail}?`)) return
+    const deposit =
+      response === 'approved' && depositDue > 0
+        ? ` A ${formatCents(depositDue)} deposit is due on approval.`
+        : ''
+    if (!confirm(`${verb} this quote${detail}?${deposit}`)) return
     setResponding(true)
     // Through the server, so the IP and browser are observed rather than
     // self-reported by the page making the claim.
@@ -216,6 +279,14 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
               </p>
             </div>
           )}
+          {depositDue > 0 && (
+            <p className="w-full max-w-sm text-sm" style={{ color: '#fde68a' }}>
+              A <b className="money">{formatCents(depositDue)}</b> deposit is due when you approve
+              {cardEnabled && quote.deposit_payable
+                ? ' — you can pay it by card right after.'
+                : ' — the shop will arrange it with you.'}
+            </p>
+          )}
           <input
             className="input w-full max-w-sm"
             placeholder="Type your name to approve"
@@ -235,7 +306,13 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
             />
             <span>
               I authorize {quote.business.name || 'the shop'} to perform the selected work at the
-              price shown, and I agree to approve it electronically.
+              price shown
+              {depositDue > 0 && (
+                <>
+                  , with a <b className="money">{formatCents(depositDue)}</b> deposit due on approval
+                </>
+              )}
+              , and I agree to approve it electronically.
             </span>
           </label>
           <div className="flex items-center gap-3">
@@ -280,6 +357,55 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
               Left out for now: {declinedAfterDecision.map((l) => l.description).join(', ')}
             </div>
           )}
+        </div>
+      )}
+      {quote.status === 'approved' && (depositDue > 0 || depositInFlight) && (
+        <div className="no-print mx-auto max-w-2xl px-4 pb-2 pt-3">
+          <div className="card space-y-2">
+            <span className="label !mb-0">Deposit</span>
+            {depositInFlight ? (
+              <p className="text-sm" style={{ color: 'var(--green)' }}>
+                {checkoutReturn === 'processing'
+                  ? 'Your payment is processing — this page will update once it clears.'
+                  : '✓ Payment received — recording it now…'}
+              </p>
+            ) : depositOutstanding <= 0 ? (
+              <p className="text-sm" style={{ color: 'var(--green)' }}>
+                ✓ Deposit of <b className="money">{formatCents(depositDue)}</b> received — thank you.
+                We&apos;ll get your parts ordered and get you scheduled.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm">
+                  Deposit due: <b className="money">{formatCents(depositOutstanding)}</b>
+                  {depositOutstanding < depositDue && (
+                    <span style={{ color: 'var(--text3)' }}> (of {formatCents(depositDue)})</span>
+                  )}
+                </p>
+                {cardEnabled && quote.deposit_payable ? (
+                  <button className="btn btn-primary w-full" disabled={paying} onClick={payDeposit}>
+                    {paying
+                      ? 'Opening secure checkout…'
+                      : `Pay ${formatCents(depositOutstanding)} deposit by card`}
+                  </button>
+                ) : (
+                  <p className="text-sm" style={{ color: 'var(--text2)' }}>
+                    The shop will arrange the deposit with you
+                    {quote.business.phone ? ` — ${quote.business.phone}` : ''}.
+                  </p>
+                )}
+                {checkoutReturn === 'none' && (
+                  <p className="text-xs" style={{ color: 'var(--text3)' }}>No charge was made.</p>
+                )}
+                {payError && <p className="text-sm" style={{ color: 'var(--red)' }}>{payError}</p>}
+                {cardEnabled && quote.deposit_payable && (
+                  <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                    Secure checkout by Stripe. Card details never touch this site.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
       {quote.photos?.length > 0 && Object.keys(photoUrls).length > 0 && (

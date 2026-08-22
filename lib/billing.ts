@@ -1,4 +1,4 @@
-import type { DocLine, Job, PartLine, Quote, QuoteLine } from './types'
+import type { DepositKind, DocLine, Job, PartLine, Quote, QuoteLine } from './types'
 
 // Client-side mirror of the quote_totals view — keep in sync with the SQL.
 export interface QuoteComputedTotals {
@@ -23,6 +23,39 @@ export function computeQuoteTotals(
     tax_cents: tax,
     total_cents: labor + lineSum + tax,
   }
+}
+
+/**
+ * Mirror of SQL quote_deposit_cents — keep identical. Turns the deposit rule
+ * into cents against the given totals (pass the KEPT lines' totals so the
+ * figure follows what the customer is actually approving). Null = no deposit.
+ */
+export function depositForRule(
+  kind: DepositKind,
+  value: number | null,
+  totals: Pick<QuoteComputedTotals, 'lines_cents' | 'total_cents'>,
+): number | null {
+  let raw = 0
+  if (kind === 'parts') raw = totals.lines_cents
+  else if (kind === 'percent') raw = Math.round((totals.total_cents * (value ?? 0)) / 10000)
+  else if (kind === 'fixed') raw = value ?? 0
+  const clamped = Math.max(0, Math.min(totals.total_cents, raw))
+  return clamped > 0 ? clamped : null
+}
+
+export const DEPOSIT_KINDS: { value: DepositKind; label: string }[] = [
+  { value: 'none', label: 'No deposit' },
+  { value: 'parts', label: 'Parts' },
+  { value: 'percent', label: '50%' },
+  { value: 'fixed', label: 'Custom $' },
+]
+
+/** Human label for a stored rule, e.g. "50%" or "Parts" or "$200". */
+export function depositRuleLabel(kind: DepositKind, value: number | null): string {
+  if (kind === 'parts') return 'parts total'
+  if (kind === 'percent') return `${((value ?? 0) / 100).toLocaleString()}%`
+  if (kind === 'fixed') return `$${((value ?? 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+  return 'none'
 }
 
 /**

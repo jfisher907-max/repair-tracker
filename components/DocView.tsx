@@ -30,6 +30,8 @@ export interface DocData {
   paidDate: string | null
   /** Partial payments received so far (invoices) — renders Paid / Balance due rows. */
   paidCents?: number
+  /** Quote: deposit due on approval (the resolved figure). */
+  depositCents?: number | null
   business: { name: string; phone: string; address: string; email: string }
 }
 
@@ -187,6 +189,12 @@ export default function DocView({ doc }: { doc: DocData }) {
                   {card.sub && <span className="doc-due-sub">{card.sub}</span>}
                 </div>
                 <div className="doc-due-amt">{formatCents(card.amount)}</div>
+              </div>
+            )}
+            {isQuote && (doc.depositCents ?? 0) > 0 && (
+              <div className="doc-trow doc-paid">
+                <span className="doc-tl">Deposit due on approval</span>
+                <span className="doc-tv">{formatCents(doc.depositCents ?? 0)}</span>
               </div>
             )}
           </div>

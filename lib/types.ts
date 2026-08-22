@@ -110,6 +110,7 @@ export interface Settings {
 }
 
 export type QuoteStatus = 'draft' | 'sent' | 'approved' | 'declined' | 'expired'
+export type DepositKind = 'none' | 'parts' | 'percent' | 'fixed'
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void'
 
 export interface Quote {
@@ -127,6 +128,12 @@ export interface Quote {
   notes: string | null
   job_id: string | null
   public_token: string
+  /** Deposit RULE the owner asks for; resolved against the approved lines. */
+  deposit_kind: DepositKind
+  /** percent: basis points; fixed: cents; null otherwise. */
+  deposit_value: number | null
+  /** The resolved deposit, frozen at approval. Null until approved / none. */
+  deposit_cents: number | null
   sent_at: string | null
   decided_at: string | null
   approved_by_name: string | null
@@ -224,6 +231,8 @@ export interface Payment {
   id: string
   job_id: string
   invoice_id: string | null
+  /** Set on deposits: the quote this money was put down against. */
+  quote_id?: string | null
   date: string
   method: PaymentMethod
   amount_cents: number

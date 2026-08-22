@@ -9,6 +9,7 @@ import { listForJob, toMemo } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
 import { buildInvoiceSnapshot, statusChipClass } from '@/lib/billing'
 import { PAYMENT_METHODS, recordPayment, syncJobPayment } from '@/lib/payments'
+import { formatDate } from '@/lib/date'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import type { Invoice, Job, PartLine, Payment, PaymentMethod, Settings } from '@/lib/types'
 
@@ -38,14 +39,20 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [savingMemo, setSavingMemo] = useState(false)
 
   const load = useCallback(async () => {
-    const [{ data: inv }, { data: s }, { data: pays }] = await Promise.all([
-      supabase.from('invoices').select('*').eq('id', id).single(),
+    const { data: inv } = await supabase.from('invoices').select('*').eq('id', id).single()
+    const loaded = inv as Invoice | null
+    // Every payment on the JOB counts toward this invoice — invoices are
+    // whole-job snapshots, so a deposit or a payment on a prior (now void)
+    // invoice belongs to this one too (mirrors SQL invoice_paid_cents).
+    const [{ data: s }, paysRes] = await Promise.all([
       supabase.from('settings').select('*').single(),
-      supabase.from('payments').select('*').eq('invoice_id', id).order('date'),
+      loaded
+        ? supabase.from('payments').select('*').eq('job_id', loaded.job_id).order('date')
+        : Promise.resolve({ data: [] as Payment[] }),
     ])
-    setInvoice(inv as Invoice)
+    setInvoice(loaded)
     setSettings(s as Settings)
-    setPayments((pays as Payment[]) ?? [])
+    setPayments(((paysRes.data as Payment[]) ?? []))
   }, [id])
 
   useEffect(() => {
@@ -53,13 +60,23 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   }, [load])
 
   /**
-   * Never sent and never paid = nobody has seen it, so there is no record to
-   * keep. The status check matters for invoices settled before the payments
-   * ledger existed: they are 'paid' with no ledger rows and no sent_at, and
-   * must never look disposable.
+   * Never sent and no payment booked against THIS invoice = nobody has seen it,
+   * so there is nothing to keep and it can be deleted.
+   *
+   * The status guard protects invoices settled BEFORE the payments ledger
+   * existed: those are 'paid' with no ledger rows anywhere on the job and no
+   * sent_at, and the 'paid' flag is the only record the money was collected —
+   * deleting one would erase it. But a quote deposit can auto-settle a freshly
+   * created, never-sent draft to 'paid'; that draft holds no payment of its own
+   * (the money is on the job) so it must stay deletable — hence the
+   * payments.length > 0 escape.
    */
+  const paidToThisInvoice = payments.filter((p) => p.invoice_id === invoice?.id).length
   const neverIssued =
-    !!invoice && !invoice.sent_at && payments.length === 0 && invoice.status !== 'paid'
+    !!invoice &&
+    !invoice.sent_at &&
+    paidToThisInvoice === 0 &&
+    (invoice.status !== 'paid' || payments.length > 0)
 
   /**
    * Re-snapshot the job into this same invoice. A draft has not been sent, so
@@ -410,12 +427,36 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </div>
         )}
         {payments.length > 0 && (
-          <p className="text-sm" style={{ color: 'var(--text2)' }}>
-            Payments received: {payments.map((p) => formatCents(p.amount_cents)).join(' + ')} ={' '}
-            <b className="money" style={{ color: 'var(--green)' }}>
-              {formatCents(payments.reduce((s, p) => s + p.amount_cents, 0))}
-            </b>
-          </p>
+          <div className="text-sm" style={{ color: 'var(--text2)' }}>
+            <span>Payments on this job:</span>
+            <ul className="mt-1 space-y-0.5">
+              {payments.map((p) => (
+                <li key={p.id} className="flex items-center justify-between gap-2">
+                  <span>
+                    {formatDate(p.date)}
+                    {' · '}
+                    {p.quote_id
+                      ? 'deposit'
+                      : p.invoice_id === invoice.id
+                        ? 'on this invoice'
+                        : p.invoice_id
+                          ? 'on another invoice'
+                          : 'on the job'}
+                    {p.method ? ` · ${p.method}` : ''}
+                  </span>
+                  <span className="money flex-none" style={{ color: 'var(--green)' }}>
+                    {formatCents(p.amount_cents)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1">
+              Total paid:{' '}
+              <b className="money" style={{ color: 'var(--green)' }}>
+                {formatCents(payments.reduce((s, p) => s + p.amount_cents, 0))}
+              </b>
+            </p>
+          </div>
         )}
         {shareMsg && <p className="text-sm" style={{ color: 'var(--green)' }}>{shareMsg}</p>}
         <p className="text-xs" style={{ color: 'var(--text3)' }}>

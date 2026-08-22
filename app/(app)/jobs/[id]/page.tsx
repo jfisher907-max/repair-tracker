@@ -330,7 +330,16 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   }
 
   async function softDeleteJob() {
-    if (!confirm(`Delete job ${job!.job_number}? You can restore it from Settings.`)) return
+    // Deleting a job pulls its payments out of every tile and report. That is
+    // fine for an empty job, but a job carrying a deposit or other payments
+    // holds real money the customer already handed over — hide it and the
+    // books quietly lose that cash. Say so before it happens.
+    const onLedger = payments.reduce((s, p) => s + p.amount_cents, 0)
+    const warn =
+      onLedger > 0
+        ? ` This job has ${formatCents(onLedger)} in recorded payments — deleting it removes that money from your totals and reports. Refund the customer in Stripe (or your own records) if the work isn't happening.`
+        : ''
+    if (!confirm(`Delete job ${job!.job_number}?${warn} You can restore it from Settings.`)) return
     const { error } = await supabase
       .from('jobs')
       .update({ deleted_at: new Date().toISOString() })
@@ -385,6 +394,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         .select('id')
         .single()
       if (error) throw error
+      // A job already covered by a deposit means the new invoice is paid the
+      // moment it exists — re-derive so it opens settled, not "unpaid".
+      try {
+        await syncJobPayment(id)
+      } catch {}
       router.push(`/invoices/${data.id}`)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))

@@ -53,10 +53,11 @@ const TABLES: Record<string, string[]> = {
     'id', 'quote_number', 'customer_id', 'vehicle_id', 'title', 'description', 'labor_hours',
     'labor_rate_cents', 'tax_rate_bp', 'status', 'valid_until', 'notes', 'job_id',
     'sent_at', 'decided_at', 'applied_at', 'approved_by_name', 'approval_consent', 'approval_ip',
-    'approval_user_agent', 'approved_snapshot', 'created_at', 'updated_at', 'deleted_at',
+    'approval_user_agent', 'approved_snapshot', 'deposit_kind', 'deposit_value', 'deposit_cents',
+    'created_at', 'updated_at', 'deleted_at',
   ],
   quote_approvals: [
-    'id', 'quote_id', 'response', 'by_name', 'consent', 'ip', 'user_agent',
+    'id', 'quote_id', 'response', 'by_name', 'consent', 'method', 'ip', 'user_agent',
     'snapshot', 'created_at',
   ],
   quote_lines: [
@@ -70,8 +71,8 @@ const TABLES: Record<string, string[]> = {
     'sent_at', 'paid_at', 'created_at', 'updated_at',
   ],
   payments: [
-    'id', 'job_id', 'invoice_id', 'date', 'method', 'amount_cents', 'note',
-    'created_at', 'updated_at',
+    'id', 'job_id', 'invoice_id', 'quote_id', 'date', 'method', 'amount_cents', 'note',
+    'external_ref', 'created_at', 'updated_at',
   ],
   job_templates: [
     'id', 'name', 'title', 'work_performed', 'labor_hours', 'lines', 'created_at', 'updated_at',

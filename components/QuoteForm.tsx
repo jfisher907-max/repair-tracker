@@ -4,9 +4,16 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
-import { computeQuoteTotals } from '@/lib/billing'
+import { computeQuoteTotals, depositForRule, DEPOSIT_KINDS } from '@/lib/billing'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
-import { vehicleLabel, type Customer, type Quote, type QuoteLine, type Vehicle } from '@/lib/types'
+import {
+  vehicleLabel,
+  type Customer,
+  type DepositKind,
+  type Quote,
+  type QuoteLine,
+  type Vehicle,
+} from '@/lib/types'
 
 interface LineDraft {
   description: string
@@ -83,6 +90,13 @@ export default function QuoteForm({
   const [taxRate, setTaxRate] = useState(quote ? String(quote.tax_rate_bp / 100) : '')
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? plusDays(30))
   const [notes, setNotes] = useState(quote?.notes ?? '')
+  // The deposit is a RULE (parts / 50% / fixed), resolved against whatever the
+  // customer actually approves — so unticking a line can never leave a
+  // deposit bigger than the job.
+  const [depositKind, setDepositKind] = useState<DepositKind>(quote?.deposit_kind ?? 'none')
+  const [depositFixed, setDepositFixed] = useState(
+    quote?.deposit_kind === 'fixed' && quote.deposit_value != null ? centsToInput(quote.deposit_value) : '',
+  )
   const [lines, setLines] = useState<LineDraft[]>(
     existingLines?.length
       ? existingLines.map((l) => ({
@@ -129,6 +143,9 @@ export default function QuoteForm({
   }, [editing, addOnJob])
 
   const customerVehicles = vehicles.filter((v) => v.customer_id === customerId)
+
+  const depositValue =
+    depositKind === 'percent' ? 5000 : depositKind === 'fixed' ? (parseMoney(depositFixed) ?? 0) : null
 
   const taxRateBp = Math.round((Number(taxRate) || 0) * 100)
   const totals = useMemo(
@@ -214,6 +231,8 @@ export default function QuoteForm({
         tax_rate_bp: taxRateBp,
         valid_until: validUntil || null,
         notes: notes.trim() || null,
+        deposit_kind: depositKind,
+        deposit_value: depositValue,
       }
 
       let quoteId = quote?.id
@@ -234,6 +253,9 @@ export default function QuoteForm({
                 approval_ip: null,
                 approval_user_agent: null,
                 approved_snapshot: null,
+                // A resolved deposit belongs to an approval that no longer
+                // stands; it is re-resolved at the next approval.
+                deposit_cents: null,
               }
             : {}
         const { error } = await supabase
@@ -383,6 +405,47 @@ export default function QuoteForm({
           <label className="label">Valid until</label>
           <input className="input" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
         </div>
+      </div>
+
+      <div className="card space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="label !mb-0">Deposit on approval</span>
+          {depositKind !== 'none' && (
+            <span className="text-sm" style={{ color: 'var(--text2)' }}>
+              ≈ {formatCents(depositForRule(depositKind, depositValue, totals) ?? 0)}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {DEPOSIT_KINDS.map((k) => (
+            <button
+              key={k.value}
+              type="button"
+              className="chip"
+              style={{
+                background: depositKind === k.value ? 'var(--accent)' : 'var(--bg3)',
+                color: depositKind === k.value ? '#111' : undefined,
+                cursor: 'pointer',
+              }}
+              onClick={() => setDepositKind(k.value)}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+        {depositKind === 'fixed' && (
+          <input
+            className="input"
+            inputMode="decimal"
+            placeholder="Amount, e.g. 200"
+            value={depositFixed}
+            onChange={(e) => setDepositFixed(e.target.value)}
+          />
+        )}
+        <p className="text-xs" style={{ color: 'var(--text3)' }}>
+          Figured on what the customer actually approves — if they skip a line, the deposit
+          follows. Paying it books the job.
+        </p>
       </div>
 
       <div className="card space-y-2">

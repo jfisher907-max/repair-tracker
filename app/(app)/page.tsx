@@ -44,7 +44,7 @@ export default function Dashboard() {
   const [partOutflows, setPartOutflows] = useState<{ date: string; cents: number }[]>([])
   /** Sales tax rides along in payments but belongs to the state, never to profit. */
   const [taxableInvoices, setTaxableInvoices] = useState<
-    { id: string; tax_cents: number; total_cents: number }[]
+    { id: string; job_id: string; tax_cents: number; total_cents: number }[]
   >([])
   /** Licenses and policies close to lapsing — surfaced here so they can't sneak up. */
   const [docAlerts, setDocAlerts] = useState<BusinessDocument[]>([])
@@ -97,7 +97,7 @@ export default function Dashboard() {
       })
     supabase
       .from('invoices')
-      .select('id, tax_cents, total_cents, status')
+      .select('id, job_id, tax_cents, total_cents, status')
       .neq('status', 'void')
       .then(({ data }) => setTaxableInvoices(data ?? []))
     supabase
@@ -186,16 +186,26 @@ export default function Dashboard() {
     const partsSpend = partOutflows.filter((o) => inYear(o.date)).reduce((s, o) => s + o.cents, 0)
 
     // Sales tax arrives inside those payments but is the state's money, so it
-    // is neither revenue nor profit. Each invoice's tax counts in proportion
-    // to how much of that invoice has been paid.
-    let taxCollected = 0
+    // is neither revenue nor profit. Because ALL job money now settles an
+    // invoice (a deposit included), tax is prorated against every payment on
+    // the job — matched to the job's governing (largest) live invoice, the
+    // same revision rule used everywhere else. Keying it to invoice-attributed
+    // payments alone left a deposit's tax share sitting in profit.
+    const govByJob = new Map<string, { tax_cents: number; total_cents: number }>()
     for (const inv of taxableInvoices) {
+      const cur = govByJob.get(inv.job_id)
+      if (!cur || inv.total_cents > cur.total_cents) {
+        govByJob.set(inv.job_id, { tax_cents: inv.tax_cents, total_cents: inv.total_cents })
+      }
+    }
+    let taxCollected = 0
+    for (const [jobId, inv] of govByJob) {
       if (inv.tax_cents <= 0 || inv.total_cents <= 0) continue
-      const paidOnInvoice = payments
-        .filter((p) => p.invoice_id === inv.id && inYear(p.date))
+      const paidOnJob = payments
+        .filter((p) => p.job_id === jobId && inYear(p.date))
         .reduce((s, p) => s + p.amount_cents, 0)
-      if (paidOnInvoice <= 0) continue
-      taxCollected += Math.round(inv.tax_cents * Math.min(1, paidOnInvoice / inv.total_cents))
+      if (paidOnJob <= 0) continue
+      taxCollected += Math.round(inv.tax_cents * Math.min(1, paidOnJob / inv.total_cents))
     }
 
     const overhead = expenses.filter((e) => inYear(e.date)).reduce((s, e) => s + e.amount_cents, 0)
