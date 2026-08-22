@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
 const tabs = [
-  { href: '/', label: 'Home', icon: '🏠' },
+  { href: '/dashboard', label: 'Home', icon: '🏠' },
   { href: '/jobs', label: 'Jobs', icon: '🗂️' },
   { href: '/jobs/new', label: 'New Job', icon: '➕', primary: true },
   { href: '/customers', label: 'People', icon: '👤' },
@@ -19,7 +19,7 @@ const sideNav: { label: string; items: { href: string; label: string; icon: stri
   {
     label: 'Overview',
     items: [
-      { href: '/', label: 'Dashboard', icon: '🏠' },
+      { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
       { href: '/reports', label: 'Reports', icon: '📊' },
     ],
   },
@@ -28,6 +28,7 @@ const sideNav: { label: string; items: { href: string; label: string; icon: stri
     items: [
       { href: '/jobs', label: 'Jobs', icon: '🗂️' },
       { href: '/jobs/new', label: 'New Job', icon: '➕' },
+      { href: '/requests', label: 'Requests', icon: '📥' },
       { href: '/followups', label: 'Follow-ups', icon: '🔔' },
     ],
   },
@@ -59,7 +60,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }, [])
 
   function isActive(href: string) {
-    if (href === '/') return pathname === '/'
+    if (href === '/dashboard') return pathname === '/dashboard'
     if (href === '/jobs/new') return pathname === '/jobs/new'
     if (href === '/quotes/new') return pathname === '/quotes/new'
     if (href === '/jobs') return pathname.startsWith('/jobs') && pathname !== '/jobs/new'
@@ -77,7 +78,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     <div className="app-frame min-h-dvh pb-24 sm:grid sm:grid-cols-[232px_1fr] sm:pb-0">
       {/* Desktop sidebar — the app reads like a real back office on a PC */}
       <aside className="sidebar sticky top-0 hidden h-dvh flex-col px-3 py-4 sm:flex">
-        <Link href="/" className="display flex items-center gap-2 px-2 text-xl font-semibold">
+        <Link href="/dashboard" className="display flex items-center gap-2 px-2 text-xl font-semibold">
           <WingMark size={22} /> {BRAND_NAME}
         </Link>
         <nav className="mt-2 flex-1">
@@ -118,7 +119,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Phone header (desktop brand lives in the sidebar) */}
         <header className="appbar sticky top-0 z-40 flex items-center justify-between px-4 pb-3 sm:hidden">
-          <Link href="/" className="display flex items-center gap-2 text-xl font-semibold">
+          <Link href="/dashboard" className="display flex items-center gap-2 text-xl font-semibold">
             <WingMark size={22} /> {BRAND_NAME}
           </Link>
           <Link

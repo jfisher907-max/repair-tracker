@@ -31,6 +31,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://wingsnthings.repair'),
   title: BRAND_NAME,
   description: "Quotes, invoices, jobs, parts, and receipts for the shop.",
   appleWebApp: {

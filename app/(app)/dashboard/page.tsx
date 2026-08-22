@@ -48,6 +48,8 @@ export default function Dashboard() {
   >([])
   /** Licenses and policies close to lapsing — surfaced here so they can't sneak up. */
   const [docAlerts, setDocAlerts] = useState<BusinessDocument[]>([])
+  /** Open requests from the public site's form — the shop's only inbound channel. */
+  const [newRequests, setNewRequests] = useState(0)
   /** Overhead — the spending that isn't parts for a specific job. */
   const [expenses, setExpenses] = useState<{ amount_cents: number; date: string }[]>([])
 
@@ -107,6 +109,11 @@ export default function Dashboard() {
     listBusinessDocuments()
       .then((docs) => setDocAlerts(docs.filter((d) => docState(d) !== 'ok')))
       .catch(() => {})
+    supabase
+      .from('service_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'new')
+      .then(({ count }) => setNewRequests(count ?? 0))
     supabase
       .from('settings')
       .select('business_name')
@@ -378,6 +385,20 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      {/* Always rendered: on the phone this row is the only door to the
+          inbox, so it can't vanish just because nothing is waiting. */}
+      <Link
+        href="/requests"
+        className="card flex items-center justify-between gap-3 !py-3 hover:brightness-110"
+        style={{
+          borderLeft: `3px solid ${newRequests > 0 ? 'var(--accent)' : 'var(--border)'}`,
+        }}
+      >
+        <span className="font-semibold">📥 Service requests</span>
+        <span className="text-sm" style={{ color: newRequests > 0 ? 'var(--text2)' : 'var(--text3)' }}>
+          {newRequests > 0 ? `${newRequests} new — a customer is waiting to hear back` : 'none waiting'}
+        </span>
+      </Link>
       {docAlerts.length > 0 && (
         <Link
           href="/settings"

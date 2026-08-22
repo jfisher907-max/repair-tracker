@@ -2,8 +2,11 @@
 // instant open + a graceful failure when there's no connection.
 // Bump CACHE on strategy changes; SWRegister reloads the page once when a new
 // worker takes over, so deploys reach open tabs without a manual hard-refresh.
-const CACHE = 'wings-n-things-v4'
-const SHELL = ['/', '/manifest.webmanifest', '/icon', '/icon-192', '/apple-icon']
+const CACHE = 'wings-n-things-v5'
+// The shell is the OWNER'S app. '/' is the public landing page now — the
+// worker only ever runs for a signed-in owner (SWRegister gates on session),
+// so the offline fallback is the dashboard, never the marketing page.
+const SHELL = ['/dashboard', '/manifest.webmanifest', '/icon', '/icon-192', '/apple-icon']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -39,7 +42,7 @@ self.addEventListener('fetch', (event) => {
           }
           return res
         })
-        .catch(() => caches.match(request).then((hit) => hit || caches.match('/'))),
+        .catch(() => caches.match(request).then((hit) => hit || caches.match('/dashboard'))),
     )
     return
   }

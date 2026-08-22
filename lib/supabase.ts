@@ -11,6 +11,24 @@ const supabaseAnonKey =
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+/**
+ * The localStorage key supabase-js stores the session under, derived exactly
+ * the way the library derives it (sb-<project-ref>-auth-token). PRESENCE of
+ * this key is the offline-safe "is this the owner's browser?" signal: a
+ * network-validated getSession() can return null in a dead zone even though
+ * a perfectly good session is stored, which must never strand the PWA.
+ */
+export const AUTH_STORAGE_KEY = `sb-${new URL(supabaseUrl).hostname.split('.')[0]}-auth-token`
+
+/** True when a session is stored locally — readable offline, cleared by signOut. */
+export function hasStoredSession(): boolean {
+  try {
+    return !!window.localStorage.getItem(AUTH_STORAGE_KEY)
+  } catch {
+    return false
+  }
+}
+
 /** Access token of the current session, for calling our own API routes. */
 export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession()

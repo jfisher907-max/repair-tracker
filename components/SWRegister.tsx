@@ -1,7 +1,8 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { hasStoredSession, supabase } from '@/lib/supabase'
 
 /**
  * Customer link pages. Someone opening a texted quote is a one-off visitor —
@@ -34,11 +35,32 @@ export default function SWRegister() {
   const isCustomerPage =
     CUSTOMER_PREFIXES.some((p) => pathname?.startsWith(p)) ||
     NO_WORKER_PATHS.some((p) => pathname === p)
+  // PRESENCE of the stored session, not a server-validated one. In a dead
+  // zone, getSession() can come back null on a mere token-refresh failure —
+  // tearing the worker down there would strand the offline PWA, the exact
+  // situation the worker exists for. signOut() removes the stored key, so
+  // presence still flips false promptly on a real sign-out (the auth
+  // listener below re-runs the effect when that happens).
+  const [signedIn, setSignedIn] = useState(() =>
+    typeof window === 'undefined' ? false : hasStoredSession(),
+  )
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      setSignedIn(hasStoredSession())
+    })
+    return () => sub.subscription.unsubscribe()
+  }, [])
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return
 
-    if (isCustomerPage) {
+    // The worker is the OWNER'S app shell. The public landing page and the
+    // customer token pages must never carry one — an installed worker once
+    // put customers in a permanent refresh loop, and an anonymous visitor
+    // gets nothing from caching a shell they will never open again. Same
+    // treatment for a signed-out owner: unregister, keep caches.
+    if (isCustomerPage || !signedIn) {
       // Undo it for anyone who already picked the worker up: while it's
       // registered it keeps claiming their tab, and every claim used to
       // reload the page. Unregistering is enough — leave the caches alone so
@@ -125,7 +147,7 @@ export default function SWRegister() {
       window.removeEventListener('unhandledrejection', onRejection)
       removeVisibility()
     }
-  }, [isCustomerPage])
+  }, [isCustomerPage, signedIn])
 
   return null
 }

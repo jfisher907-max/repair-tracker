@@ -736,3 +736,25 @@ a.card:active {
   }
   @page { size: letter; margin: 0.55in; }
 }
+
+/* --- Public landing page (Bold Brand palette, dark form section) --------- */
+/* Inline styles can't express :focus or ::placeholder, and a keyboard user
+   on the shop's only contact channel needs a visible focus ring. */
+.pub-input {
+  width: 100%;
+  background: #1d2027;
+  border: 1px solid #343945;
+  border-radius: 8px;
+  padding: 11px 12px;
+  font-size: 16px; /* >=16px so iOS doesn't zoom the viewport on focus */
+  color: #f6f5f2;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 200ms ease;
+}
+.pub-input:focus {
+  border-color: #f0a832;
+  box-shadow: 0 0 0 3px rgba(240, 168, 50, 0.28);
+}
+.pub-input::placeholder {
+  color: #9aa1ad;
+}

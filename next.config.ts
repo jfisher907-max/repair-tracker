@@ -10,6 +10,20 @@ const nextConfig: NextConfig = {
   // Stamping the build lets Next SEE that mismatch and fall back to a real
   // page load instead of swallowing the tap.
   deploymentId: process.env.VERCEL_DEPLOYMENT_ID,
+
+  // The vercel.app host serves an identical copy of the site. It must keep
+  // WORKING (customer links already texted use it — see lib/payments-server),
+  // but Google must not index the duplicate instead of the real domain, or
+  // the URL that ranks won't be the one on the Business Profile.
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        has: [{ type: 'host', value: 'repair-tracker-three-psi.vercel.app' }],
+        headers: [{ key: 'X-Robots-Tag', value: 'noindex' }],
+      },
+    ]
+  },
 };
 
 export default nextConfig;

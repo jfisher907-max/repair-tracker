@@ -34,10 +34,13 @@ export default function ResetPage() {
           done.push(`${regs.length} worker${regs.length === 1 ? '' : 's'}`)
         }
       } catch {}
-      // Sign-in lives in cookies, so this never logs anyone out.
+      // Sign-in lives in localStorage (supabase-js default; see AuthGate), which
+      // this page deliberately never touches — only CacheStorage and service
+      // workers are cleared. Do not add localStorage.clear() here: that WOULD
+      // log the owner out, breaking the promise printed below.
       setStatus(done.length ? `Cleared ${done.join(' and ')}. Reloading…` : 'Nothing cached. Reloading…')
       setTimeout(() => {
-        window.location.replace('/')
+        window.location.replace('/dashboard')
       }, 1200)
     })()
   }, [])
