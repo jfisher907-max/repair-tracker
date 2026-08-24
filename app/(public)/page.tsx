@@ -76,7 +76,7 @@ const STEPS = [
 export default function LandingPage() {
   return (
     <div
-      className="min-h-dvh"
+      className="wnt-light min-h-dvh"
       style={{
         background: '#e9ebef',
         color: '#10141c',
@@ -97,7 +97,7 @@ export default function LandingPage() {
       <RedirectIfOwner />
 
       {/* Charcoal brand band — same header the quotes and invoices wear. */}
-      <header style={{ background: '#10141c', color: '#e9ebef' }}>
+      <header className="wnt-dark" style={{ background: '#10141c', color: '#f2f4f8' }}>
         <div className="mx-auto flex max-w-4xl items-center justify-between px-5 py-4">
           <span
             className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"
@@ -194,7 +194,8 @@ export default function LandingPage() {
         {/* Request form — the one and only contact channel. */}
         <section
           id="request"
-          style={{ background: '#10141c', color: '#e9ebef' }}
+          className="wnt-dark"
+          style={{ background: '#10141c', color: '#f2f4f8' }}
         >
           <div className="mx-auto max-w-4xl px-5 py-14">
             <h2
