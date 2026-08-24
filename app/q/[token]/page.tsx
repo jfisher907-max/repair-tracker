@@ -233,15 +233,15 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   }
 
   return (
-    <div className="min-h-dvh" style={{ background: '#e5e7eb' }}>
+    <div className="min-h-dvh" style={{ background: '#e9ebef' }}>
       {isSent && (
         <div
           className="no-print sticky top-0 z-10 flex flex-col items-center gap-2 px-4 py-3"
-          style={{ background: '#111827' }}
+          style={{ background: '#0b0e13' }}
         >
           {quote.lines.length >= 2 && (
             <div className="w-full max-w-sm space-y-1">
-              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#9ca3af' }}>
+              <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8b94a7' }}>
                 Untick anything you&apos;d like to skip for now
               </p>
               {quote.lines.map((l) => (
@@ -249,8 +249,8 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
                   key={l.id}
                   className="flex min-h-[44px] items-center justify-between gap-2 rounded-md px-2 py-2 text-sm"
                   style={{
-                    background: unchecked[l.id] ? 'transparent' : '#1f2937',
-                    color: unchecked[l.id] ? '#6b7280' : '#e5e7eb',
+                    background: unchecked[l.id] ? 'transparent' : '#1a202c',
+                    color: unchecked[l.id] ? '#8b94a7' : '#e9ebef',
                     textDecoration: unchecked[l.id] ? 'line-through' : 'none',
                   }}
                 >
@@ -267,11 +267,11 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
                   <span className="money flex-none">{formatCents(l.line_total_cents)}</span>
                 </label>
               ))}
-              <p className="text-right text-sm" style={{ color: '#e5e7eb' }}>
+              <p className="text-right text-sm" style={{ color: '#e9ebef' }}>
                 Your total:{' '}
                 <b className="money">{formatCents(keptTotal)}</b>
                 {skippedCount > 0 && (
-                  <span className="text-xs" style={{ color: '#9ca3af' }}>
+                  <span className="text-xs" style={{ color: '#8b94a7' }}>
                     {' '}
                     ({skippedCount} item{skippedCount === 1 ? '' : 's'} skipped)
                   </span>
@@ -280,7 +280,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
             </div>
           )}
           {depositDue > 0 && (
-            <p className="w-full max-w-sm text-sm" style={{ color: '#fde68a' }}>
+            <p className="w-full max-w-sm text-sm" style={{ color: '#f7dca4' }}>
               A <b className="money">{formatCents(depositDue)}</b> deposit is due when you approve
               {cardEnabled && quote.deposit_payable
                 ? ' — you can pay it by card right after.'
@@ -296,7 +296,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
           />
           <label
             className="flex w-full max-w-sm items-start gap-2 text-xs"
-            style={{ color: '#d1d5db' }}
+            style={{ color: '#aeb6c4' }}
           >
             <input
               type="checkbox"
@@ -332,12 +332,12 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
             </button>
           </div>
           {nothingKept && (
-            <span className="text-xs" style={{ color: '#fca5a5' }}>
+            <span className="text-xs" style={{ color: '#f58e8b' }}>
               Everything is unticked — there&apos;s nothing left to approve.
             </span>
           )}
           {respondError && (
-            <span className="text-xs" style={{ color: '#fca5a5' }}>{respondError}</span>
+            <span className="text-xs" style={{ color: '#f58e8b' }}>{respondError}</span>
           )}
         </div>
       )}
@@ -345,8 +345,8 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
         <div
           className="no-print px-4 py-3 text-center font-semibold"
           style={{
-            background: quote.status === 'approved' ? '#dcfce7' : '#fee2e2',
-            color: quote.status === 'approved' ? '#166534' : '#991b1b',
+            background: quote.status === 'approved' ? 'rgba(76,217,123,0.16)' : 'rgba(239,111,108,0.14)',
+            color: quote.status === 'approved' ? '#0f3d24' : '#8f2018',
           }}
         >
           {quote.status === 'approved'

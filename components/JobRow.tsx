@@ -6,10 +6,12 @@ import { formatCents } from '@/lib/money'
 import { formatDateShort } from '@/lib/date'
 import { vehicleLabel } from '@/lib/types'
 
+/* The signature pattern: a status-colored 3px left edge on a neutral card.
+   Status vocabulary: paid=ok (mint) · partial=wait (gold) · unpaid=stop (ember). */
 const stripeColors: Record<string, string> = {
-  unpaid: 'var(--red)',
-  partial: 'var(--accent2)',
-  paid: 'var(--green)',
+  unpaid: 'var(--status-stop-solid)',
+  partial: 'var(--status-wait-solid)',
+  paid: 'var(--status-ok-solid)',
 }
 
 export default function JobRow({ item }: { item: JobWithContext }) {
@@ -18,13 +20,12 @@ export default function JobRow({ item }: { item: JobWithContext }) {
     <Link
       href={`/jobs/${job.id}`}
       className="card flex items-center gap-3 !py-3"
-      style={{ borderLeft: `3px solid ${stripeColors[job.payment_status] ?? 'var(--border)'}` }}
+      style={{ borderLeft: `var(--edge-width) solid ${stripeColors[job.payment_status] ?? 'var(--border)'}` }}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-xs font-bold" style={{ color: 'var(--accent2)' }}>
-            {job.job_number}
-          </span>
+          {/* Ids are gold, mono, always visible. */}
+          <span className="wnt-id text-xs">{job.job_number}</span>
           <span className="text-xs" style={{ color: 'var(--text3)' }}>
             {formatDateShort(job.date)}
           </span>

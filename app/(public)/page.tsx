@@ -78,8 +78,8 @@ export default function LandingPage() {
     <div
       className="min-h-dvh"
       style={{
-        background: '#f6f5f2',
-        color: '#1f2430',
+        background: '#e9ebef',
+        color: '#10141c',
         fontFamily: 'var(--font-doc-body), system-ui, sans-serif',
       }}
     >
@@ -97,7 +97,7 @@ export default function LandingPage() {
       <RedirectIfOwner />
 
       {/* Charcoal brand band — same header the quotes and invoices wear. */}
-      <header style={{ background: '#14161b', color: '#f6f5f2' }}>
+      <header style={{ background: '#10141c', color: '#e9ebef' }}>
         <div className="mx-auto flex max-w-4xl items-center justify-between px-5 py-4">
           <span
             className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"
@@ -106,7 +106,7 @@ export default function LandingPage() {
             <WingMark size={30} />
             Wings N Things
           </span>
-          <span className="text-xs uppercase tracking-widest" style={{ color: '#9aa1ad' }}>
+          <span className="text-xs uppercase tracking-widest" style={{ color: '#8b94a7' }}>
             Juneau, Alaska
           </span>
         </div>
@@ -122,7 +122,7 @@ export default function LandingPage() {
           >
             Premier automotive diagnostics&nbsp;&amp; repair.
           </h1>
-          <p className="mt-4 max-w-xl text-lg leading-relaxed" style={{ color: '#4b5364' }}>
+          <p className="mt-4 max-w-xl text-lg leading-relaxed" style={{ color: '#2a3040' }}>
             Detail-focused, professional service in Juneau, Alaska. Clear
             communication, photo-documented work, and written estimates you
             approve from your phone.
@@ -130,18 +130,18 @@ export default function LandingPage() {
           <a
             href="#request"
             className="mt-8 inline-block rounded-lg px-6 py-3.5 text-base font-semibold"
-            style={{ background: '#f0a832', color: '#14161b' }}
+            style={{ background: '#f0a832', color: '#201503' }}
           >
             Request service →
           </a>
         </section>
 
         {/* Services */}
-        <section style={{ background: '#fdfdfc', borderTop: '1px solid #e5e2da', borderBottom: '1px solid #e5e2da' }}>
+        <section style={{ background: '#ffffff', borderTop: '1px solid #dadde4', borderBottom: '1px solid #dadde4' }}>
           <div className="mx-auto max-w-4xl px-5 py-12">
             <h2
               className="text-xs font-semibold uppercase tracking-widest"
-              style={{ color: '#6d6a5e' }}
+              style={{ color: '#5f6779' }}
             >
               What we do
             </h2>
@@ -154,7 +154,7 @@ export default function LandingPage() {
                   >
                     {s.title}
                   </h3>
-                  <p className="mt-1 text-sm leading-relaxed" style={{ color: '#4b5364' }}>
+                  <p className="mt-1 text-sm leading-relaxed" style={{ color: '#2a3040' }}>
                     {s.body}
                   </p>
                 </div>
@@ -165,7 +165,7 @@ export default function LandingPage() {
 
         {/* How it works */}
         <section className="mx-auto max-w-4xl px-5 py-12">
-          <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#6d6a5e' }}>
+          <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5f6779' }}>
             How it works
           </h2>
           <div className="mt-6 grid gap-6 sm:grid-cols-3">
@@ -173,7 +173,7 @@ export default function LandingPage() {
               <div key={s.n}>
                 <span
                   className="flex h-9 w-9 items-center justify-center rounded-full text-base font-bold"
-                  style={{ background: '#14161b', color: '#f0a832', fontFamily: 'var(--font-doc-display), sans-serif' }}
+                  style={{ background: '#10141c', color: '#f0a832', fontFamily: 'var(--font-doc-display), sans-serif' }}
                 >
                   {s.n}
                 </span>
@@ -183,7 +183,7 @@ export default function LandingPage() {
                 >
                   {s.title}
                 </h3>
-                <p className="mt-1 text-sm leading-relaxed" style={{ color: '#4b5364' }}>
+                <p className="mt-1 text-sm leading-relaxed" style={{ color: '#2a3040' }}>
                   {s.body}
                 </p>
               </div>
@@ -194,7 +194,7 @@ export default function LandingPage() {
         {/* Request form — the one and only contact channel. */}
         <section
           id="request"
-          style={{ background: '#14161b', color: '#f6f5f2' }}
+          style={{ background: '#10141c', color: '#e9ebef' }}
         >
           <div className="mx-auto max-w-4xl px-5 py-14">
             <h2
@@ -203,7 +203,7 @@ export default function LandingPage() {
             >
               Request service
             </h2>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed" style={{ color: '#9aa1ad' }}>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed" style={{ color: '#8b94a7' }}>
               Tell us about your vehicle and what it needs. We&apos;ll get back to you
               within one business day with an estimate and a plan for getting
               the vehicle in.
@@ -215,9 +215,9 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-5 py-8 text-xs" style={{ color: '#6d6a5e' }}>
+      <footer className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-5 py-8 text-xs" style={{ color: '#5f6779' }}>
         <span>© {new Date().getFullYear()} Wings N Things LLC · Juneau, Alaska</span>
-        <a href="/dashboard" className="underline underline-offset-2" style={{ color: '#6d6a5e' }}>
+        <a href="/dashboard" className="underline underline-offset-2" style={{ color: '#5f6779' }}>
           Owner sign in
         </a>
       </footer>

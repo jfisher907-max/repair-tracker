@@ -17,7 +17,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 600,
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
-  color: '#9aa1ad',
+  color: '#8b94a7',
   marginBottom: 6,
 }
 
@@ -121,12 +121,12 @@ export default function RequestForm() {
         tabIndex={-1}
         role="status"
         className="max-w-xl rounded-xl p-6"
-        style={{ background: '#1d2027', border: '1px solid #343945', outline: 'none' }}
+        style={{ background: '#1a202c', border: '1px solid #222a38', outline: 'none' }}
       >
-        <p className="text-lg font-semibold" style={{ color: '#7ddb8a' }}>
+        <p className="text-lg font-semibold" style={{ color: '#6fe398' }}>
           ✓ Got it — thank you.
         </p>
-        <p className="mt-2 text-sm leading-relaxed" style={{ color: '#c6cbd4' }}>
+        <p className="mt-2 text-sm leading-relaxed" style={{ color: '#aeb6c4' }}>
           We&apos;ll look it over and get back to you within one business day
           {honored === 'email' ? ' by email' : honored === 'call' ? ' with a call' : honored === 'text' ? ' by text' : ''}.
         </p>
@@ -182,7 +182,7 @@ export default function RequestForm() {
           />
         </div>
       </div>
-      <p className="!mt-2 text-xs" style={{ color: '#9aa1ad' }}>
+      <p className="!mt-2 text-xs" style={{ color: '#8b94a7' }}>
         Phone or email — whichever you prefer, we just need one.
       </p>
 
@@ -199,9 +199,9 @@ export default function RequestForm() {
                 onClick={() => setPref(selected ? '' : c.value)}
                 className="min-h-11 rounded-full px-4 text-sm font-medium"
                 style={{
-                  background: selected ? '#f0a832' : '#1d2027',
-                  color: selected ? '#14161b' : '#c6cbd4',
-                  border: `1px solid ${selected ? '#f0a832' : '#343945'}`,
+                  background: selected ? '#f0a832' : '#1a202c',
+                  color: selected ? '#201503' : '#aeb6c4',
+                  border: `1px solid ${selected ? '#f0a832' : '#222a38'}`,
                 }}
               >
                 {/* the check is the non-color state signal */}
@@ -247,18 +247,18 @@ export default function RequestForm() {
       </div>
 
       {error && (
-        <p role="alert" className="text-sm" style={{ color: '#f0a0a0' }}>{error}</p>
+        <p role="alert" className="text-sm" style={{ color: '#f58e8b' }}>{error}</p>
       )}
 
       <button
         type="submit"
         disabled={busy}
         className="w-full rounded-lg px-6 py-3.5 text-base font-semibold sm:w-auto"
-        style={{ background: '#f0a832', color: '#14161b', opacity: busy ? 0.7 : 1 }}
+        style={{ background: '#f0a832', color: '#201503', opacity: busy ? 0.7 : 1 }}
       >
         {busy ? 'Sending…' : 'Send request'}
       </button>
-      <p className="text-xs leading-relaxed" style={{ color: '#9aa1ad' }}>
+      <p className="text-xs leading-relaxed" style={{ color: '#8b94a7' }}>
         Your info goes straight to the shop and nowhere else — no marketing
         lists, no third parties.
       </p>

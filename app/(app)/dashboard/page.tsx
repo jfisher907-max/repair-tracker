@@ -304,14 +304,14 @@ export default function Dashboard() {
           icon="📈"
           label="Cash profit"
           value={formatCents(stats.cashProfit)}
-          accent={stats.cashProfit >= 0 ? 'var(--green)' : 'var(--red)'}
+          tone={stats.cashProfit >= 0 ? 'ok' : 'stop'}
           hint="money in − parts, before overhead"
         />
         <StatTile
           icon="⚠️"
           label="Unpaid balance"
           value={formatCents(stats.unpaid)}
-          accent={stats.unpaid > 0 ? 'var(--red)' : 'var(--green)'}
+          tone={stats.unpaid > 0 ? 'stop' : 'ok'}
           hint="still owed to you"
         />
       </div>
@@ -342,12 +342,12 @@ export default function Dashboard() {
         <MoneyRow label="Labor billed" value={stats.laborCharged} />
         <MoneyRow label="Parts billed" value={stats.partsCharged} />
         <MoneyRow label="What the parts cost you" value={-stats.partsCostOnJobs} muted />
-        <MoneyRow label="Parts markup" value={stats.partsMarkup} accent="var(--accent2)" />
+        <MoneyRow label="Parts markup" value={stats.partsMarkup} />
         <div className="border-t pt-1.5" style={{ borderColor: 'var(--border)' }}>
           <MoneyRow
             label="Earned on the work"
             value={stats.earned}
-            accent="var(--green)"
+            accent="var(--text-money-in)"
             bold
           />
         </div>
@@ -357,7 +357,7 @@ export default function Dashboard() {
             <MoneyRow
               label="After overhead"
               value={stats.earned - stats.overhead}
-              accent={stats.earned - stats.overhead >= 0 ? 'var(--green)' : 'var(--red)'}
+              accent={stats.earned - stats.overhead >= 0 ? 'var(--text-money-in)' : 'var(--text-money-owed)'}
               bold
             />
           </>
@@ -381,7 +381,7 @@ export default function Dashboard() {
           📊 Reports
         </Link>
         <Link href="/expenses" className="btn">
-          🧰 Expenses
+          💼 Expenses
         </Link>
       </div>
 
@@ -394,7 +394,7 @@ export default function Dashboard() {
           borderLeft: `3px solid ${newRequests > 0 ? 'var(--accent)' : 'var(--border)'}`,
         }}
       >
-        <span className="font-semibold">📥 Service requests</span>
+        <span className="font-semibold">🛎️ Service requests</span>
         <span className="text-sm" style={{ color: newRequests > 0 ? 'var(--text2)' : 'var(--text3)' }}>
           {newRequests > 0 ? `${newRequests} new — a customer is waiting to hear back` : 'none waiting'}
         </span>
@@ -403,14 +403,14 @@ export default function Dashboard() {
         <Link
           href="/settings"
           className="card flex items-center justify-between gap-3 !py-3 hover:brightness-110"
-          style={{ borderLeft: `3px solid ${docAlerts.some((d) => docState(d) === 'expired') ? 'var(--red)' : 'var(--orange)'}` }}
+          style={{ borderLeft: `3px solid ${docAlerts.some((d) => docState(d) === 'expired') ? 'var(--status-stop-solid)' : 'var(--status-wait-solid)'}` }}
         >
           <span className="font-semibold">📄 Paperwork</span>
           <span className="text-sm" style={{ color: 'var(--text2)' }}>
             {docAlerts.map((d, i) => (
               <span key={d.id}>
                 {i > 0 && ' · '}
-                <span style={{ color: docState(d) === 'expired' ? 'var(--red)' : 'var(--orange)' }}>
+                <span style={{ color: docState(d) === 'expired' ? 'var(--status-stop-fg)' : 'var(--status-wait-fg)' }}>
                   {d.name} {docState(d) === 'expired' ? 'expired' : 'expires soon'}
                 </span>
               </span>
@@ -496,23 +496,30 @@ function StatTile({
   icon,
   label,
   value,
-  accent,
+  tone,
   hint,
 }: {
   icon: string
   label: string
   value: string
-  accent?: string
+  /** Emphasis per the design system: a colored 1px OUTLINE on the neutral
+      tile (never a colored card) + the numeral colored by meaning. */
+  tone?: 'ok' | 'stop'
   /** One line under the number, for what the number does and doesn't count. */
   hint?: string
 }) {
   return (
-    <div className="stat-tile" style={accent ? { borderTop: `2px solid ${accent}` } : undefined}>
-      <div className="flex items-start justify-between">
-        <div className="stat-label">{label}</div>
-        <span className="text-sm" style={{ opacity: 0.45 }}>{icon}</span>
-      </div>
-      <div className="stat-value money" style={accent ? { color: accent } : undefined}>
+    <div className={`stat-tile${tone ? ` stat-tile--${tone}` : ''}`}>
+      <span className="stat-emoji" aria-hidden="true">{icon}</span>
+      <div className="stat-label">{label}</div>
+      <div
+        className="stat-value money"
+        style={
+          tone
+            ? { color: tone === 'ok' ? 'var(--text-money-in)' : 'var(--text-money-owed)' }
+            : undefined
+        }
+      >
         {value}
       </div>
       {hint && (

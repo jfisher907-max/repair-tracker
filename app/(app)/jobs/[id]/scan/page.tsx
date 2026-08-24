@@ -303,7 +303,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
                 <div
                   key={i}
                   className="grid grid-cols-[1fr_64px_88px_44px] items-end gap-1.5 rounded-lg p-1.5"
-                  style={r.confidence === 'low' ? { background: '#3d2f1466', outline: '1px solid var(--accent-dim)' } : undefined}
+                  style={r.confidence === 'low' ? { background: 'var(--status-wait-bg)', outline: '1px solid var(--gold-line)' } : undefined}
                 >
                   <div className="space-y-1">
                     <input
@@ -357,7 +357,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
               <div
                 className="flex items-center justify-between rounded-lg px-3 py-2"
                 style={{
-                  background: mismatch ? '#3d1b1b' : 'var(--bg2)',
+                  background: mismatch ? 'var(--status-stop-bg)' : 'var(--bg2)',
                   color: mismatch ? 'var(--red)' : 'var(--green)',
                 }}
               >

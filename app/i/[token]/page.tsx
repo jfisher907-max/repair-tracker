@@ -138,11 +138,11 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
   }
 
   return (
-    <div className="min-h-dvh" style={{ background: '#e5e7eb' }}>
+    <div className="min-h-dvh" style={{ background: '#e9ebef' }}>
       {invoice.status === 'paid' && (
         <div
           className="no-print px-4 py-3 text-center font-semibold"
-          style={{ background: '#dcfce7', color: '#166534' }}
+          style={{ background: 'rgba(76,217,123,0.16)', color: '#0f3d24' }}
         >
           ✓ This invoice has been paid — thank you!
         </div>
@@ -150,7 +150,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
       {paymentInFlight && invoice.status !== 'paid' && (
         <div
           className="no-print px-4 py-3 text-center font-semibold"
-          style={{ background: '#dbeafe', color: '#1e40af' }}
+          style={{ background: 'rgba(92,168,222,0.14)', color: '#1f4f73' }}
         >
           {checkoutReturn === 'processing'
             ? 'Your payment is processing — this page will update once it clears.'
@@ -160,13 +160,13 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
       {checkoutReturn === 'none' && invoice.status !== 'paid' && (
         <div
           className="no-print px-4 py-2 text-center text-sm"
-          style={{ background: '#f3f4f6', color: '#374151' }}
+          style={{ background: '#f4f5f8', color: '#2a3040' }}
         >
           No charge was made.
         </div>
       )}
       {cardEnabled && !paymentInFlight && invoice.status !== 'paid' && invoice.status !== 'void' && balanceCents > 0 && (
-        <div className="no-print flex flex-col items-center gap-2 px-4 py-4" style={{ background: '#111827' }}>
+        <div className="no-print flex flex-col items-center gap-2 px-4 py-4" style={{ background: '#0b0e13' }}>
           <button
             className="btn btn-primary w-full max-w-sm !min-h-[48px] text-base"
             disabled={paying}
@@ -174,11 +174,11 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
           >
             {paying ? 'Opening secure checkout…' : `Pay ${formatCents(balanceCents)} by card`}
           </button>
-          <span className="text-xs" style={{ color: '#9ca3af' }}>
+          <span className="text-xs" style={{ color: '#8b94a7' }}>
             Secure payment by card — processed by Stripe.
           </span>
           {payError && (
-            <span className="text-xs" style={{ color: '#fca5a5' }}>{payError}</span>
+            <span className="text-xs" style={{ color: '#f58e8b' }}>{payError}</span>
           )}
         </div>
       )}

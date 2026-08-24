@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed, Inter, Space_Grotesk } from "next/font/google";
+import { Barlow, Barlow_Condensed, IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import SWRegister from "@/components/SWRegister";
 import { BRAND_NAME } from "@/lib/brand";
@@ -30,6 +30,14 @@ const spaceGrotesk = Space_Grotesk({
   weight: ["500", "700"],
 });
 
+// Ids only — J007, Q012, VINs. The design system's one mono face; money is
+// NOT mono (bold display with tabular figures).
+const plexMono = IBM_Plex_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  weight: ["400", "600"],
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL('https://wingsnthings.repair'),
   title: BRAND_NAME,
@@ -57,7 +65,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${barlow.variable} ${barlowCondensed.variable} ${inter.variable} ${spaceGrotesk.variable}`}>
+      <body className={`${barlow.variable} ${barlowCondensed.variable} ${inter.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}>
         <SWRegister />
         {children}
       </body>

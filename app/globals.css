@@ -1,31 +1,162 @@
 @import "tailwindcss";
 
 :root {
-  --bg0: #0b0e13;
-  --bg1: #131820;
-  --bg2: #1a212c;
-  --bg3: #232d3b;
-  --border: #2b3646;
-  --border2: #3a4a5e;
-  --accent: #f0a832;
-  --accent2: #ffc35c;
+  /* =====================================================================
+     Wings N Things Design System — token layer.
+     Structure from the design canvas (docs/design-system/tokens-extracted.md);
+     values reconciled to the REAL brand where the canvas eye-matched them
+     (gold #f0a832, the app's own faces). Semantic tokens are the API;
+     ramps are implementation. Legacy names (--bg0…--blue) are aliases so
+     existing surfaces keep working while they migrate.
+     ===================================================================== */
+
+  /* --- Night: the base — near-black blue --- */
+  --night-1000: #06080c;
+  --night-950: #0b0e13;
+  --night-900: #10141c;
+  --night-850: #141922;
+  --night-800: #1a202c;
+  --night-700: #222a38;
+  --night-600: #2e3746;
+  --night-500: #3e4859;
+
+  /* --- Ink: text on night --- */
+  --ink-100: #f2f4f8;
+  --ink-200: #d7dce5;
+  --ink-300: #aeb6c4;
+  --ink-400: #8b94a7;
+  --ink-500: #5f6779;
+  --ink-600: #454d5e;
+
+  /* --- Gold: the brand (real #f0a832; ramp derived from it) --- */
+  --gold-700: #b97f1e;
+  --gold-600: #d9962c;
+  --gold-500: #f0a832;
+  --gold-400: #ffc35c;
+  --gold-200: #f7dca4;
+  --gold-ink: #201503;
+  --gold-tint: rgba(240, 168, 50, 0.12);
+  --gold-line: rgba(240, 168, 50, 0.35);
+
+  /* --- Money & status accents --- */
+  --mint-500: #4cd97b;
+  --mint-400: #6fe398;
+  --mint-tint: rgba(76, 217, 123, 0.12);
+  --mint-line: rgba(76, 217, 123, 0.45);
+  --ember-500: #ef6f6c;
+  --ember-400: #f58e8b;
+  --ember-tint: rgba(239, 111, 108, 0.12);
+  --ember-line: rgba(239, 111, 108, 0.45);
+  --sky-500: #5ca8de;
+  --sky-tint: rgba(92, 168, 222, 0.12);
+
+  /* --- Semantic surfaces (dark-first) --- */
+  --surface-page: var(--night-950);
+  --surface-rail: var(--night-1000);
+  --surface-card: var(--night-850);
+  --surface-sunken: var(--night-900);
+  --surface-raised: var(--night-800);
+  --surface-accent: var(--gold-tint);
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --surface-selected: var(--gold-tint);
+
+  /* --- Semantic text --- */
+  --text-heading: var(--ink-100);
+  --text-body: var(--ink-200);
+  --text-muted: var(--ink-400);
+  /* NON-TEXT ONLY (status edges, decoration): ink-500 measures under 4.5:1
+     on every dark surface, so it must never carry copy. Use --text-muted. */
+  --text-faint: var(--ink-500);
+  --text-link: var(--gold-500);
+  --text-on-accent: var(--gold-ink);
+  --text-money-in: var(--mint-500);
+  --text-money-owed: var(--ember-500);
+
+  /* --- Semantic lines --- */
+  --border-hairline: var(--night-800);
+  --border-default: var(--night-700);
+  --border-strong: var(--night-600);
+  --border-focus: var(--gold-500);
+
+  /* --- Status vocabulary: ok=paid · wait=partial (gold) · stop=unpaid
+         (ember) · info=scheduled (sky) · idle=draft/sent --- */
+  --status-ok-fg: var(--mint-400);
+  --status-ok-bg: var(--mint-tint);
+  --status-ok-solid: var(--mint-500);
+  --status-wait-fg: var(--gold-400);
+  --status-wait-bg: var(--gold-tint);
+  --status-wait-solid: var(--gold-500);
+  --status-stop-fg: var(--ember-400);
+  --status-stop-bg: var(--ember-tint);
+  --status-stop-solid: var(--ember-500);
+  --status-info-fg: var(--sky-500);
+  --status-info-bg: var(--sky-tint);
+  --status-info-solid: var(--sky-500);
+  --status-idle-fg: var(--ink-400);
+  --status-idle-bg: rgba(255, 255, 255, 0.06);
+  --status-idle-solid: var(--ink-500);
+
+  /* --- Interactive --- */
+  --action-primary: var(--gold-500);
+  --action-primary-hover: var(--gold-400);
+  --action-primary-active: var(--gold-600);
+  --action-secondary-bg: var(--night-800);
+  /* The canvas specified a 30% gold ring; measured, that composites to
+     1.84:1 against the night page — under the 3:1 non-text minimum, and it is
+     the ONLY focus indicator on buttons and nav. At 0.7 it reads 5.11:1. */
+  --focus-ring: 0 0 0 3px rgba(240, 168, 50, 0.7);
+
+  /* --- Elevation & shape ---
+     NAMESPACED (--wnt-radius-*) on purpose: Tailwind v4 owns the bare
+     --radius-* names to generate rounded-sm/md/lg/xl. Declaring ours in :root
+     after Tailwind's silently resized every rounded-* class in the app
+     (rounded-lg 8px -> 18px, rounded-md 6px -> 14px) and inverted the scale
+     against the undefined rounded-xl. Never reuse the bare names. */
+  --wnt-radius-xs: 6px;
+  --wnt-radius-sm: 10px;
+  --wnt-radius-md: 14px;
+  --wnt-radius-lg: 18px;
+  --wnt-radius-pill: 999px;
+  --edge-width: 3px; /* the signature status left edge */
+  --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 6px 18px rgba(0, 0, 0, 0.35);
+  --shadow-overlay: 0 20px 48px rgba(0, 0, 0, 0.55), 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-glow-gold: 0 0 0 1px var(--gold-line), 0 4px 16px rgba(240, 168, 50, 0.15);
+  --scrim-overlay: rgba(4, 6, 10, 0.66);
+
+  /* --- Motion: 130ms controls, 200ms panels, no bounce --- */
+  --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease: var(--ease-standard);
+  --dur-instant: 80ms;
+  --dur-fast: 130ms;
+  --dur-normal: 200ms;
+  --dur-med: var(--dur-normal);
+  --dur-slow: 320ms;
+  --transition-control: background-color var(--dur-fast) var(--ease-standard),
+    border-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
+  --press-scale: 0.985;
+
+  /* --- Legacy aliases (migrating surfaces read these) --- */
+  --bg0: var(--night-950);
+  --bg1: var(--night-900);
+  --bg2: var(--night-800);
+  --bg3: var(--night-700);
+  --border: var(--night-700);
+  --border2: var(--night-600);
+  --accent: var(--gold-500);
+  --accent2: var(--gold-400);
   --accent-dim: #6e4d13;
-  --text: #eef2f7;
-  --text2: #a6b5c7;
-  --text3: #74869c;
-  --green: #3ad880;
-  --red: #f37070;
+  --text: var(--ink-100);
+  --text2: var(--ink-300);
+  --text3: var(--ink-400);
+  --green: var(--mint-500);
+  --red: var(--ember-500);
   --orange: #f08840;
-  --blue: #58a6e8;
-
-  /* Motion system */
-  --ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --dur-fast: 150ms;
-  --dur-med: 280ms;
-
-  /* Depth */
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 3px 10px rgba(0, 0, 0, 0.22);
-  --shadow-2: 0 2px 6px rgba(0, 0, 0, 0.4), 0 12px 28px rgba(0, 0, 0, 0.35);
+  --blue: var(--sky-500);
+  --shadow-1: var(--shadow-card);
+  --shadow-2: var(--shadow-raised);
   --glow-accent: 0 2px 14px rgba(240, 168, 50, 0.22);
 }
 
@@ -34,13 +165,45 @@ html {
 }
 
 body {
-  background:
-    radial-gradient(1100px 520px at 50% -220px, #182231 0%, rgba(24, 34, 49, 0) 65%),
-    var(--bg0);
-  color: var(--text);
+  /* Flat color only — the design system bans decorative gradients. */
+  background: var(--surface-page);
+  color: var(--text-body);
   font-family: var(--font-body), system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
+
+h1, h2, h3, h4 { color: var(--text-heading); }
+
+/* --- Design-system helpers --- */
+/* Micro-label: THE only uppercase in the system (labels + status pills). */
+.wnt-label {
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* Ids (J007, Q012, VINs): gold, mono, always visible. */
+.wnt-data {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.wnt-id {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--gold-500);
+}
+/* The signature pattern: 3px status-colored left edge on a neutral card —
+   never a colored background, never a full colored card. */
+.edge { border-left: var(--edge-width) solid transparent; }
+.edge-ok { border-left: var(--edge-width) solid var(--status-ok-solid); }
+.edge-wait { border-left: var(--edge-width) solid var(--status-wait-solid); }
+.edge-stop { border-left: var(--edge-width) solid var(--status-stop-solid); }
+.edge-info { border-left: var(--edge-width) solid var(--status-info-solid); }
+.edge-idle { border-left: var(--edge-width) solid var(--status-idle-solid); }
 
 h1, h2, h3, .display {
   font-family: var(--font-display), var(--font-body), sans-serif;
@@ -50,24 +213,33 @@ h1, h2, h3, .display {
 /* ---------- Surfaces ---------- */
 
 .card {
-  background: linear-gradient(180deg, #151b25 0%, var(--bg1) 100%);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--wnt-radius-md);
   padding: 1rem;
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--shadow-card);
   transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease),
     border-color var(--dur-med) var(--ease), filter var(--dur-fast) var(--ease);
 }
+/* Emphasis = colored 1px outline on a neutral card (CASH PROFIT / UNPAID). */
+.card-line-ok, .stat-tile--ok { box-shadow: 0 0 0 1px var(--mint-line), var(--shadow-card); }
+.card-line-stop, .stat-tile--stop { box-shadow: 0 0 0 1px var(--ember-line), var(--shadow-card); }
+.card-glow-gold { box-shadow: var(--shadow-glow-gold); }
 
 /* Only cards that are links behave interactively */
+/* Dark-surface hover lightens ONE STEP (night-850 -> night-800); press scales
+   .985. No lift, no brightness filter — the spec bans bounce. */
 a.card:hover {
-  transform: translateY(-1px);
-  border-color: var(--border2);
-  box-shadow: var(--shadow-2);
-  filter: brightness(1.06);
+  background: var(--surface-raised);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-raised);
 }
 a.card:active {
-  transform: translateY(0) scale(0.995);
+  transform: scale(var(--press-scale));
+}
+a.card:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 /* ---------- Controls ---------- */
@@ -79,40 +251,49 @@ a.card:active {
   gap: 0.4rem;
   min-height: 44px;
   padding: 0.5rem 1rem;
-  border-radius: 11px;
-  border: 1px solid var(--border2);
-  background: var(--bg2);
-  color: var(--text);
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--action-secondary-bg);
+  color: var(--text-heading);
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
   text-decoration: none;
-  transition: transform var(--dur-fast) var(--ease), filter var(--dur-fast) var(--ease),
-    box-shadow var(--dur-med) var(--ease), border-color var(--dur-med) var(--ease),
-    background-color var(--dur-fast) var(--ease);
+  transition: var(--transition-control), transform var(--dur-fast) var(--ease-standard);
 }
+/* Dark-surface hover lightens one step; press scales .985 — no bounce. */
 .btn:hover {
-  filter: brightness(1.14);
-  transform: translateY(-1px);
+  background: var(--night-700);
+  border-color: var(--border-strong);
 }
 .btn:active {
-  transform: translateY(0) scale(0.97);
+  transform: scale(var(--press-scale));
+}
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
   transform: none;
   filter: none;
 }
 
+/* Gold hovers LIGHTEN (500 → 400); press goes 600. Flat — no gradients. */
 .btn-primary {
-  background: linear-gradient(180deg, var(--accent2) 0%, var(--accent) 90%);
-  border-color: var(--accent);
-  color: #201503;
-  box-shadow: var(--glow-accent), var(--shadow-1);
+  background: var(--action-primary);
+  border-color: var(--action-primary);
+  color: var(--text-on-accent);
+  box-shadow: var(--shadow-card);
 }
 .btn-primary:hover {
-  box-shadow: 0 3px 18px rgba(240, 168, 50, 0.32), var(--shadow-1);
+  background: var(--action-primary-hover);
+  border-color: var(--action-primary-hover);
+}
+.btn-primary:active {
+  background: var(--action-primary-active);
+  border-color: var(--action-primary-active);
 }
 
 .btn-danger {
@@ -133,98 +314,118 @@ a.card:active {
 .input, .select, .textarea {
   width: 100%;
   min-height: 44px;
-  padding: 0.5rem 0.75rem;
-  border-radius: 11px;
-  border: 1px solid var(--border);
-  background: var(--bg2);
-  color: var(--text);
-  font-size: 1rem;
-  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease),
-    background-color var(--dur-fast) var(--ease);
+  padding: 9px 12px;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-inset-field);
+  color: var(--text-heading);
+  font-size: 1rem; /* stays >=16px so iOS never zooms the viewport */
+  transition: var(--transition-control);
 }
 .textarea { min-height: 90px; }
 .input:focus, .select:focus, .textarea:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(240, 168, 50, 0.16);
-  background: #1c2431;
+  border-color: var(--border-focus);
+  box-shadow: var(--focus-ring), var(--shadow-inset-field);
 }
-.input::placeholder, .textarea::placeholder { color: var(--text3); }
+/* Placeholders carry real content ("Type your name to approve") — muted, not
+   faint: faint is 2.88:1 on the field and fails at every size. */
+.input::placeholder, .textarea::placeholder { color: var(--text-muted); }
 
+/* Micro-label spec: 11px / 600 / .08em — the system's only uppercase. */
 .label {
   display: block;
-  font-size: 0.8rem;
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
   font-weight: 600;
-  color: var(--text2);
-  margin-bottom: 0.25rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 .chip {
   display: inline-block;
   padding: 0.1rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
+  border-radius: var(--wnt-radius-pill);
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
-/* One color per word, everywhere: the chip family is the app's status
-   language. Muted statuses use --text2, not --text3 — 12px text on the tinted
-   backgrounds needs the contrast (draft/void measured 3.7:1 with text3). */
-.chip-unpaid { background: #3d1b1b; color: var(--red); }
-.chip-partial { background: #3d2f14; color: var(--accent2); }
-.chip-paid { background: #143d26; color: var(--green); }
-.chip-draft { background: #232d3b; color: var(--text2); }
-.chip-void { background: #232d3b; color: var(--text2); }
-.chip-sent { background: #14283d; color: var(--blue); }
-.chip-approved { background: #143d26; color: var(--green); }
-.chip-declined { background: #3d1b1b; color: var(--red); }
-.chip-expired { background: #3d2f14; color: var(--orange); }
-.chip-open { background: #3d2f14; color: var(--accent2); }
-.chip-booked { background: #14283d; color: var(--blue); }
-.chip-done { background: #143d26; color: var(--green); }
-.chip-overdue { background: #3d1b1b; color: var(--red); }
+/* The status VOCABULARY: every state maps to one of five meanings.
+   ok = paid/cleared · wait = partial/awaiting (gold) · stop = unpaid/blocked
+   (ember) · info = scheduled (sky) · idle = draft/void. One color per meaning,
+   everywhere — tinted background + readable fg, never a solid colored card. */
+.chip-paid, .chip-approved, .chip-done { background: var(--status-ok-bg); color: var(--status-ok-fg); }
+.chip-partial, .chip-open, .chip-expired { background: var(--status-wait-bg); color: var(--status-wait-fg); }
+.chip-unpaid, .chip-declined, .chip-overdue { background: var(--status-stop-bg); color: var(--status-stop-fg); }
+.chip-sent, .chip-booked { background: var(--status-info-bg); color: var(--status-info-fg); }
+.chip-draft, .chip-void { background: var(--status-idle-bg); color: var(--ink-300); }
 
 .stat-tile {
-  background: linear-gradient(180deg, #151b25 0%, var(--bg1) 100%);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 0.75rem 0.9rem;
-  box-shadow: var(--shadow-1);
+  position: relative;
+  background: var(--surface-card);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--wnt-radius-md);
+  padding: 0.8rem 0.95rem;
+  box-shadow: var(--shadow-card);
 }
 .stat-tile .stat-label {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text3);
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
 }
 .stat-tile .stat-value {
   font-family: var(--font-display), sans-serif;
-  font-size: 1.45rem;
-  margin-top: 0.15rem;
+  font-size: 22px;
+  line-height: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.2rem;
+  color: var(--text-heading);
+}
+/* Metric emoji sits in the top-right corner of the tile. */
+.stat-tile .stat-emoji {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.7rem;
+  font-size: 15px;
+  opacity: 0.9;
 }
 
-.money { font-variant-numeric: tabular-nums; }
+/* Money: bold display face with tabular figures — never mono, never rounded.
+   Colored by meaning where it matters: green in, red owed, neutral otherwise. */
+.money {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+.money-in { color: var(--text-money-in); }
+.money-owed { color: var(--text-money-owed); }
 
 /* ---------- App chrome (header + tab bar) ---------- */
 
 /* Note: declare only the standard backdrop-filter — LightningCSS adds the
    -webkit- prefix itself, and hand-writing both makes it drop the standard one. */
+/* Flat chrome — the system reserves transparency/blur for the dialog scrim
+   only; no glass panels. The bars sit on the rail surface, one step darker
+   than the page, so the content plane reads as the lit one. */
 .appbar {
-  background: color-mix(in srgb, var(--bg1) 82%, transparent);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
+  background: var(--surface-rail);
+  border-bottom: 1px solid var(--border-hairline);
   padding-top: calc(env(safe-area-inset-top) + 0.75rem);
 }
 
 .tabbar {
-  background: color-mix(in srgb, var(--bg1) 84%, transparent);
-  backdrop-filter: blur(16px);
-  border-top: 1px solid var(--border);
+  background: var(--surface-rail);
+  border-top: 1px solid var(--border-hairline);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -253,16 +454,19 @@ a.card:active {
 
 /* ---------- Desktop sidebar ---------- */
 
+/* The rail is the DARKEST surface — flat night-1000, one step below the page. */
 .sidebar {
-  background: linear-gradient(180deg, #141a24 0%, #10151d 100%);
-  border-right: 1px solid var(--border);
+  background: var(--surface-rail);
+  border-right: 1px solid var(--border-hairline);
 }
 .side-label {
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text3);
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
   padding: 0 0.75rem;
   margin: 1.1rem 0 0.3rem;
 }
@@ -284,10 +488,17 @@ a.card:active {
   color: var(--text);
 }
 .side-item.active {
-  background: rgba(240, 168, 50, 0.1);
-  color: var(--accent2);
-  border-left-color: var(--accent);
+  background: var(--surface-selected);
+  color: var(--gold-400);
+  border-left-color: var(--status-wait-solid);
 }
+.side-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Interactive rows share the button press response. */
+.row-interactive:active { transform: scale(var(--press-scale)); }
 
 .section-title {
   display: flex;
@@ -435,12 +646,18 @@ a.card:active {
 /* ---------- Customer documents: quotes & invoices (Bold Brand) ---------- */
 
 .doc-root {
-  --doc-ink: #191612;
-  --doc-muted: #6f675c;
-  --doc-faint: #a19889;
-  --doc-line: #e8e3da;
-  --doc-amber: #f59e0b;
-  --doc-coal: #1c1917;
+  /* Document theme per the design system's .wnt-doc re-map (cool night-derived
+     neutrals replace the old warm stone), with the REAL brand gold. */
+  --doc-ink: #10141c;
+  --doc-muted: #6b7383;
+  /* Was #9aa1b0 from the canvas — 2.59:1 on white paper, the worst text
+     contrast in the system at the smallest size on the most public surface.
+     Collapsed into --doc-muted (4.77:1); the 10px/600/.13em uppercase
+     treatment carries the hierarchy without a second grey. */
+  --doc-faint: #6b7383;
+  --doc-line: #dadde4;
+  --doc-amber: #f0a832;
+  --doc-coal: #10141c;
   font-family: var(--font-doc-body), 'Helvetica Neue', Arial, sans-serif;
   color: var(--doc-ink);
   -webkit-font-smoothing: antialiased;
@@ -448,14 +665,15 @@ a.card:active {
   max-width: 8.5in;
   margin: 0 auto;
   background: #fff;
-  border-radius: 3px;
+  border-radius: 6px; /* --radius-xs: the documents' corner */
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(20, 15, 8, 0.14), 0 18px 44px rgba(20, 15, 8, 0.1);
+  box-shadow: 0 1px 2px rgba(16, 20, 28, 0.06), 0 18px 44px rgba(16, 20, 28, 0.1);
 }
 
 .doc-brand {
   background: var(--doc-coal);
-  border-bottom: 5px solid var(--doc-amber);
+  /* 3px gold rule under the header band — the design system's number. */
+  border-bottom: 3px solid var(--doc-amber);
   padding: 34px 44px 30px;
   display: flex;
   justify-content: space-between;
@@ -477,7 +695,7 @@ a.card:active {
   margin-top: 12px;
   font-size: 12px;
   line-height: 1.6;
-  color: #a8a29e;
+  color: #8b94a7;
   overflow-wrap: break-word;
 }
 .doc-id { margin-left: auto; text-align: right; min-width: 0; }
@@ -488,11 +706,12 @@ a.card:active {
   text-transform: uppercase;
   color: var(--doc-amber);
 }
+/* The doc number IS an id: gold + mono, per the system's id rule. */
 .doc-num {
-  font-family: var(--font-doc-display), Arial, sans-serif;
-  font-size: 25px;
-  font-weight: 700;
-  color: #fff;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 23px;
+  font-weight: 600;
+  color: var(--doc-amber);
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
 }
@@ -503,8 +722,8 @@ a.card:active {
   font-weight: 600;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #d6d3d1;
-  border: 1px solid #57534e;
+  color: #d7dce5;
+  border: 1px solid #454d5e;
   border-radius: 999px;
   padding: 3px 10px;
 }
@@ -613,7 +832,7 @@ a.card:active {
 .doc-due-card {
   margin-top: 14px;
   background: var(--doc-coal);
-  border-radius: 12px;
+  border-radius: 14px; /* on the 6/10/14/18 scale */
   padding: 17px 20px;
   display: flex;
   justify-content: space-between;
@@ -621,7 +840,7 @@ a.card:active {
   gap: 16px;
   print-color-adjust: exact;
 }
-.doc-due-card.doc-settled { background: #14532d; }
+.doc-due-card.doc-settled { background: #0f3d24; }
 .doc-due-label {
   display: block;
   font-size: 10.5px;
@@ -630,8 +849,8 @@ a.card:active {
   text-transform: uppercase;
   color: var(--doc-amber);
 }
-.doc-due-card.doc-settled .doc-due-label { color: #86efac; }
-.doc-due-sub { display: block; margin-top: 3px; font-size: 11.5px; color: #a8a29e; }
+.doc-due-card.doc-settled .doc-due-label { color: #6fe398; }
+.doc-due-sub { display: block; margin-top: 3px; font-size: 11.5px; color: #8b94a7; }
 .doc-due-amt {
   font-family: var(--font-doc-display), Arial, sans-serif;
   font-size: 27px;
@@ -742,19 +961,20 @@ a.card:active {
    on the shop's only contact channel needs a visible focus ring. */
 .pub-input {
   width: 100%;
-  background: #1d2027;
-  border: 1px solid #343945;
-  border-radius: 8px;
+  background: var(--night-800);
+  border: 1px solid var(--night-700);
+  border-radius: var(--wnt-radius-sm);
   padding: 11px 12px;
   font-size: 16px; /* >=16px so iOS doesn't zoom the viewport on focus */
-  color: #f6f5f2;
+  color: var(--ink-100);
   outline: none;
-  transition: border-color 150ms ease, box-shadow 200ms ease;
+  box-shadow: var(--shadow-inset-field);
+  transition: var(--transition-control);
 }
 .pub-input:focus {
-  border-color: #f0a832;
-  box-shadow: 0 0 0 3px rgba(240, 168, 50, 0.28);
+  border-color: var(--border-focus);
+  box-shadow: var(--focus-ring), var(--shadow-inset-field);
 }
 .pub-input::placeholder {
-  color: #9aa1ad;
+  color: var(--ink-400);
 }

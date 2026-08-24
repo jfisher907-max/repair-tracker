@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react'
 
 const tabs = [
   { href: '/dashboard', label: 'Home', icon: '🏠' },
-  { href: '/jobs', label: 'Jobs', icon: '🗂️' },
+  { href: '/jobs', label: 'Jobs', icon: '📁' },
   { href: '/jobs/new', label: 'New Job', icon: '➕', primary: true },
   { href: '/customers', label: 'People', icon: '👤' },
   { href: '/billing', label: 'Billing', icon: '🧾' },
@@ -26,9 +26,9 @@ const sideNav: { label: string; items: { href: string; label: string; icon: stri
   {
     label: 'Work',
     items: [
-      { href: '/jobs', label: 'Jobs', icon: '🗂️' },
+      { href: '/jobs', label: 'Jobs', icon: '📁' },
       { href: '/jobs/new', label: 'New Job', icon: '➕' },
-      { href: '/requests', label: 'Requests', icon: '📥' },
+      { href: '/requests', label: 'Requests', icon: '🛎️' },
       { href: '/followups', label: 'Follow-ups', icon: '🔔' },
     ],
   },
@@ -37,7 +37,7 @@ const sideNav: { label: string; items: { href: string; label: string; icon: stri
     items: [
       { href: '/billing', label: 'Quotes & Invoices', icon: '🧾' },
       { href: '/quotes/new', label: 'New Quote', icon: '📝' },
-      { href: '/expenses', label: 'Expenses', icon: '🧰' },
+      { href: '/expenses', label: 'Expenses', icon: '💼' },
     ],
   },
   { label: 'People', items: [{ href: '/customers', label: 'Customers', icon: '👤' }] },

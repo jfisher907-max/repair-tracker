@@ -48,8 +48,8 @@ export default function ResetPage() {
   return (
     <div style={{ padding: 32, fontFamily: 'system-ui, sans-serif', textAlign: 'center' }}>
       <h1 style={{ fontSize: 20, marginBottom: 8 }}>Resetting the app</h1>
-      <p style={{ color: '#6b7280' }}>{status}</p>
-      <p style={{ color: '#6b7280', fontSize: 13, marginTop: 16 }}>
+      <p style={{ color: 'var(--text-muted)' }}>{status}</p>
+      <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 16 }}>
         Your sign-in and your data are untouched — this only drops the cached copy of the app.
       </p>
     </div>
