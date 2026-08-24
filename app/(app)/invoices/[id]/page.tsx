@@ -236,8 +236,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           <span className={statusChipClass(invoice.status)}>{invoice.status}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn btn-sm btn-primary" onClick={shareLink}>📤 Send link</button>
-          <button className="btn btn-sm" onClick={() => window.print()}>🖨️ Print</button>
+          <button className="btn btn-sm btn-primary" onClick={shareLink}><span className="emoji-mobile">📤 </span>Send link</button>
+          <button className="btn btn-sm" onClick={() => window.print()}><span className="emoji-mobile">🖨️ </span>Print</button>
           {invoice.status === 'paid' && settings?.google_review_url && (
             <button
               className="btn btn-sm"
@@ -256,7 +256,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 } catch {}
               }}
             >
-              ⭐ Ask for a review
+              <span className="emoji-mobile">⭐ </span>Ask for a review
             </button>
           )}
           {invoice.status !== 'void' && (
@@ -267,7 +267,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 setEditingMemo(!editingMemo)
               }}
             >
-              📝 {invoice.memo ? 'Edit notes' : 'Add notes'}
+              <span className="emoji-mobile">📝 </span>{invoice.memo ? 'Edit notes' : 'Add notes'}
             </button>
           )}
           {invoice.status === 'draft' && (
@@ -295,7 +295,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 setPayOpen(!payOpen)
               }}
             >
-              💵 Record payment
+              <span className="emoji-mobile">💵 </span>Record payment
             </button>
           )}
           {invoice.status !== 'void' && invoice.status !== 'paid' && (

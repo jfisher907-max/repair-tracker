@@ -397,7 +397,7 @@ export default function SettingsPage() {
           keep a copy somewhere safe now and then.
         </p>
         <button className="btn" onClick={exportAll} disabled={exporting}>
-          {exporting ? 'Building zip…' : '⬇️ Export all data'}
+          {exporting ? 'Building zip…' : <><span className="emoji-mobile">⬇️ </span>Export all data</>}
         </button>
       </div>
 

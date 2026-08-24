@@ -113,7 +113,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
               {!customer.phone && !customer.email && 'No contact info'}
               {customer.phone && (
                 <a href={`tel:${customer.phone}`} style={{ color: 'var(--blue)' }}>
-                  📞 {customer.phone}
+                  <span className="emoji-mobile">📞 </span>{customer.phone}
                 </a>
               )}
               {customer.phone && customer.email && ' · '}
@@ -151,7 +151,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
             )}
           </span>
           <Link href={`/report?customer=${id}`} className="btn btn-sm btn-primary">
-            🖨️ Print repair history
+            <span className="emoji-mobile">🖨️ </span>Print repair history
           </Link>
           {lifetime.unpaid > 0 && (
             <button
@@ -168,7 +168,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
                 } catch {}
               }}
             >
-              💳 Send statement
+              <span className="emoji-mobile">💳 </span>Send statement
             </button>
           )}
         </div>

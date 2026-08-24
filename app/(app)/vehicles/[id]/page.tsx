@@ -181,7 +181,7 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
         {owner && (
           <div className="border-t pt-2" style={{ borderColor: 'var(--border)' }}>
             <Link href={`/report?vehicle=${id}`} className="btn btn-sm btn-primary">
-              🖨️ Print history for this vehicle
+              <span className="emoji-mobile">🖨️ </span>Print history for this vehicle
             </Link>
           </div>
         )}

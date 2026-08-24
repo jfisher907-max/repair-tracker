@@ -111,12 +111,12 @@ export default function RequestsPage() {
           <div className="flex flex-wrap items-center gap-2 text-sm">
             {r.phone && (
               <>
-                <a className="btn btn-sm" href={`tel:${r.phone}`}>📞 {r.phone}</a>
-                <a className="btn btn-sm" href={`sms:${r.phone}`}>💬 Text</a>
+                <a className="btn btn-sm" href={`tel:${r.phone}`}><span className="emoji-mobile">📞 </span>{r.phone}</a>
+                <a className="btn btn-sm" href={`sms:${r.phone}`}><span className="emoji-mobile">💬 </span>Text</a>
               </>
             )}
             {r.email && (
-              <a className="btn btn-sm" href={`mailto:${r.email}`}>✉️ {r.email}</a>
+              <a className="btn btn-sm" href={`mailto:${r.email}`}><span className="emoji-mobile">✉️ </span>{r.email}</a>
             )}
             {r.contact_pref && (
               <span className="text-xs" style={{ color: 'var(--text3)' }}>
@@ -132,13 +132,13 @@ export default function RequestsPage() {
             <div className="flex gap-2">
               {r.status === 'new' && (
                 <button className="btn btn-sm" onClick={() => setStatus(r, 'contacted')}>
-                  ✓ Mark contacted
+                  <span className="emoji-mobile">✓ </span>Mark contacted
                 </button>
               )}
               {r.status !== 'closed' ? (
                 <>
                   <Link className="btn btn-sm" href="/jobs/new">
-                    🔧 Start job
+                    <span className="emoji-mobile">🔧 </span>Start job
                   </Link>
                   <button className="btn btn-sm" onClick={() => setStatus(r, 'closed')}>
                     Close

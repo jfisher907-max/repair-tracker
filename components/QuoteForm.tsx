@@ -471,7 +471,7 @@ export default function QuoteForm({
                   setLines(lines.length === 1 && isBlank(lines[0]) ? [newLine] : [...lines, newLine])
                 }}
               >
-                💡 {s.description.length > 42 ? `${s.description.slice(0, 42)}…` : s.description}
+                <span className="emoji-mobile">💡 </span>{s.description.length > 42 ? `${s.description.slice(0, 42)}…` : s.description}
                 {s.estimate_cents != null && ` · ${formatCents(s.estimate_cents)}`}
               </button>
             ))}

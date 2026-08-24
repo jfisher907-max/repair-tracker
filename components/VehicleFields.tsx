@@ -181,7 +181,7 @@ export default function VehicleFields({
           }}
         />
         <button type="button" className="btn" onClick={decodeVin} disabled={decoding}>
-          {decoding ? 'Decoding…' : '⚡ Decode VIN'}
+          {decoding ? 'Decoding…' : <><span className="emoji-mobile">⚡ </span>Decode VIN</>}
         </button>
       </div>
       {vinStatus ? (
@@ -190,7 +190,7 @@ export default function VehicleFields({
         </p>
       ) : (
         <p className="text-xs" style={{ color: 'var(--text3)' }}>
-          📷 On iPhone: tap the field, then the scan-text button on the keyboard, and point the
+          <span className="emoji-mobile">📷 </span>On iPhone: tap the field, then the scan-text button on the keyboard, and point the
           camera at the door-jamb sticker or windshield plate. Decode fills the rest.
         </p>
       )}

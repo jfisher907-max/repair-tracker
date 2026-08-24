@@ -202,7 +202,13 @@ export default function ExpensesPage() {
         <div className="panel-in card grid grid-cols-2 gap-2 sm:grid-cols-3">
           <div className="col-span-2 flex items-center gap-2 sm:col-span-3">
             <label className="btn btn-sm cursor-pointer">
-              {scanning ? 'Working…' : form.storage_path ? '📎 Receipt attached — replace' : '📷 Scan receipt'}
+              {scanning ? (
+                'Working…'
+              ) : form.storage_path ? (
+                <><span className="emoji-mobile">📎 </span>Receipt attached — replace</>
+              ) : (
+                <><span className="emoji-mobile">📷 </span>Scan receipt</>
+              )}
               <input
                 type="file"
                 accept="image/*,application/pdf,.pdf,.heic,.heif"

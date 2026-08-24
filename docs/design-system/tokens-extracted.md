@@ -58,12 +58,27 @@ listed here follows the canvas.
   parallel `--doc-*` variables rather than the `.wnt-doc` token re-map. The
   VALUES are reconciled to the canvas's document palette; renaming the
   variables would be a no-visual-change refactor carrying real print risk.
-- **Emoji remain in owner-side action buttons** (Print, Reports, Expenses …).
-  The canvas bans emoji in buttons; on a phone-first owner tool they are the
-  fastest scan target, and they never appear in customer documents, which is
-  what the rule protects. Flagged for the owner's call.
-- **The page-arrival stagger (`.page-anim`) is retained** against the canvas's
-  "no entrance animation" rule. Flagged for the owner's call.
+- **Emoji are PHONE-ONLY (owner decision, 2026-08-23).** The canvas bans emoji
+  in buttons; the owner's call is that they earn their place on the phone —
+  fastest scan target, scarcest space — and not on desktop, which is text-led
+  and where the canvas rule therefore holds. Implementation:
+  - Nav needs no CSS: the tab bar is phone-only and keeps its icons; the
+    desktop sidebar is a separate component and now carries none.
+  - Everything else that uses an emoji as a LABEL PREFIX wraps it in
+    `<span className="emoji-mobile">EMOJI </span>`, hidden at `min-width:
+    640px` (Tailwind's `sm:`). Include the trailing space inside the span so
+    desktop shows no stray gap. `.stat-tile .stat-emoji` hides by the same
+    rule.
+  - Deliberately NOT hidden, because hiding them would leave a hole or an
+    empty control: illustrative empty-state art (🚗 🧾 🔍 🖼️ at text-2xl/4xl),
+    standalone indicator badges (the pdf-vs-receipt glyph, the `· 🧾` marker),
+    and icon-only buttons with no text label (🗑).
+  - Customer documents were already clean — their `✓` marks are text glyphs,
+    not emoji, and stay everywhere.
+- **The page-arrival stagger (`.page-anim`) is KEPT (owner decision,
+  2026-08-23)** against the canvas's "no entrance animation" rule. The owner
+  wants the arrival motion; everything else in the motion spec (130ms
+  controls, 200ms panels, press .985, no bounce/ripple) is followed.
 
 ## tokens/colors.css (verbatim)
 

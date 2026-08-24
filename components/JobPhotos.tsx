@@ -195,7 +195,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
             <span className="flash-in text-xs" style={{ color: 'var(--text2)' }}>{note}</span>
           )}
           <label className="btn btn-sm cursor-pointer">
-            {busy ? 'Working…' : '📷 Add photos'}
+            {busy ? 'Working…' : <><span className="emoji-mobile">📷 </span>Add photos</>}
             <input
               type="file"
               accept="image/*"
@@ -278,7 +278,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
                     onClick={() => toggleVisible(p)}
                     title="Mark this photo as one the customer may see"
                   >
-                    {p.customer_visible ? '👁 Customer' : 'Internal'}
+                    {p.customer_visible ? <><span className="emoji-mobile">👁 </span>Customer</> : 'Internal'}
                   </button>
                   <button
                     className="btn btn-sm btn-danger !px-1.5"
@@ -303,7 +303,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
         >
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-sm font-semibold">{viewing.caption || 'Photo'}</span>
-            <button className="btn btn-sm" onClick={() => setViewing(null)}>✕ Close</button>
+            <button className="btn btn-sm" onClick={() => setViewing(null)}><span className="emoji-mobile">✕ </span>Close</button>
           </div>
           {/* The image directly, not a card inside a card — the previous
               version nested a second full-screen viewer and left most of the

@@ -440,17 +440,22 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                 style={{ color: quote.viewed_at ? 'var(--green)' : 'var(--text3)' }}
                 title="Whether the customer has opened the quote link"
               >
-                {quote.viewed_at
-                  ? `👁 viewed ${new Date(quote.viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
-                  : 'not viewed yet'}
+                {quote.viewed_at ? (
+                  <>
+                    <span className="emoji-mobile">👁 </span>
+                    {`viewed ${new Date(quote.viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
+                  </>
+                ) : (
+                  'not viewed yet'
+                )}
               </span>
             )}
             <span className={statusChipClass(quote.status)}>{quote.status}</span>
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn btn-sm btn-primary" onClick={shareLink}>📤 Send link</button>
-          <button className="btn btn-sm" onClick={() => window.print()}>🖨️ Print</button>
+          <button className="btn btn-sm btn-primary" onClick={shareLink}><span className="emoji-mobile">📤 </span>Send link</button>
+          <button className="btn btn-sm" onClick={() => window.print()}><span className="emoji-mobile">🖨️ </span>Print</button>
           <button
             className="btn btn-sm"
             onClick={() => {
@@ -476,7 +481,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
               setEditing(true)
             }}
           >
-            ✎ Edit
+            <span className="emoji-mobile">✎ </span>Edit
           </button>
           {quote.status === 'sent' && (
             <>
@@ -488,7 +493,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                   setRecordName(customer?.name ?? '')
                 }}
               >
-                ✓ Record approval
+                <span className="emoji-mobile">✓ </span>Record approval
               </button>
               <button
                 className="btn btn-sm"
@@ -498,18 +503,20 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                   setRecordName(customer?.name ?? '')
                 }}
               >
-                ✗ Record decline
+                <span className="emoji-mobile">✗ </span>Record decline
               </button>
             </>
           )}
           <button className="btn btn-sm" disabled={converting} onClick={convertToJob}>
-            {quote.job_id && quote.applied_at
-              ? '→ Open job'
-              : converting
-                ? 'Working…'
-                : quote.job_id
-                  ? '➕ Apply to job'
-                  : '🔧 Convert to job'}
+            {quote.job_id && quote.applied_at ? (
+              '→ Open job'
+            ) : converting ? (
+              'Working…'
+            ) : quote.job_id ? (
+              <><span className="emoji-mobile">➕ </span>Apply to job</>
+            ) : (
+              <><span className="emoji-mobile">🔧 </span>Convert to job</>
+            )}
           </button>
           <button className="btn btn-sm btn-danger" onClick={softDelete}>Delete</button>
         </div>
@@ -705,7 +712,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         )}
         {quote.notes && (
           <div className="card !py-2 text-sm" style={{ color: 'var(--text2)' }}>
-            🔒 Private notes: {quote.notes}
+            <span className="emoji-mobile">🔒 </span>Private notes: {quote.notes}
           </div>
         )}
       </div>

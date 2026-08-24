@@ -208,7 +208,7 @@ export default function ServiceReminders({
               </div>
               <div className="flex flex-none items-center gap-2">
                 <button className="btn btn-sm" onClick={() => markDone(r)}>
-                  ✓ Done today
+                  <span className="emoji-mobile">✓ </span>Done today
                 </button>
                 <button className="btn btn-sm" onClick={() => remove(r)} aria-label={`Delete ${r.name}`}>
                   🗑

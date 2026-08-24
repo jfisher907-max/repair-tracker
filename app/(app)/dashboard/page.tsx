@@ -378,10 +378,10 @@ export default function Dashboard() {
           + New Quote
         </Link>
         <Link href="/reports" className="btn">
-          📊 Reports
+          <span className="emoji-mobile">📊 </span>Reports
         </Link>
         <Link href="/expenses" className="btn">
-          💼 Expenses
+          <span className="emoji-mobile">💼 </span>Expenses
         </Link>
       </div>
 
@@ -394,7 +394,7 @@ export default function Dashboard() {
           borderLeft: `3px solid ${newRequests > 0 ? 'var(--accent)' : 'var(--border)'}`,
         }}
       >
-        <span className="font-semibold">🛎️ Service requests</span>
+        <span className="font-semibold"><span className="emoji-mobile">🛎️ </span>Service requests</span>
         <span className="text-sm" style={{ color: newRequests > 0 ? 'var(--text2)' : 'var(--text3)' }}>
           {newRequests > 0 ? `${newRequests} new — a customer is waiting to hear back` : 'none waiting'}
         </span>
@@ -405,7 +405,7 @@ export default function Dashboard() {
           className="card flex items-center justify-between gap-3 !py-3 hover:brightness-110"
           style={{ borderLeft: `3px solid ${docAlerts.some((d) => docState(d) === 'expired') ? 'var(--status-stop-solid)' : 'var(--status-wait-solid)'}` }}
         >
-          <span className="font-semibold">📄 Paperwork</span>
+          <span className="font-semibold"><span className="emoji-mobile">📄 </span>Paperwork</span>
           <span className="text-sm" style={{ color: 'var(--text2)' }}>
             {docAlerts.map((d, i) => (
               <span key={d.id}>
@@ -425,7 +425,7 @@ export default function Dashboard() {
           href={billing.unpaidInvoices > 0 ? '/billing?tab=invoices' : '/billing'}
           className="card flex items-center justify-between !py-3 hover:brightness-110"
         >
-          <span className="font-semibold">🧾 Billing</span>
+          <span className="font-semibold"><span className="emoji-mobile">🧾 </span>Billing</span>
           <span className="text-sm" style={{ color: 'var(--text2)' }}>
             {billing.openQuotes > 0 && (
               <>{billing.openQuotes} open quote{billing.openQuotes === 1 ? '' : 's'}</>

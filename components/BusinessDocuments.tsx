@@ -185,7 +185,7 @@ export default function BusinessDocuments() {
               </div>
               <div className="flex flex-none items-center gap-2">
                 <button className="btn btn-sm" onClick={() => open(d)}>
-                  📄 Open
+                  <span className="emoji-mobile">📄 </span>Open
                 </button>
                 <button
                   className="btn btn-sm btn-danger"
@@ -249,7 +249,8 @@ export default function BusinessDocuments() {
             </div>
           </div>
           <label className="btn w-full cursor-pointer">
-            {file ? `📎 ${file.name}` : '📎 Choose PDF or photo'}
+            <span className="emoji-mobile">📎 </span>
+            {file ? file.name : 'Choose PDF or photo'}
             <input
               type="file"
               accept="application/pdf,image/*"
@@ -294,10 +295,10 @@ export default function BusinessDocuments() {
           </div>
           <div className="flex flex-none items-center gap-2">
             <a className="btn btn-sm" href="/brand/wings-n-things-logo-email.png" download>
-              ⬇ Email logo
+              <span className="emoji-mobile">⬇ </span>Email logo
             </a>
             <a className="btn btn-sm" href="/brand/wings-n-things-brand.zip" download>
-              ⬇ All files
+              <span className="emoji-mobile">⬇ </span>All files
             </a>
           </div>
         </div>

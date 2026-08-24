@@ -211,7 +211,7 @@ export default function ReportsPage() {
             ))}
           </select>
           <button className="btn btn-sm btn-primary" onClick={() => window.print()}>
-            🖨️ Print / Save PDF
+            <span className="emoji-mobile">🖨️ </span>Print / Save PDF
           </button>
         </div>
       </div>

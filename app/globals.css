@@ -392,13 +392,25 @@ a.card:focus-visible {
   margin-top: 0.2rem;
   color: var(--text-heading);
 }
-/* Metric emoji sits in the top-right corner of the tile. */
+/* Metric emoji sits in the top-right corner of the tile — phone only. */
 .stat-tile .stat-emoji {
   position: absolute;
   top: 0.55rem;
   right: 0.7rem;
   font-size: 15px;
   opacity: 0.9;
+}
+
+/* Emoji are the icon set on the PHONE, where they are the fastest scan target
+   and screen space is scarce. Desktop is text-led, which is also where the
+   design system's "no emoji in buttons" rule applies. Nav needs no class:
+   the tab bar is phone-only and the sidebar is desktop-only, so the sidebar
+   simply carries no icons. Matches Tailwind's sm: breakpoint. */
+@media (min-width: 640px) {
+  .emoji-mobile,
+  .stat-tile .stat-emoji {
+    display: none;
+  }
 }
 
 /* Money: bold display face with tabular figures — never mono, never rounded.

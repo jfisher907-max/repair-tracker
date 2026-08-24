@@ -15,32 +15,34 @@ const tabs = [
   { href: '/followups', label: 'Follow-ups', icon: '🔔' },
 ]
 
-const sideNav: { label: string; items: { href: string; label: string; icon: string }[] }[] = [
+// The desktop sidebar is text-led: no icons. The phone tab bar (below) keeps
+// its emoji, which is where they earn their place.
+const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
   {
     label: 'Overview',
     items: [
-      { href: '/dashboard', label: 'Dashboard', icon: '🏠' },
-      { href: '/reports', label: 'Reports', icon: '📊' },
+      { href: '/dashboard', label: 'Dashboard' },
+      { href: '/reports', label: 'Reports' },
     ],
   },
   {
     label: 'Work',
     items: [
-      { href: '/jobs', label: 'Jobs', icon: '📁' },
-      { href: '/jobs/new', label: 'New Job', icon: '➕' },
-      { href: '/requests', label: 'Requests', icon: '🛎️' },
-      { href: '/followups', label: 'Follow-ups', icon: '🔔' },
+      { href: '/jobs', label: 'Jobs' },
+      { href: '/jobs/new', label: 'New Job' },
+      { href: '/requests', label: 'Requests' },
+      { href: '/followups', label: 'Follow-ups' },
     ],
   },
   {
     label: 'Money',
     items: [
-      { href: '/billing', label: 'Quotes & Invoices', icon: '🧾' },
-      { href: '/quotes/new', label: 'New Quote', icon: '📝' },
-      { href: '/expenses', label: 'Expenses', icon: '💼' },
+      { href: '/billing', label: 'Quotes & Invoices' },
+      { href: '/quotes/new', label: 'New Quote' },
+      { href: '/expenses', label: 'Expenses' },
     ],
   },
-  { label: 'People', items: [{ href: '/customers', label: 'Customers', icon: '👤' }] },
+  { label: 'People', items: [{ href: '/customers', label: 'Customers' }] },
 ]
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -91,7 +93,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   className={`side-item ${isActive(item.href) ? 'active' : ''}`}
                 >
-                  <span className="text-base leading-none">{item.icon}</span>
                   {item.label}
                 </Link>
               ))}
@@ -102,7 +103,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           href="/settings"
           className={`side-item ${pathname.startsWith('/settings') ? 'active' : ''}`}
         >
-          <span className="text-base leading-none">⚙️</span>
           Settings
         </Link>
       </aside>

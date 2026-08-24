@@ -265,7 +265,7 @@ export default function JobForm({ job }: { job?: Job }) {
                   setTemplateName(null)
                 }}
               >
-                ✕ Clear
+                <span className="emoji-mobile">✕ </span>Clear
               </button>
             )}
           </div>

@@ -220,7 +220,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
             then you review everything before it’s saved.
           </p>
           <label className="btn btn-primary w-full cursor-pointer">
-            📷 Photo or PDF
+            <span className="emoji-mobile">📷 </span>Photo or PDF
             <input
               type="file"
               accept="image/*,application/pdf,.pdf,.heic,.heif"
