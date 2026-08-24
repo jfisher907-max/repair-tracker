@@ -9,7 +9,8 @@ interface JobPhoto {
   job_id: string
   storage_path: string
   caption: string | null
-  customer_visible: boolean
+  show_on_quote: boolean
+  show_on_invoice: boolean
   created_at: string
 }
 
@@ -167,10 +168,13 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
     await load()
   }
 
-  async function toggleVisible(p: JobPhoto) {
+  /** A photo can go on the quote, on the invoice, both, or neither — the
+   *  cracked boot belongs on the estimate, the fitted part belongs on the
+   *  bill, and most photos are just for the shop. */
+  async function toggleShare(p: JobPhoto, field: 'show_on_quote' | 'show_on_invoice') {
     await supabase
       .from('job_photos')
-      .update({ customer_visible: !p.customer_visible })
+      .update({ [field]: !p[field] })
       .eq('id', p.id)
     await load()
   }
@@ -270,15 +274,29 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
                 <div className="flex items-center justify-between gap-1">
                   <button
                     className="btn btn-sm !px-1.5 !text-[0.65rem]"
+                    aria-pressed={p.show_on_quote}
                     style={
-                      p.customer_visible
-                        ? { borderColor: 'var(--green)', color: 'var(--green)' }
+                      p.show_on_quote
+                        ? { borderColor: 'var(--status-ok-solid)', color: 'var(--status-ok-fg)' }
                         : undefined
                     }
-                    onClick={() => toggleVisible(p)}
-                    title="Mark this photo as one the customer may see"
+                    onClick={() => toggleShare(p, 'show_on_quote')}
+                    title="Show this photo on the customer's quote"
                   >
-                    {p.customer_visible ? <><span className="emoji-mobile">👁 </span>Customer</> : 'Internal'}
+                    {p.show_on_quote ? '✓ ' : ''}Quote
+                  </button>
+                  <button
+                    className="btn btn-sm !px-1.5 !text-[0.65rem]"
+                    aria-pressed={p.show_on_invoice}
+                    style={
+                      p.show_on_invoice
+                        ? { borderColor: 'var(--status-ok-solid)', color: 'var(--status-ok-fg)' }
+                        : undefined
+                    }
+                    onClick={() => toggleShare(p, 'show_on_invoice')}
+                    title="Attach this photo to the customer's invoice"
+                  >
+                    {p.show_on_invoice ? '✓ ' : ''}Invoice
                   </button>
                   <button
                     className="btn btn-sm btn-danger !px-1.5"

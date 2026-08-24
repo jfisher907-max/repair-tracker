@@ -7,6 +7,7 @@ import { BRAND_NAME } from '@/lib/brand'
 import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { useCheckoutReturn } from '@/lib/checkout-return'
+import SharedPhotos from '@/components/public/SharedPhotos'
 import type { DocLine } from '@/lib/types'
 
 interface PublicInvoice {
@@ -182,6 +183,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
           )}
         </div>
       )}
+      <SharedPhotos token={token} kind="invoice" title="The work" />
       <DocView doc={doc} />
     </div>
   )

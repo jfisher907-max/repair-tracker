@@ -78,7 +78,8 @@ const TABLES: Record<string, string[]> = {
     'id', 'name', 'title', 'work_performed', 'labor_hours', 'lines', 'created_at', 'updated_at',
   ],
   job_photos: [
-    'id', 'job_id', 'storage_path', 'caption', 'customer_visible', 'created_at', 'updated_at',
+    'id', 'job_id', 'storage_path', 'caption', 'show_on_quote', 'show_on_invoice',
+    'customer_visible', 'created_at', 'updated_at',
   ],
   recommendations: [
     'id', 'job_id', 'vehicle_id', 'description', 'status', 'target_date',
