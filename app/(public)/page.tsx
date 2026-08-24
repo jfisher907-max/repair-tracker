@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 const SERVICES = [
   {
     title: 'Diagnostics',
-    body: 'Finding the actual Fault. Scan, test, repair.',
+    body: 'Finding the actual fault. Scan, test, repair.',
   },
   {
     title: 'Scheduled Maintenance',
