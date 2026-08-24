@@ -31,27 +31,27 @@ export const metadata: Metadata = {
 const SERVICES = [
   {
     title: 'Diagnostics',
-    body: 'Finding the actual fault — not throwing parts at a symptom. Scan, test, verify, then talk.',
+    body: 'Finding the actual Fault. Scan, test, repair.',
   },
   {
-    title: 'Scheduled maintenance',
-    body: 'Oil, fluids, filters, belts, and inspections on the schedule your vehicle actually needs.',
+    title: 'Scheduled Maintenance',
+    body: 'Oil, fluids, filters, belts, and scheduled inspections.',
   },
   {
-    title: 'Brakes & suspension',
-    body: 'Pads, rotors, wheel bearings, shocks and struts — the systems that keep you planted.',
+    title: 'Brakes & Suspension',
+    body: 'Pads, calipers, rotors, wheel bearings, shocks and struts.',
   },
   {
-    title: 'Electrical & electronics',
-    body: 'Batteries, charging, wiring, sensors, and the gremlins other shops give back unsolved.',
+    title: 'Electrical & Electronics',
+    body: 'Batteries, charging, wiring, and sensors.',
   },
   {
-    title: 'Heating & cooling',
-    body: 'Cooling systems and cabin heat, sorted before an Alaska winter makes them urgent.',
+    title: 'Heating & Cooling',
+    body: 'Cooling & heating systems.',
   },
   {
-    title: 'Pre-purchase inspections',
-    body: 'A straight, documented answer on a vehicle before you hand over the money.',
+    title: 'Pre-purchase Inspections',
+    body: 'A straight, documented inspection on a vehicle you’d like to add into your life.',
   },
 ]
 
