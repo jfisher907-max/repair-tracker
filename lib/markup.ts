@@ -61,6 +61,18 @@ export function isPassThrough(description: string | null | undefined): boolean {
 }
 
 /**
+ * Sales tax specifically — narrower than isPassThrough, which also matches
+ * freight, core charges and discounts. Those are legitimate part lines; sales
+ * tax is not, because it is the shop's cost and billing it as a line makes the
+ * invoice charge tax on tax (see migration 0027).
+ */
+const SALES_TAX_LINE = new RegExp('\b(sales\s*)?tax\b', 'i')
+
+export function isSalesTaxLine(description: string | null | undefined): boolean {
+  return SALES_TAX_LINE.test((description ?? '').trim())
+}
+
+/**
  * The charge for one unit at this cost, or null when the matrix is off or has
  * nothing to say. Null keeps the old meaning — charge at cost — so turning the
  * feature off restores exactly the previous behaviour.

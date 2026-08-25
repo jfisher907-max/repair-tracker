@@ -41,7 +41,7 @@ const TABLES: Record<string, string[]> = {
   ],
   receipts: [
     'id', 'job_id', 'storage_path', 'store', 'purchase_date', 'receipt_total_cents',
-    'extraction_status', 'created_at', 'updated_at',
+    'tax_cents', 'extraction_status', 'created_at', 'updated_at',
   ],
   settings: [
     'id', 'business_name', 'business_phone', 'business_address', 'business_email',

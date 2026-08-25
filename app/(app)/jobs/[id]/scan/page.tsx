@@ -9,6 +9,7 @@ import { syncJobPayment } from '@/lib/payments'
 import { prepareUpload } from '@/lib/upload'
 import { loadMarkupConfig, markedUpCharge, type MarkupConfig } from '@/lib/markup'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
+import { isSalesTaxLine } from '@/lib/markup'
 import type { ExtractionResult } from '@/lib/types'
 
 interface ReviewLine {
@@ -44,6 +45,9 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
   const [store, setStore] = useState('')
   const [purchaseDate, setPurchaseDate] = useState('')
   const [receiptTotal, setReceiptTotal] = useState('')
+  /** Sales tax printed on the receipt. A cost of the job, never a customer
+      charge — see migration 0027. */
+  const [salesTax, setSalesTax] = useState('')
   const [rows, setRows] = useState<ReviewLine[]>([])
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
   const [markup, setMarkup] = useState<MarkupConfig>({ enabled: false, tiers: [] })
@@ -83,7 +87,45 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
     [rows],
   )
   const printedTotalCents = parseMoney(receiptTotal)
-  const mismatch = printedTotalCents != null && Math.abs(printedTotalCents - runningTotalCents) > 0
+  const taxCents = parseMoney(salesTax) ?? 0
+  // The paper balances when the parts you typed plus the tax you paid equal
+  // the printed total. Tax is not a line because it must never reach the
+  // customer's invoice.
+  const accountedCents = runningTotalCents + taxCents
+  const balanced = printedTotalCents != null && printedTotalCents - accountedCents === 0
+  const unaccountedCents = printedTotalCents == null ? 0 : printedTotalCents - accountedCents
+
+  /**
+   * A row named like sales tax is never acceptable, however it got here — the
+   * extractor used to be told to emit one, and it was the old hand-entry
+   * workaround. Left in, it bills the customer tax and the invoice then taxes
+   * that subtotal again. It also makes the arithmetic balance, so without this
+   * the screen would show a green all-clear over the exact bug we are fixing.
+   */
+  const taxRowIdx = rows
+    .map((r, i) => (r.description.trim() && isSalesTaxLine(r.description) ? i : -1))
+    .filter((i) => i >= 0)
+  const hasTaxRow = taxRowIdx.length > 0
+  const mismatch = printedTotalCents == null ? hasTaxRow : !balanced || hasTaxRow
+
+  /** Juneau charges 5%. A remainder far past that is a missed line, a typo, or
+   *  a credit slip — not tax, and banking it invents cost that never left. */
+  const MAX_PLAUSIBLE_TAX_BP = 1500
+  const taxLooksPlausible =
+    runningTotalCents > 0 &&
+    unaccountedCents > 0 &&
+    unaccountedCents * 10000 <= runningTotalCents * MAX_PLAUSIBLE_TAX_BP
+  const impliedTaxPct =
+    runningTotalCents > 0 ? ((unaccountedCents / runningTotalCents) * 100).toFixed(1) : null
+
+  /** Move a tax row into the tax box: add its amount, drop the row. Moving,
+   *  not copying, is what prevents counting it on both sides. */
+  function moveTaxRow(i: number) {
+    const r = rows[i]
+    const cents = Math.round((Number(r.qty) || 0) * (parseMoney(r.unit_cost) ?? 0))
+    setSalesTax(centsToInput(taxCents + cents))
+    setRows(rows.filter((_, k) => k !== i))
+  }
 
   async function onPickFile(picked: File) {
     setPhase('working')
@@ -136,6 +178,7 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
       setStore(extraction.store ?? '')
       setPurchaseDate(extraction.purchase_date ?? '')
       setReceiptTotal(extraction.receipt_total != null ? extraction.receipt_total.toFixed(2) : '')
+      setSalesTax(extraction.sales_tax != null ? extraction.sales_tax.toFixed(2) : '')
       setRows(
         extraction.lines.map((l) => ({
           part_number: l.part_number ?? '',
@@ -164,7 +207,8 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
         .update({
           store: store.trim() || null,
           purchase_date: purchaseDate || null,
-          receipt_total_cents: parseMoney(receiptTotal),
+          receipt_total_cents: printedTotalCents,
+          tax_cents: taxCents,
           extraction_status: extracted ? 'extracted' : 'manual',
         })
         .eq('id', receiptId)
@@ -286,13 +330,23 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
                   onChange={(e) => setPurchaseDate(e.target.value)}
                 />
               </div>
-              <div className="col-span-2">
+              <div>
                 <label className="label">Receipt total (as printed)</label>
                 <input
                   className="input"
                   inputMode="decimal"
                   value={receiptTotal}
                   onChange={(e) => setReceiptTotal(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label">Sales tax paid</label>
+                <input
+                  className="input"
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={salesTax}
+                  onChange={(e) => setSalesTax(e.target.value)}
                 />
               </div>
             </div>
@@ -356,27 +410,87 @@ export default function ScanReceiptPage({ params }: { params: Promise<{ id: stri
 
               <div
                 className="flex items-center justify-between rounded-lg px-3 py-2"
+                role="status"
                 style={{
                   background: mismatch ? 'var(--status-stop-bg)' : 'var(--bg2)',
-                  color: mismatch ? 'var(--red)' : 'var(--green)',
+                  color: mismatch
+                    ? 'var(--status-stop-fg)'
+                    : printedTotalCents == null
+                      ? 'var(--text2)'
+                      : 'var(--green)',
                 }}
               >
                 <span className="text-sm font-semibold">
-                  Lines total {mismatch ? '≠' : '='} printed total
+                  {printedTotalCents == null
+                    ? 'Parts + tax'
+                    : `Parts + tax ${mismatch ? '≠' : '='} printed total`}
                 </span>
                 <span className="money font-bold">
-                  {formatCents(runningTotalCents)}
+                  {formatCents(accountedCents)}
                   {printedTotalCents != null && ` / ${formatCents(printedTotalCents)}`}
                 </span>
               </div>
+              {hasTaxRow && (
+                <div className="space-y-1">
+                  <p className="text-xs" style={{ color: 'var(--status-stop-fg)' }}>
+                    Sales tax is on a line. Billed to the customer it gets taxed again — move it
+                    into the tax box instead.
+                  </p>
+                  {taxRowIdx.map((i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      className="btn btn-sm w-full"
+                      onClick={() => moveTaxRow(i)}
+                    >
+                      Move “{rows[i].description.trim()}” into sales tax
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!hasTaxRow && !balanced && printedTotalCents != null && unaccountedCents > 0 && (
+                taxLooksPlausible ? (
+                  <button
+                    type="button"
+                    className="btn btn-sm w-full"
+                    onClick={() => setSalesTax(centsToInput(taxCents + unaccountedCents))}
+                  >
+                    {formatCents(unaccountedCents)} unaccounted ({impliedTaxPct}% of parts) — bank
+                    it as sales tax
+                  </button>
+                ) : (
+                  <p className="text-xs" style={{ color: 'var(--status-stop-fg)' }}>
+                    {runningTotalCents <= 0
+                      ? `${formatCents(unaccountedCents)} unaccounted, but the lines total ${formatCents(runningTotalCents)} — on a credit slip type the printed total as a negative.`
+                      : `${formatCents(unaccountedCents)} unaccounted — that is ${impliedTaxPct}% of the parts, too much for sales tax. Check for a line you haven't entered yet.`}
+                  </p>
+                )
+              )}
+              {!hasTaxRow && !balanced && printedTotalCents != null && unaccountedCents < 0 && (
+                <p className="text-xs" style={{ color: 'var(--status-stop-fg)' }}>
+                  {formatCents(-unaccountedCents)} over the printed total — check a line amount or
+                  the tax figure.
+                </p>
+              )}
+              {printedTotalCents == null && (
+                <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                  No printed total entered, so nothing is being checked against the paper.
+                </p>
+              )}
               <p className="text-xs" style={{ color: 'var(--text3)' }}>
-                Tax and core charges are ordinary lines (“Sales tax”, “Core charge”) so the job’s
-                parts cost matches the real receipt. Negative amounts are fine for returns.
+                Sales tax goes in its own box, not in a line. It counts as your cost — so profit
+                is honest — but it never reaches the customer&apos;s invoice, so they are not
+                taxed twice. Core charges stay ordinary lines; negative amounts are fine for
+                returns.
               </p>
             </div>
 
             <div className="flex gap-2">
-              <button className="btn btn-primary flex-1" disabled={saving} onClick={confirmSave}>
+              <button
+                className="btn btn-primary flex-1"
+                disabled={saving || hasTaxRow}
+                onClick={confirmSave}
+              >
                 {saving ? 'Saving…' : `Save ${rows.filter((r) => r.description.trim()).length} lines + receipt`}
               </button>
               <Link href={`/jobs/${jobId}`} className="btn">Cancel</Link>

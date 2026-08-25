@@ -12,11 +12,16 @@ type SupportedMedia = (typeof SUPPORTED_MEDIA)[number]
 const EXTRACTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['store', 'purchase_date', 'receipt_total', 'lines'],
+  required: ['store', 'purchase_date', 'receipt_total', 'sales_tax', 'lines'],
   properties: {
     store: { type: ['string', 'null'], description: 'Store/vendor name as printed' },
     purchase_date: { type: ['string', 'null'], description: 'Purchase date as YYYY-MM-DD, null if unreadable' },
     receipt_total: { type: ['number', 'null'], description: 'Grand total as printed, in dollars' },
+    sales_tax: {
+      type: ['number', 'null'],
+      description:
+        'Sales tax as printed, in dollars. Null if the receipt shows none. Negative on a credit/return slip. NEVER also list this as a line.',
+    },
     lines: {
       type: 'array',
       items: {
@@ -36,12 +41,13 @@ const EXTRACTION_SCHEMA = {
 } as const
 
 const PROMPT = `Extract the line items from this store receipt photo. Rules:
-- Include EVERY charged line: parts, sales tax, core charges, shop fees, discounts and refunds (as negative unit_cost).
+- Include every PARTS line: parts, core charges, shop fees, discounts and refunds (as negative unit_cost).
+- SALES TAX IS NOT A LINE. Report it once in sales_tax and never as a line item — it is the shop's cost, not something the customer is billed for. This applies however the receipt prints it ("TAX", "SALES TAX", "GST", a tax subtotal).
 - NEVER invent or guess part numbers — use null when a part number is not clearly printed.
 - Mark any value you are unsure about (faded, blurry, cut off) with confidence "low"; otherwise "high".
 - Ignore marketing text, surveys, loyalty-program blurbs, and store addresses.
 - qty defaults to 1 when not printed. unit_cost is the per-unit price so qty × unit_cost equals the line amount.
-- receipt_total is the grand total as printed on the receipt.
+- receipt_total is the grand total as printed on the receipt. lines + sales_tax should equal it.
 Receipts are often thermal-faded, crumpled, or photographed at an angle — do your best, and prefer null/low confidence over guessing.`
 
 function validateExtraction(raw: unknown): ExtractionResult {
@@ -66,6 +72,8 @@ function validateExtraction(raw: unknown): ExtractionResult {
     purchase_date: typeof o.purchase_date === 'string' ? o.purchase_date : null,
     receipt_total:
       typeof o.receipt_total === 'number' && Number.isFinite(o.receipt_total) ? o.receipt_total : null,
+    sales_tax:
+      typeof o.sales_tax === 'number' && Number.isFinite(o.sales_tax) ? o.sales_tax : null,
     lines,
   }
 }

@@ -81,22 +81,38 @@ export default function Dashboard() {
             })),
         )
       })
-    supabase
-      .from('part_lines')
-      .select('line_total_cents, purchase_date, job:jobs(date, deleted_at)')
-      .then(({ data }) => {
-        const rows =
-          (data as unknown as {
-            line_total_cents: number
-            purchase_date: string | null
-            job: { date: string; deleted_at: string | null } | null
-          }[]) ?? []
-        setPartOutflows(
-          rows
-            .filter((r) => r.job && !r.job.deleted_at)
-            .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents })),
-        )
-      })
+    // Parts spend is cash out the door, so it counts the sales tax paid at the
+    // counter as well as the parts themselves (receipts.tax_cents). That tax
+    // is a cost and never a customer charge — see migration 0027.
+    Promise.all([
+      supabase
+        .from('part_lines')
+        .select('line_total_cents, purchase_date, job:jobs(date, deleted_at)'),
+      supabase
+        .from('receipts')
+        .select('tax_cents, purchase_date, job:jobs(date, deleted_at)'),
+    ]).then(([lines, receipts]) => {
+      const lineRows =
+        (lines.data as unknown as {
+          line_total_cents: number
+          purchase_date: string | null
+          job: { date: string; deleted_at: string | null } | null
+        }[]) ?? []
+      const taxRows =
+        (receipts.data as unknown as {
+          tax_cents: number
+          purchase_date: string | null
+          job: { date: string; deleted_at: string | null } | null
+        }[]) ?? []
+      setPartOutflows([
+        ...lineRows
+          .filter((r) => r.job && !r.job.deleted_at)
+          .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents })),
+        ...taxRows
+          .filter((r) => r.job && !r.job.deleted_at && r.tax_cents > 0)
+          .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.tax_cents })),
+      ])
+    })
     supabase
       .from('invoices')
       .select('id, job_id, tax_cents, total_cents, status')
@@ -341,8 +357,11 @@ export default function Dashboard() {
           <>
         <MoneyRow label="Labor billed" value={stats.laborCharged} />
         <MoneyRow label="Parts billed" value={stats.partsCharged} />
-        <MoneyRow label="What the parts cost you" value={-stats.partsCostOnJobs} muted />
-        <MoneyRow label="Parts markup" value={stats.partsMarkup} />
+        <MoneyRow label="What the parts cost you (incl. counter tax)" value={-stats.partsCostOnJobs} muted />
+        {/* parts_cost_cents includes the sales tax paid at the counter
+            (migration 0027), so this is margin after that tax — not the raw
+            output of the markup matrix. Named for what it is. */}
+        <MoneyRow label="Parts margin" value={stats.partsMarkup} />
         <div className="border-t pt-1.5" style={{ borderColor: 'var(--border)' }}>
           <MoneyRow
             label="Earned on the work"

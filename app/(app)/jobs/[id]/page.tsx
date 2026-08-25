@@ -80,6 +80,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [draft, setDraft] = useState<LineDraft>(emptyDraft)
   const [addedFlash, setAddedFlash] = useState<string | null>(null)
   const [failedThumbs, setFailedThumbs] = useState<Set<string>>(new Set())
+  /** Correcting the sales tax recorded on a receipt after the fact. */
+  const [taxEditId, setTaxEditId] = useState<string | null>(null)
+  const [taxInput, setTaxInput] = useState('')
+  const [taxBusy, setTaxBusy] = useState(false)
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
   const [markup, setMarkup] = useState<MarkupConfig>({ enabled: false, tiers: [] })
@@ -165,7 +169,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   if (error) return <p style={{ color: 'var(--red)' }}>{error}</p>
   if (!job) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
-  const totals = computeTotals(job, lines)
+  /** Sales tax paid at the parts counter, across this job's receipts — a cost,
+   *  never a customer charge. Folded into parts cost the same way job_totals
+   *  does it, and broken out below the cost line so the figure can be
+   *  reconciled against the paper receipt. */
+  const receiptTaxCents = receipts.reduce((s, r) => s + (r.tax_cents ?? 0), 0)
+  const totals = computeTotals(job, lines, receiptTaxCents)
   // Ledger is authoritative once it has entries; jobs settled before payment
   // tracking existed fall back to their cached status/amount.
   const paidFromLedger = payments.reduce((s, p) => s + p.amount_cents, 0)
@@ -321,8 +330,33 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setBusyLineId(null)
   }
 
+  /** The scan screen writes tax once, on the receipt it just created — so
+   *  without this a fat-fingered figure would be frozen into job cost and the
+   *  P&L forever. Negative is allowed: a return refunds the tax too. */
+  async function saveReceiptTax(r: Receipt) {
+    if (taxBusy) return
+    setTaxBusy(true)
+    const { error } = await supabase
+      .from('receipts')
+      .update({ tax_cents: parseMoney(taxInput) ?? 0 })
+      .eq('id', r.id)
+    setTaxBusy(false)
+    if (error) {
+      setLineMsg(error.message)
+      return
+    }
+    setTaxEditId(null)
+    await load()
+  }
+
   async function deleteReceipt(r: Receipt) {
-    if (!confirm('Delete this receipt photo? Part lines from it stay.')) return
+    // Post-0027 a receipt row carries recorded cost, so the old reassurance
+    // ("part lines from it stay") is no longer the whole truth.
+    const taxWarning =
+      r.tax_cents > 0
+        ? ` The ${formatCents(r.tax_cents)} of sales tax recorded on it is removed from this job's cost.`
+        : ''
+    if (!confirm(`Delete this receipt photo? Part lines from it stay.${taxWarning}`)) return
     await supabase.storage.from('receipts').remove([r.storage_path])
     const { error } = await supabase.from('receipts').delete().eq('id', r.id)
     if (error) alert(error.message)
@@ -970,12 +1004,47 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                         {r.store ?? (pdf ? 'PDF receipt' : 'Receipt')}
                       </div>
                       <div className="truncate text-xs" style={{ color: 'var(--text3)' }}>
-                        {[r.purchase_date, formatCents(r.receipt_total_cents)]
+                        {[
+                          r.purchase_date,
+                          formatCents(r.receipt_total_cents),
+                          r.tax_cents ? `tax ${formatCents(r.tax_cents)}` : null,
+                        ]
                           .filter((x) => x && x !== '—')
                           .join(' · ') || r.extraction_status}
                       </div>
                     </div>
                   </a>
+                  {taxEditId === r.id ? (
+                    <div className="mt-1 flex gap-1">
+                      <input
+                        className="input !min-h-[36px] !py-1 text-sm"
+                        inputMode="decimal"
+                        aria-label="Sales tax on this receipt"
+                        value={taxInput}
+                        onChange={(e) => setTaxInput(e.target.value)}
+                      />
+                      <button
+                        className="btn btn-sm btn-primary !px-2"
+                        disabled={taxBusy}
+                        onClick={() => saveReceiptTax(r)}
+                      >
+                        ✓
+                      </button>
+                      <button className="btn btn-sm !px-2" onClick={() => setTaxEditId(null)}>
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="btn btn-sm mt-1 w-full !py-1 !text-[0.7rem]"
+                      onClick={() => {
+                        setTaxEditId(r.id)
+                        setTaxInput(r.tax_cents ? centsToInput(r.tax_cents) : '')
+                      }}
+                    >
+                      {r.tax_cents ? 'Edit sales tax' : 'Add sales tax'}
+                    </button>
+                  )}
                   {/* 44px hit area kept clear of the open-receipt link's
                       corner — a ~22px ✕ overlapping the link was a coin flip
                       with gloves on. */}
@@ -1003,6 +1072,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         <div className="label">Money</div>
         <Row label={`Labor (${Number(job.labor_hours)} hr × ${formatCents(job.labor_rate_cents)})`} value={totals.labor_charge_cents} />
         <Row label="Parts cost (what you paid)" value={totals.parts_cost_cents} />
+        {receiptTaxCents > 0 && (
+          <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text3)' }}>
+            <span>— of which sales tax at the counter</span>
+            <span className="money">{formatCents(receiptTaxCents)}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between">
           <span style={{ color: 'var(--text2)' }}>
             Parts charged{' '}

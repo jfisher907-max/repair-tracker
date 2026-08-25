@@ -32,18 +32,24 @@ export default function ReportsPage() {
   useEffect(() => {
     fetchJobsWithContext().then(setJobs)
     // Parts spending by purchase date (fallback: job date) for the cash view.
-    supabase
-      .from('part_lines')
-      .select('line_total_cents, purchase_date, job:jobs(date, deleted_at)')
-      .then(({ data }) => {
-        const rows =
-          (data as unknown as { line_total_cents: number; purchase_date: string | null; job: { date: string; deleted_at: string | null } | null }[]) ?? []
-        setPartOutflows(
-          rows
-            .filter((r) => r.job && !r.job.deleted_at)
-            .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents })),
-        )
-      })
+    // Cash out the door includes the sales tax paid at the counter, which is a
+    // cost of the job and never a customer charge (migration 0027).
+    Promise.all([
+      supabase.from('part_lines').select('line_total_cents, purchase_date, job:jobs(date, deleted_at)'),
+      supabase.from('receipts').select('tax_cents, purchase_date, job:jobs(date, deleted_at)'),
+    ]).then(([lines, receipts]) => {
+      type J = { date: string; deleted_at: string | null } | null
+      const lineRows = (lines.data as unknown as { line_total_cents: number; purchase_date: string | null; job: J }[]) ?? []
+      const taxRows = (receipts.data as unknown as { tax_cents: number; purchase_date: string | null; job: J }[]) ?? []
+      setPartOutflows([
+        ...lineRows
+          .filter((r) => r.job && !r.job.deleted_at)
+          .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents })),
+        ...taxRows
+          .filter((r) => r.job && !r.job.deleted_at && r.tax_cents > 0)
+          .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.tax_cents })),
+      ])
+    })
     // Exclude payments belonging to soft-deleted jobs — their revenue is
     // excluded too, so counting their cash would skew Collected vs Billed.
     supabase
@@ -178,7 +184,7 @@ export default function ReportsPage() {
   const generated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const activeMonths = report.months
     .map((m, i) => ({ ...m, i }))
-    .filter((m) => m.revenue !== 0 || m.overhead !== 0 || m.collected !== 0 || m.partsPaid !== 0)
+    .filter((m) => m.revenue !== 0 || m.overhead !== 0 || m.collected !== 0 || m.partsPaid !== 0 || m.parts !== 0)
 
   return (
     <div className="space-y-4">

@@ -85,6 +85,8 @@ export interface Receipt {
   store: string | null
   purchase_date: string | null
   receipt_total_cents: number | null
+  /** Sales tax printed on the purchase receipt — a cost, never a customer charge. */
+  tax_cents: number
   extraction_status: ExtractionStatus
   extraction_raw: unknown
   created_at: string
@@ -222,6 +224,9 @@ export interface ExtractionResult {
   store: string | null
   purchase_date: string | null
   receipt_total: number | null
+  /** Sales tax as printed. A cost of the job, reported separately so it can
+   *  never become a customer-billed line. */
+  sales_tax: number | null
   lines: ExtractedLine[]
 }
 

@@ -10,12 +10,22 @@ export interface ComputedTotals {
   profit_cents: number
 }
 
+/**
+ * Client-side mirror of the SQL job_totals view — keep them identical.
+ *
+ * receiptTaxCents is the sales tax paid at the parts counter across this job's
+ * receipts. It is a COST and never a customer charge: it raises parts cost and
+ * lowers profit, and touches nothing on the charged side (see migration 0027).
+ * Omitting it here while the view counts it is exactly how the two drift.
+ */
 export function computeTotals(
   job: Pick<Job, 'labor_hours' | 'labor_rate_cents' | 'parts_charged_override_cents'>,
   lines: Pick<PartLine, 'line_total_cents' | 'line_charge_total_cents'>[],
+  receiptTaxCents = 0,
 ): ComputedTotals {
   const labor = Math.round(Number(job.labor_hours) * job.labor_rate_cents)
-  const partsCost = lines.reduce((sum, l) => sum + l.line_total_cents, 0)
+  const partsCost =
+    lines.reduce((sum, l) => sum + l.line_total_cents, 0) + receiptTaxCents
   const lineCharges = lines.reduce(
     (sum, l) => sum + (l.line_charge_total_cents ?? l.line_total_cents),
     0,
