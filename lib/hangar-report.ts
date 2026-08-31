@@ -283,7 +283,7 @@ export function buildEmailText(
     )
     if (Object.keys(st.reasons).length) {
       L.push('')
-      L.push(`  By Reason (for proration):`)
+      L.push(`  By Reason:`)
       Object.entries(st.reasons).forEach(([r, d]) =>
         L.push(
           `    ${r.padEnd(34)} ${(d.ms / 3600000).toFixed(1)} hrs  (${d.count} session${d.count !== 1 ? 's' : ''})`,
