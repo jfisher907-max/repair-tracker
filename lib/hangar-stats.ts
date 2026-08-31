@@ -159,3 +159,104 @@ export function toLocalInput(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
+
+// ── Range clipping ───────────────────────────────────────────────
+// For hour AGGREGATES, filtering rows by their start date skews windows:
+// a months-old open "assignment" session (see the operator's model — jets
+// stay 'in ALNW' indefinitely) would contribute nothing to "Last 30 Days"
+// even though it spans the whole window. These helpers return rows whose
+// span overlaps the range, CLIPPED to it, with open spans closed at `now` —
+// so a window sums exactly the hours that fell inside it. Use for stats;
+// keep plain filterByDate for record lists (History), where you want the
+// actual rows with their real timestamps.
+
+export function clipSessionsToRange(
+  sessions: HangarSession[],
+  filter: HangarDateFilter,
+  now: Date,
+): HangarSession[] {
+  const { start, end } = getDateRange(filter)
+  const lo = start ? start.getTime() : -Infinity
+  const hi = Math.min(end ? end.getTime() : Infinity, now.getTime())
+  const out: HangarSession[] = []
+  for (const s of sessions) {
+    const a = Math.max(new Date(s.entry).getTime(), lo)
+    const b = Math.min(s.exit ? new Date(s.exit).getTime() : now.getTime(), hi)
+    if (b > a) out.push({ ...s, entry: new Date(a).toISOString(), exit: new Date(b).toISOString() })
+  }
+  return out
+}
+
+export function clipUnavailToRange(
+  periods: HangarUnavail[],
+  filter: HangarDateFilter,
+  now: Date,
+): HangarUnavail[] {
+  const { start, end } = getDateRange(filter)
+  const lo = start ? start.getTime() : -Infinity
+  const hi = Math.min(end ? end.getTime() : Infinity, now.getTime())
+  const out: HangarUnavail[] = []
+  for (const u of periods) {
+    const a = Math.max(new Date(u.start_time).getTime(), lo)
+    const b = Math.min(u.end_time ? new Date(u.end_time).getTime() : now.getTime(), hi)
+    if (b > a) out.push({ ...u, start_time: new Date(a).toISOString(), end_time: new Date(b).toISOString() })
+  }
+  return out
+}
+
+// ── Monthly proration (ALNW billing) ─────────────────────────────
+// Per-calendar-month unavailable time with periods CLIPPED to month
+// boundaries (a period straddling two months is split between them),
+// open periods clipped at `now`. Local time throughout, matching the
+// rest of the section. The dollar math (share of a monthly rate) is
+// display-only — nothing monetary is stored.
+
+export type MonthProration = {
+  key: string // 'YYYY-MM'
+  label: string // 'Aug 2026'
+  monthHours: number
+  unavailHours: number
+  pct: number // 0..100
+  current: boolean // the month `now` falls in (still accruing)
+}
+
+export function monthlyUnavailBreakdown(periods: HangarUnavail[], now: Date): MonthProration[] {
+  if (!periods.length) return []
+  const earliest = periods.reduce(
+    (min, u) => Math.min(min, new Date(u.start_time).getTime()),
+    Infinity,
+  )
+  const first = new Date(earliest)
+  const rows: MonthProration[] = []
+  let y = first.getFullYear()
+  let m = first.getMonth()
+  for (;;) {
+    const monthStart = new Date(y, m, 1)
+    if (monthStart > now) break
+    const monthEnd = new Date(y, m + 1, 1)
+    const monthHours = (monthEnd.getTime() - monthStart.getTime()) / 3600000
+    let ms = 0
+    for (const u of periods) {
+      const s = Math.max(new Date(u.start_time).getTime(), monthStart.getTime())
+      const e = Math.min(u.end_time ? new Date(u.end_time).getTime() : now.getTime(), monthEnd.getTime())
+      if (e > s) ms += e - s
+    }
+    const unavailHours = ms / 3600000
+    if (unavailHours > 0) {
+      rows.push({
+        key: `${y}-${String(m + 1).padStart(2, '0')}`,
+        label: monthStart.toLocaleString('en-US', { month: 'short', year: 'numeric' }),
+        monthHours,
+        unavailHours,
+        pct: (unavailHours / monthHours) * 100,
+        current: now >= monthStart && now < monthEnd,
+      })
+    }
+    m += 1
+    if (m > 11) {
+      m = 0
+      y += 1
+    }
+  }
+  return rows
+}

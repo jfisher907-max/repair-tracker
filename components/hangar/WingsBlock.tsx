@@ -1,7 +1,7 @@
 'use client'
 
 import type { HangarUnavail } from '@/lib/hangar'
-import { filterByDate, fmtDT, fmtDur, getUnavailStats, type HangarDateFilter } from '@/lib/hangar-stats'
+import { clipUnavailToRange, fmtDT, fmtDur, getUnavailStats, type HangarDateFilter } from '@/lib/hangar-stats'
 
 const THIS_MONTH: HangarDateFilter = { preset: 'this_month', start: null, end: null }
 
@@ -17,7 +17,9 @@ export default function WingsBlock({
   busy: boolean
 }) {
   const open = unavail.find((u) => !u.end_time)
-  const monthHrs = getUnavailStats(filterByDate(unavail, 'start_time', THIS_MONTH)).totalHours
+  // Clipped to the calendar month so a period straddling month boundaries
+  // contributes only its in-month portion — matches the proration table.
+  const monthHrs = getUnavailStats(clipUnavailToRange(unavail, THIS_MONTH, new Date(now))).totalHours
 
   return (
     <div className={`card ${open ? 'card-line-stop' : 'card-line-ok'}`}>

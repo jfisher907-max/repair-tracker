@@ -6,8 +6,9 @@
 import type { HangarSession, HangarUnavail } from './hangar'
 import {
   HANGARS,
+  clipSessionsToRange,
+  clipUnavailToRange,
   completedHangarMs,
-  filterByDate,
   fmtDT,
   fmtDur,
   getAcStats,
@@ -17,10 +18,21 @@ import {
   type HangarDateFilter,
 } from './hangar-stats'
 
+// Aggregates come from range-CLIPPED spans (open ones counted up to now) so
+// the report's hour totals match the Reports page; the row listings keep the
+// original records — real timestamps, 'Ongoing' where still open — filtered
+// to those overlapping the range.
 function filtered(sessions: HangarSession[], unavail: HangarUnavail[], filter: HangarDateFilter) {
+  const now = new Date()
+  const fSess = clipSessionsToRange(sessions, filter, now)
+  const fUnavail = clipUnavailToRange(unavail, filter, now)
+  const sessIds = new Set(fSess.map((s) => s.id))
+  const unavailIds = new Set(fUnavail.map((u) => u.id))
   return {
-    fSess: filterByDate(sessions, 'entry', filter),
-    fUnavail: filterByDate(unavail, 'start_time', filter),
+    fSess,
+    fUnavail,
+    logSess: sessions.filter((s) => sessIds.has(s.id)),
+    logUnavail: unavail.filter((u) => unavailIds.has(u.id)),
   }
 }
 
@@ -30,15 +42,15 @@ export function buildReportHTML(
   filter: HangarDateFilter,
 ): string {
   const now = new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' })
-  const { fSess, fUnavail } = filtered(sessions, unavail, filter)
+  const { fSess, fUnavail, logSess, logUnavail } = filtered(sessions, unavail, filter)
   const s1 = getAcStats('N254AL', fSess)
   const s2 = getAcStats('N253AL', fSess)
   const us = getUnavailStats(fUnavail)
   const label = getPresetLabel(filter.preset)
   const cwMs = completedHangarMs(fSess, 'Wings Hangar')
   const caMs = completedHangarMs(fSess, 'ALNW')
-  const sorted = [...fSess].sort((a, b) => new Date(b.entry).getTime() - new Date(a.entry).getTime())
-  const sortedU = [...fUnavail].sort(
+  const sorted = [...logSess].sort((a, b) => new Date(b.entry).getTime() - new Date(a.entry).getTime())
+  const sortedU = [...logUnavail].sort(
     (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime(),
   )
 
@@ -235,7 +247,7 @@ export function buildEmailText(
   filter: HangarDateFilter,
 ): string {
   const now = new Date().toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' })
-  const { fSess, fUnavail } = filtered(sessions, unavail, filter)
+  const { fSess, fUnavail, logSess, logUnavail } = filtered(sessions, unavail, filter)
   const s1 = getAcStats('N254AL', fSess)
   const s2 = getAcStats('N253AL', fSess)
   const us = getUnavailStats(fUnavail)
@@ -295,7 +307,7 @@ export function buildEmailText(
   L.push(`  Total Hours:      ${us.totalHours} hrs`)
   L.push(`  Total Days (24h): ${us.totalDays} days`)
   L.push('')
-  const sortedU = [...fUnavail].sort(
+  const sortedU = [...logUnavail].sort(
     (a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime(),
   )
   if (sortedU.length) {
@@ -317,7 +329,7 @@ export function buildEmailText(
   L.push('FULL SESSION LOG')
   L.push(SEP2)
   L.push('')
-  const sorted = [...fSess].sort((a, b) => new Date(b.entry).getTime() - new Date(a.entry).getTime())
+  const sorted = [...logSess].sort((a, b) => new Date(b.entry).getTime() - new Date(a.entry).getTime())
   if (!sorted.length) {
     L.push('  No sessions in this range.')
   } else {
@@ -340,7 +352,8 @@ export function buildEmailText(
 }
 
 export function buildCSV(sessions: HangarSession[], filter: HangarDateFilter): string {
-  const fSess = filterByDate(sessions, 'entry', filter)
+  const ids = new Set(clipSessionsToRange(sessions, filter, new Date()).map((s) => s.id))
+  const fSess = sessions.filter((s) => ids.has(s.id))
   const rows: string[][] = [['Aircraft', 'Hangar', 'Entry', 'Exit', 'Duration (hrs)', 'Reason', 'Note']]
   ;[...fSess]
     .sort((a, b) => new Date(b.entry).getTime() - new Date(a.entry).getTime())

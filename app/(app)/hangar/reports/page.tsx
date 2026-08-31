@@ -5,11 +5,13 @@ import { useDocumentTitle } from '@/lib/title'
 import { fetchHangarData, type HangarSession, type HangarUnavail } from '@/lib/hangar'
 import {
   HANGARS,
+  clipSessionsToRange,
+  clipUnavailToRange,
   completedHangarMs,
-  filterByDate,
   getAcStats,
   getPresetLabel,
   getUnavailStats,
+  monthlyUnavailBreakdown,
   type AcStats,
   type HangarDateFilter as Filter,
 } from '@/lib/hangar-stats'
@@ -76,6 +78,36 @@ export default function HangarReportsPage() {
   const [unavail, setUnavail] = useState<HangarUnavail[] | null>(null)
   const [filter, setFilter] = useState<Filter>({ preset: 'all', start: null, end: null })
   const [copied, setCopied] = useState(false)
+  const [showMoney, setShowMoney] = useState(false)
+  const [rate, setRate] = useState(12000)
+
+  // Per-browser display preference — the dollar math is never stored.
+  useEffect(() => {
+    try {
+      const on = localStorage.getItem('wnt_hangar_show_money')
+      const r = localStorage.getItem('wnt_hangar_rate')
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring persisted UI prefs on mount
+      if (on !== null) setShowMoney(on === '1')
+      if (r !== null && Number(r) > 0) setRate(Number(r))
+    } catch {}
+  }, [])
+
+  function toggleMoney() {
+    setShowMoney((v) => {
+      try {
+        localStorage.setItem('wnt_hangar_show_money', v ? '0' : '1')
+      } catch {}
+      return !v
+    })
+  }
+
+  function changeRate(v: string) {
+    const n = Number(v)
+    setRate(n)
+    try {
+      if (n > 0) localStorage.setItem('wnt_hangar_rate', String(n))
+    } catch {}
+  }
 
   const load = useCallback(async () => {
     try {
@@ -94,8 +126,11 @@ export default function HangarReportsPage() {
 
   const s = sessions ?? []
   const u = unavail ?? []
-  const fSess = filterByDate(s, 'entry', filter)
-  const fUnavail = filterByDate(u, 'start_time', filter)
+  // Clip spans to the selected window (open ones counted up to now) so the
+  // aggregates sum exactly the hours inside it — an open months-old ALNW
+  // assignment still contributes its share of "Last 30 Days".
+  const fSess = clipSessionsToRange(s, filter, new Date())
+  const fUnavail = clipUnavailToRange(u, filter, new Date())
   const s1 = getAcStats('N254AL', fSess)
   const s2 = getAcStats('N253AL', fSess)
   const us = getUnavailStats(fUnavail)
@@ -198,8 +233,72 @@ export default function HangarReportsPage() {
               These hours are the usage evidence behind ALNW hangar-management billing.
             </div>
           </div>
+
+          <div className="card mt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="section-title">ALNW proration</div>
+              <button type="button" className={`btn btn-sm ${showMoney ? 'btn-primary' : ''}`} onClick={toggleMoney}>
+                {showMoney ? 'Hide $' : 'Show $'}
+              </button>
+            </div>
+            {showMoney && (
+              <div className="panel-in mt-3">
+                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--text2)' }}>
+                  Monthly rate $
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    className="input w-32"
+                    value={Number.isFinite(rate) ? rate : ''}
+                    onChange={(e) => changeRate(e.target.value)}
+                  />
+                  /month
+                </label>
+                <div className="mt-3 grid gap-2">
+                  {monthlyUnavailBreakdown(u, new Date()).map((m) => {
+                    const credit = (m.pct / 100) * (rate > 0 ? rate : 0)
+                    const net = (rate > 0 ? rate : 0) - credit
+                    return (
+                      <div key={m.key} className="stat-tile">
+                        <div className="flex items-baseline justify-between">
+                          <span className="font-semibold">
+                            {m.label}
+                            {m.current && (
+                              <span className="ml-1.5 text-sm font-normal" style={{ color: 'var(--text3)' }}>
+                                (so far)
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-lg font-semibold" style={{ color: 'var(--red)' }}>
+                            −{money(credit)}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 text-sm" style={{ color: 'var(--text3)' }}>
+                          {m.unavailHours.toFixed(1)}h unavailable · {m.pct.toFixed(1)}% of the month · net due{' '}
+                          {money(net)}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {monthlyUnavailBreakdown(u, new Date()).length === 0 && (
+                    <div className="text-sm" style={{ color: 'var(--text3)' }}>
+                      No unavailable time logged yet.
+                    </div>
+                  )}
+                </div>
+                <div className="mt-2 text-sm" style={{ color: 'var(--text3)' }}>
+                  Credit = share of the monthly rate for time Wings was unavailable, split across month
+                  boundaries. Display-only — nothing monetary is stored.
+                </div>
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>
   )
+}
+
+function money(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
