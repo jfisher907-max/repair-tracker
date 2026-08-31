@@ -1029,3 +1029,51 @@ a.card:focus-visible {
 .pub-input::placeholder {
   color: var(--ink-400);
 }
+
+/* ── Hangar section ──────────────────────────────────────────────
+   The one-tap location switch on the hangar board: three equal segments,
+   Wings = mint, ALNW = brand gold, Out = neutral raised. Everything else in
+   the section uses the standard primitives. */
+.hangar-switch {
+  display: flex;
+  gap: 0.5rem;
+}
+.hangar-switch button {
+  flex: 1;
+  min-height: 48px;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+.hangar-switch button:hover:not(:disabled) {
+  color: var(--text-body);
+}
+.hangar-switch button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.hangar-switch button.on.hangar-sw-wings {
+  background: var(--status-ok-bg);
+  border-color: var(--status-ok-solid);
+  color: var(--status-ok-fg);
+}
+.hangar-switch button.on.hangar-sw-alnw {
+  background: var(--status-wait-bg);
+  border-color: var(--status-wait-solid);
+  color: var(--status-wait-fg);
+}
+.hangar-switch button.on.hangar-sw-out {
+  background: var(--surface-raised);
+  border-color: var(--border-strong);
+  color: var(--text-heading);
+}
+.hangar-timer {
+  font-family: var(--font-mono), monospace;
+}

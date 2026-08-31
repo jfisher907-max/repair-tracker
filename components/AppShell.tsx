@@ -43,6 +43,16 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
     ],
   },
   { label: 'People', items: [{ href: '/customers', label: 'Customers' }] },
+  {
+    // Hangar management for Airlift Northwest — deliberately its own group so it
+    // stays out of the repair lanes above.
+    label: 'Hangar',
+    items: [
+      { href: '/hangar', label: 'Board' },
+      { href: '/hangar/history', label: 'History' },
+      { href: '/hangar/reports', label: 'Reports' },
+    ],
+  },
 ]
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -65,6 +75,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (href === '/dashboard') return pathname === '/dashboard'
     if (href === '/jobs/new') return pathname === '/jobs/new'
     if (href === '/quotes/new') return pathname === '/quotes/new'
+    if (href === '/hangar') return pathname === '/hangar'
     if (href === '/jobs') return pathname.startsWith('/jobs') && pathname !== '/jobs/new'
     if (href === '/billing') {
       return (
@@ -122,14 +133,24 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <Link href="/dashboard" className="display flex items-center gap-2 text-xl font-semibold">
             <WingMark size={22} /> {BRAND_NAME}
           </Link>
-          <Link
-            href="/settings"
-            className="-m-2 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl transition-opacity"
-            aria-label="Settings"
-            style={{ opacity: pathname.startsWith('/settings') ? 1 : 0.6 }}
-          >
-            ⚙️
-          </Link>
+          <div className="flex items-center">
+            <Link
+              href="/hangar"
+              className="-m-1 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl transition-opacity"
+              aria-label="Hangar"
+              style={{ opacity: pathname.startsWith('/hangar') ? 1 : 0.6 }}
+            >
+              ✈️
+            </Link>
+            <Link
+              href="/settings"
+              className="-m-1 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl transition-opacity"
+              aria-label="Settings"
+              style={{ opacity: pathname.startsWith('/settings') ? 1 : 0.6 }}
+            >
+              ⚙️
+            </Link>
+          </div>
         </header>
 
         {/* Keyed by route so the staggered entrance replays on every navigation */}
