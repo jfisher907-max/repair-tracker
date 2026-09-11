@@ -66,7 +66,11 @@ export function isPassThrough(description: string | null | undefined): boolean {
  * tax is not, because it is the shop's cost and billing it as a line makes the
  * invoice charge tax on tax (see migration 0027).
  */
-const SALES_TAX_LINE = new RegExp('\b(sales\s*)?tax\b', 'i')
+// Double backslashes, same as PASS_THROUGH above: in a JS string '\b' is a
+// BACKSPACE character, not a word boundary. The single-backslash version
+// shipped in a82ef98 compiled to a pattern that matched nothing, silently
+// disabling the tax-row guard on the scan screen while lint stayed clean.
+const SALES_TAX_LINE = new RegExp('\\b(sales\\s*)?tax\\b', 'i')
 
 export function isSalesTaxLine(description: string | null | undefined): boolean {
   return SALES_TAX_LINE.test((description ?? '').trim())
