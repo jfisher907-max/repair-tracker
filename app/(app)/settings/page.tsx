@@ -5,6 +5,7 @@ import { getAccessToken, supabase } from '@/lib/supabase'
 import BusinessDocuments from '@/components/BusinessDocuments'
 import { BRAND_SLUG } from '@/lib/brand'
 import { DEFAULT_TIERS, type MarkupTier } from '@/lib/markup'
+import { QUOTE_PRICING_CHOICES, type QuotePricing } from '@/lib/quote-pricing'
 import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type Quote, type Vehicle } from '@/lib/types'
 
@@ -34,6 +35,9 @@ export default function SettingsPage() {
   const [savedMsg, setSavedMsg] = useState('')
   const [markupOn, setMarkupOn] = useState(false)
   const [markupTiers, setMarkupTiers] = useState<MarkupTier[]>(DEFAULT_TIERS)
+  /** How new quote lines are priced from the O'Reilly figures (migration 0034). */
+  const [quotePricing, setQuotePricing] = useState<QuotePricing>('walkin')
+  const [quotePct, setQuotePct] = useState('0')
   const [cardPay, setCardPay] = useState<boolean | null>(null)
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
   const [aiTest, setAiTest] = useState<string | null>(null)
@@ -84,6 +88,8 @@ export default function SettingsPage() {
         if (Array.isArray(data.parts_markup_tiers) && data.parts_markup_tiers.length) {
           setMarkupTiers(data.parts_markup_tiers as MarkupTier[])
         }
+        setQuotePricing((data.quote_pricing as QuotePricing) ?? 'walkin')
+        setQuotePct(String(data.quote_markup_pct ?? 0))
       })
     getAccessToken().then(async (token) => {
       try {
@@ -116,6 +122,9 @@ export default function SettingsPage() {
         google_review_url: reviewUrl.trim() || null,
         parts_markup_enabled: markupOn,
         parts_markup_tiers: markupTiers,
+        quote_pricing: quotePricing,
+        // The database allows 0-300%; keep a typo from failing the whole save.
+        quote_markup_pct: Math.min(300, Math.max(0, Math.round(Number(quotePct) || 0))),
         store_suggestions: stores
           .split('\n')
           .map((s) => s.trim())
@@ -377,6 +386,58 @@ export default function SettingsPage() {
           These are a starting point, not advice — set them to your own numbers. Existing jobs
           and any invoice already issued are untouched.
         </p>
+      </div>
+
+      <div className="card space-y-3">
+        <div className="label">Quote pricing</div>
+        <p className="text-sm" style={{ color: 'var(--text2)' }}>
+          How a quote line’s customer price is suggested from the O’Reilly figures beside it (typed,
+          or read from an O’Reilly quote). You can always type your own. The price is set once, on
+          the quote — after the customer approves, the receipt only records your cost.
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {QUOTE_PRICING_CHOICES.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              className="chip min-h-[36px]"
+              style={{
+                background: quotePricing === c.value ? 'var(--accent)' : 'var(--bg3)',
+                color: quotePricing === c.value ? '#111' : undefined,
+                cursor: 'pointer',
+              }}
+              onClick={() => setQuotePricing(c.value)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs" style={{ color: 'var(--text3)' }}>
+          {QUOTE_PRICING_CHOICES.find((c) => c.value === quotePricing)?.hint}
+        </p>
+        {(quotePricing === 'walkin' || quotePricing === 'cost_plus') && (
+          <div className="flex items-center gap-2 text-sm">
+            <span style={{ color: 'var(--text2)' }}>
+              {quotePricing === 'walkin' ? 'Above the walk-in price by' : 'Above your cost by'}
+            </span>
+            <input
+              className="input !min-h-[38px] !w-20"
+              inputMode="numeric"
+              aria-label="Percent"
+              value={quotePct}
+              onChange={(e) => setQuotePct(e.target.value)}
+            />
+            <span style={{ color: 'var(--text3)' }}>%</span>
+          </div>
+        )}
+        {quotePricing === 'walkin' && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Each quote line with a part number has a “Check walk-in” link that opens the part on
+            oreillyauto.com. Type the walk-in price you see and the app learns your cost-to-walk-in
+            ratio for that O’Reilly line — after three parts it starts suggesting the walk-in price
+            itself, rounded to .99 the way O’Reilly prices.
+          </p>
+        )}
       </div>
 
       <div className="card space-y-2">

@@ -1,4 +1,4 @@
-import type { DepositKind, DocLine, Job, PartLine, Quote, QuoteLine } from './types'
+import type { DepositKind, DocLine, Job, PartCondition, PartLine, Quote, QuoteLine } from './types'
 
 // Client-side mirror of the quote_totals view — keep in sync with the SQL.
 export interface QuoteComputedTotals {
@@ -59,11 +59,39 @@ export function depositRuleLabel(kind: DepositKind, value: number | null): strin
 }
 
 /**
+ * "Rebuilt: Brake caliper. New: Brake pads, Rotors." — the AS 45.45.190
+ * identification for a job whose parts print as one collapsed line, so the
+ * disclosure survives the owner's parts override. Empty when no billed part
+ * carries a condition (fees and the adjustment line are 'not_part').
+ */
+function conditionSummary(partLines: PartLine[]): string {
+  const byCondition = new Map<PartCondition, string[]>()
+  for (const l of partLines) {
+    if (l.on_invoice === false || l.is_adjustment) continue
+    if (!l.condition || l.condition === 'not_part') continue
+    const list = byCondition.get(l.condition) ?? []
+    list.push(l.description.trim())
+    byCondition.set(l.condition, list)
+  }
+  const ORDER: PartCondition[] = ['new', 'used', 'rebuilt', 'reconditioned']
+  return ORDER.filter((c) => byCondition.has(c))
+    .map((c) => `${CONDITION_WORD[c]}: ${(byCondition.get(c) ?? []).join(', ')}`)
+    .join('. ')
+}
+
+const CONDITION_WORD: Record<PartCondition, string> = {
+  new: 'New',
+  used: 'Used',
+  rebuilt: 'Rebuilt',
+  reconditioned: 'Reconditioned',
+}
+
+/**
  * Freeze a job's CUSTOMER-FACING math into an invoice snapshot. Later job
  * edits never change an issued invoice. Charge basis only — costs and profit
  * never enter an invoice. With a job-level parts override, per-line prices
  * would expose markup, so the parts collapse to a single line (same rule as
- * the printed report).
+ * the printed report) — carrying the part conditions with them.
  */
 export function buildInvoiceSnapshot(
   job: Job,
@@ -84,16 +112,37 @@ export function buildInvoiceSnapshot(
   let parts: number
   if (job.parts_charged_override_cents != null) {
     parts = job.parts_charged_override_cents
+    // The prices collapse, but AS 45.45.190 doesn't: the invoice still has to
+    // say which parts were new, used, rebuilt or reconditioned. Confirming the
+    // conditions is demanded before invoicing, and this branch used to throw
+    // every one of them away.
+    const named = conditionSummary(partLines)
     lines = parts !== 0
-      ? [{ description: 'Parts & materials', qty: 1, unit_charge_cents: parts, line_total_cents: parts }]
+      ? [
+          {
+            description: named ? `Parts & materials — ${named}` : 'Parts & materials',
+            qty: 1,
+            unit_charge_cents: parts,
+            line_total_cents: parts,
+          },
+        ]
       : []
   } else {
-    lines = partLines.map((l) => ({
-      description: l.part_number ? `${l.description} (#${l.part_number})` : l.description,
-      qty: Number(l.qty),
-      unit_charge_cents: l.unit_charge_cents ?? l.unit_cost_cents,
-      line_total_cents: l.line_charge_total_cents,
-    }))
+    // The field map stays explicit on purpose: part lines also carry cost,
+    // quote links and receipt wording, none of which may reach a customer.
+    lines = partLines
+      // Off-invoice lines are the shop's own cost (a core deposit, unquoted
+      // freight). They charge exactly 0 and never print.
+      .filter((l) => l.on_invoice !== false)
+      .map((l) => ({
+        description: withPartNumber(l.description, l.part_number),
+        qty: Number(l.qty),
+        unit_charge_cents: l.unit_charge_cents ?? l.unit_cost_cents,
+        line_total_cents: l.line_charge_total_cents,
+        // AS 45.45.190: each replaced part says new / used / rebuilt /
+        // reconditioned. Fees, freight and the adjustment line carry none.
+        ...(l.condition && l.condition !== 'not_part' ? { condition: l.condition } : {}),
+      }))
     parts = lines.reduce((s, l) => s + l.line_total_cents, 0)
   }
   const tax = Math.round(((labor + parts) * taxRateBp) / 10000)
@@ -107,6 +156,19 @@ export function buildInvoiceSnapshot(
     tax_cents: tax,
     total_cents: labor + parts + tax,
   }
+}
+
+/**
+ * "Caliper - Remanufactured - 19B2688" already names its part; printing
+ * "(#19B2688)" after it too is noise. Short or odd part numbers ("5%") are
+ * appended as before rather than risk a false "already there".
+ */
+export function withPartNumber(description: string, partNumber: string | null): string {
+  if (!partNumber) return description
+  const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const pn = norm(partNumber)
+  if (pn.length >= 3 && norm(description).includes(pn)) return description
+  return `${description} (#${partNumber})`
 }
 
 export function formatTaxRate(bp: number): string {

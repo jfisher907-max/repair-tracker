@@ -4,7 +4,7 @@ import DocBrand from '@/components/DocBrand'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { formatTaxRate } from '@/lib/billing'
-import type { DocLine } from '@/lib/types'
+import type { AuthorizationEntry, DocLine, PartCondition } from '@/lib/types'
 
 export interface DocData {
   docType: 'Quote' | 'Invoice'
@@ -32,8 +32,42 @@ export interface DocData {
   paidCents?: number
   /** Quote: deposit due on approval (the resolved figure). */
   depositCents?: number | null
+  /** Invoice: the approvals behind the bill, frozen with it (AS 45.45.170(d)). */
+  authorizations?: AuthorizationEntry[]
   business: { name: string; phone: string; address: string; email: string }
 }
+
+const CONDITION_LABEL: Record<PartCondition, string> = {
+  new: 'New',
+  used: 'Used',
+  rebuilt: 'Rebuilt',
+  reconditioned: 'Reconditioned',
+}
+
+const METHOD_LABEL: Record<string, string> = {
+  online: 'online',
+  phone: 'by phone',
+  in_person: 'in person',
+  text: 'by text',
+}
+
+/** AS 45.45.170(d) wants the date AND the time of an OK — in shop time. */
+function formatWhen(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/Anchorage',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+/** AS 45.45.210: printed conspicuously on the invoice, word for word. */
+const REPAIR_ACT_NOTICE =
+  'Motor vehicle repair trade practices are regulated by Alaska Statutes 45.45.130 - 45.45.240, administered by the Alaska Department of Law.'
 
 /**
  * The customer-facing quote/invoice document ("Bold Brand" template).
@@ -46,11 +80,15 @@ export default function DocView({ doc }: { doc: DocData }) {
   const showLinePrices = doc.lines.length > 1 || doc.lines.some((l) => Number(l.qty) !== 1)
 
   const paid = doc.paidCents ?? 0
-  /** Dates inside the due-card sub line wrap as a unit, never mid-date. */
-  const nbsp = (s: string) => s.replace(/ /g, ' ')
+  /** Dates inside the due-card sub line wrap as a unit, never mid-date.
+   *  String.fromCharCode(160), never a literal non-breaking space: the
+   *  literal was flattened to an ordinary space once already, which left
+   *  this replacing a space with a space and quietly doing nothing. */
+  const nbsp = (s: string) => s.replace(/ /g, String.fromCharCode(160))
   const isSettled = !isQuote && (doc.paidDate != null || (paid > 0 && paid >= doc.totalCents))
   const isVoid = doc.status === 'void'
   const balanceCents = Math.max(0, doc.totalCents - paid)
+  const trail = !isQuote ? (doc.authorizations ?? []) : []
 
   // The charcoal card carries the one number that matters: what the
   // customer owes (invoice), what the work will run (quote), or PAID.
@@ -127,7 +165,13 @@ export default function DocView({ doc }: { doc: DocData }) {
             <tbody>
               {doc.lines.map((l, i) => (
                 <tr key={i}>
-                  <td className="doc-desc">{l.description}</td>
+                  <td className="doc-desc">
+                    {l.description}
+                    {/* AS 45.45.190: each part replaced is identified as new,
+                        used, rebuilt or reconditioned. Its own small word —
+                        never appended to the description text. */}
+                    {l.condition && <span className="doc-cond">{CONDITION_LABEL[l.condition]}</span>}
+                  </td>
                   <td className="doc-n doc-dim">{Number(l.qty)}</td>
                   {showLinePrices && (
                     <>
@@ -200,20 +244,48 @@ export default function DocView({ doc }: { doc: DocData }) {
           </div>
         </div>
 
-        {(isQuote || doc.paymentInstructions) && (
-          <footer className="doc-foot">
-            {isQuote ? (
-              <p>
-                This is an estimate. Final billing reflects actual parts and labor; you&apos;ll be
-                contacted before any significant change.
-              </p>
-            ) : (
-              <p>
-                <b>Payment:</b> {doc.paymentInstructions}
-              </p>
-            )}
-          </footer>
+        {trail.length > 0 && (
+          <div className="doc-auth">
+            <span className="doc-memo-label">Authorized</span>
+            <ul>
+              {trail.map((a, i) => (
+                <li key={i}>
+                  {formatWhen(a.at)} — {a.label}
+                  {a.by_name && <> by {a.by_name}</>}
+                  {a.method && (
+                    <>
+                      {' '}
+                      ({METHOD_LABEL[a.method] ?? a.method}
+                      {a.phone_called && <>, called {a.phone_called}</>})
+                    </>
+                  )}
+                  {' · '}
+                  {formatCents(a.amount_cents)} before tax
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
+
+        <footer className="doc-foot">
+          {isQuote ? (
+            // Mirrors the posted notice AS 45.45.150 requires: the estimate is
+            // a ceiling — never exceeded without the customer's OK.
+            <p>
+              This is an estimate. The final price won&apos;t go over it without your OK, and it
+              may come in lower.
+            </p>
+          ) : (
+            <>
+              {doc.paymentInstructions && (
+                <p>
+                  <b>Payment:</b> {doc.paymentInstructions}
+                </p>
+              )}
+              <p className="doc-legal">{REPAIR_ACT_NOTICE}</p>
+            </>
+          )}
+        </footer>
       </div>
     </div>
   )

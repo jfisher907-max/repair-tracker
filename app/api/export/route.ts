@@ -37,11 +37,13 @@ const TABLES: Record<string, string[]> = {
   part_lines: [
     'id', 'job_id', 'receipt_id', 'purchase_date', 'store', 'part_number', 'description', 'qty',
     'unit_cost_cents', 'line_total_cents', 'unit_charge_cents', 'line_charge_total_cents',
-    'core_returned_at', 'notes', 'created_at', 'updated_at',
+    'core_returned_at', 'quote_line_id', 'awaiting_cost', 'on_invoice', 'substituted_from',
+    'receipt_description', 'is_adjustment', 'condition', 'notes', 'created_at', 'updated_at',
   ],
   receipts: [
     'id', 'job_id', 'storage_path', 'store', 'purchase_date', 'receipt_total_cents',
-    'tax_cents', 'extraction_status', 'created_at', 'updated_at',
+    'tax_cents', 'extraction_status', 'saved_at', 'balance_note', 'po_ref', 'vendor_invoice_no',
+    'created_at', 'updated_at',
   ],
   settings: [
     'id', 'business_name', 'business_phone', 'business_address', 'business_email',
@@ -54,7 +56,7 @@ const TABLES: Record<string, string[]> = {
     'labor_rate_cents', 'tax_rate_bp', 'status', 'valid_until', 'notes', 'job_id',
     'sent_at', 'decided_at', 'applied_at', 'approved_by_name', 'approval_consent', 'approval_ip',
     'approval_user_agent', 'approved_snapshot', 'deposit_kind', 'deposit_value', 'deposit_cents',
-    'created_at', 'updated_at', 'deleted_at',
+    'source_path', 'created_at', 'updated_at', 'deleted_at',
   ],
   quote_approvals: [
     'id', 'quote_id', 'response', 'by_name', 'consent', 'method', 'ip', 'user_agent',
@@ -62,13 +64,20 @@ const TABLES: Record<string, string[]> = {
   ],
   quote_lines: [
     'id', 'quote_id', 'description', 'qty', 'unit_charge_cents', 'line_total_cents', 'declined',
-    'created_at', 'updated_at',
+    'part_number', 'line_code', 'unit_cost_cents', 'unit_list_cents', 'unit_retail_cents',
+    'price_basis', 'created_at', 'updated_at',
+  ],
+  // The AS 45.45.170(d) record of every OK over an approved estimate. Without
+  // it an export can't show why a job was billed past its estimate.
+  job_authorizations: [
+    'id', 'job_id', 'previous_ceiling_cents', 'new_total_cents', 'delta_cents', 'description',
+    'method', 'by_name', 'phone_called', 'authorized_at', 'recorded_at',
   ],
   invoices: [
     'id', 'invoice_number', 'job_id', 'customer_id', 'issue_date', 'due_date', 'status',
     'customer_name', 'vehicle_label', 'job_title', 'lines', 'labor_hours', 'labor_rate_cents',
     'labor_cents', 'parts_cents', 'tax_rate_bp', 'tax_cents', 'total_cents', 'memo',
-    'sent_at', 'paid_at', 'created_at', 'updated_at',
+    'authorizations', 'sent_at', 'paid_at', 'created_at', 'updated_at',
   ],
   payments: [
     'id', 'job_id', 'invoice_id', 'quote_id', 'date', 'method', 'amount_cents', 'note',

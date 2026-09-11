@@ -40,13 +40,20 @@ export async function saveJobAsTemplate(
     title: job.title,
     work_performed: job.work_performed,
     labor_hours: Number(job.labor_hours),
-    lines: lines.map((l) => ({
-      description: l.description,
-      qty: Number(l.qty),
-      // The template carries what the customer pays; at-cost lines carry
-      // their cost as the price, which is what they were actually sold at.
-      unit_charge_cents: l.unit_charge_cents ?? l.unit_cost_cents,
-    })),
+    // Shop-cost lines (a core deposit, absorbed freight) were never sold to
+    // the customer, so they aren't part of the job being templated. Neither is
+    // the negative "Adjustment to approved estimate" line, which belongs to one
+    // job's estimate and would otherwise discount every job made from this
+    // template for ever.
+    lines: lines
+      .filter((l) => l.on_invoice !== false && !l.is_adjustment)
+      .map((l) => ({
+        description: l.description,
+        qty: Number(l.qty),
+        // The template carries what the customer pays; at-cost lines carry
+        // their cost as the price, which is what they were actually sold at.
+        unit_charge_cents: l.unit_charge_cents ?? l.unit_cost_cents,
+      })),
   })
   if (error) throw error
 }

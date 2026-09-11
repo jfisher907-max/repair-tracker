@@ -359,7 +359,20 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       else await applyToJob()
       return
     }
-    if (!confirm(`Create a job from ${quote!.quote_number}? Quoted lines become the job's customer pricing; you'll add actual parts costs as you buy them.`)) return
+    // Convert has no status gate in the database — the Stripe deposit webhook
+    // converts headless — so the warning lives here. The approved-total check
+    // counts only APPROVED quotes, so a job made from an unapproved one reads
+    // as over until the customer's OK is on file.
+    const notApproved =
+      quote!.status !== 'approved'
+        ? `\n\nThis quote is ${quote!.status.toUpperCase()} — the customer hasn't approved it. Record their OK on the quote first (Record approval), or the job will show as over what was approved.`
+        : ''
+    if (
+      !confirm(
+        `Create a job from ${quote!.quote_number}? The approved lines land on the job at the prices the customer approved, and each receipt fills in what you paid.${notApproved}`,
+      )
+    )
+      return
     setConverting(true)
     try {
       // One transaction: the job, its lines, the declined-line follow-ups,
@@ -449,6 +462,25 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                   'not viewed yet'
                 )}
               </span>
+            )}
+            {!quote.job_id && (
+              // Ordering parts before the job exists: the quote number is the
+              // O'Reilly PO until it converts (the job number after that).
+              <button
+                type="button"
+                className="chip"
+                style={{ background: 'var(--bg3)', cursor: 'pointer' }}
+                title="Copy — use it as the PO on your O'Reilly order"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(quote!.quote_number)
+                    setShareMsg(`Copied ${quote!.quote_number} — use it as the PO on the O’Reilly order.`)
+                    setTimeout(() => setShareMsg(''), 2500)
+                  } catch {}
+                }}
+              >
+                PO {quote.quote_number}
+              </button>
             )}
             <span className={statusChipClass(quote.status)}>{quote.status}</span>
           </span>

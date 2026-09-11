@@ -8,7 +8,7 @@ import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { useCheckoutReturn } from '@/lib/checkout-return'
 import SharedPhotos from '@/components/public/SharedPhotos'
-import type { DocLine } from '@/lib/types'
+import type { AuthorizationEntry, DocLine } from '@/lib/types'
 
 interface PublicInvoice {
   invoice_number: string
@@ -30,6 +30,9 @@ interface PublicInvoice {
   amount_paid_cents: number
   memo: string | null
   paid_at: string | null
+  /** The approvals behind the bill; the number called arrives masked to its
+   *  last four digits (get_public_invoice, migration 0032). */
+  authorizations?: AuthorizationEntry[]
   business: {
     name: string
     phone: string
@@ -135,6 +138,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
     paymentInstructions: invoice.business.payment_instructions || null,
     paidDate: invoice.paid_at,
     paidCents: invoice.amount_paid_cents,
+    authorizations: invoice.authorizations ?? [],
     business: invoice.business,
   }
 

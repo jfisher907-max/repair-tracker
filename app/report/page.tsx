@@ -89,7 +89,15 @@ function Report() {
           const { data: recRows } = await supabase
             .from('recommendations').select('*').eq('job_id', jobId)
           setRecs((recRows as Recommendation[]) ?? [])
-          setJobs([{ job: jobRow as Job, vehicle: v, lines: (lineRows as PartLine[]) ?? [] }])
+          // The same filter the all-jobs path uses: an off-invoice line is the
+          // shop's own cost and never belongs on a customer's record.
+          setJobs([
+            {
+              job: jobRow as Job,
+              vehicle: v,
+              lines: ((lineRows as PartLine[]) ?? []).filter((l) => l.on_invoice !== false),
+            },
+          ])
           return
         }
 
@@ -151,6 +159,9 @@ function Report() {
 
         const linesByJob = new Map<string, PartLine[]>()
         for (const l of (lineRows as PartLine[]) ?? []) {
+          // Shop-cost lines (a core deposit, absorbed freight) were never sold
+          // to the customer; they charge 0 and don't belong on their record.
+          if (l.on_invoice === false) continue
           const list = linesByJob.get(l.job_id) ?? []
           list.push(l)
           linesByJob.set(l.job_id, list)

@@ -73,6 +73,20 @@ export interface PartLine {
   line_charge_total_cents: number
   /** For core-charge lines: when the old unit went back. Null on a core line = still in the shop. */
   core_returned_at: string | null
+  /** The approved quote line this part carries onto the job (migration 0030). */
+  quote_line_id: string | null
+  /** An approved or template part with no real cost yet. Cleared by any cost write. */
+  awaiting_cost: boolean
+  /** False = the shop's own cost (a core, unquoted freight): never printed, charges exactly 0. */
+  on_invoice: boolean
+  /** The quoted part number when the part actually installed differs. Owner-only. */
+  substituted_from: string | null
+  /** The store's wording as printed on the receipt. Owner-only. */
+  receipt_description: string | null
+  /** The one "Adjustment to approved estimate" line (migration 0032). */
+  is_adjustment: boolean
+  /** AS 45.45.190 condition; null = not confirmed yet (asked before invoicing). */
+  condition: 'new' | 'used' | 'rebuilt' | 'reconditioned' | 'not_part' | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -89,6 +103,14 @@ export interface Receipt {
   tax_cents: number
   extraction_status: ExtractionStatus
   extraction_raw: unknown
+  /** When the review screen saved it. Null = uploaded but never finished; it can be resumed. */
+  saved_at: string | null
+  /** Why lines + tax don't equal the printed total, when they don't. */
+  balance_note: string | null
+  /** PO printed on the supplier ticket — the job (J014) or quote (Q008) number. */
+  po_ref: string | null
+  /** The supplier's own ticket / invoice number. */
+  vendor_invoice_no: string | null
   created_at: string
   updated_at: string
 }
@@ -148,6 +170,8 @@ export interface Quote {
   applied_at: string | null
   /** First time the customer opened the public link. Null = never viewed. */
   viewed_at: string | null
+  /** The supplier quote file (O'Reilly screenshot/PDF) this quote was read from. */
+  source_path: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -162,9 +186,21 @@ export interface QuoteLine {
   line_total_cents: number
   /** Ticked off by the customer's response — out of the total, into follow-ups at conversion. */
   declined: boolean
+  /** Supplier part number this line was priced from. Owner-only; never on /q. */
+  part_number: string | null
+  /** Owner-only supplier figures (migration 0034) — never on the customer's quote. */
+  line_code: string | null
+  unit_cost_cents: number | null
+  unit_list_cents: number | null
+  /** The walk-in price Jake checked for this part. Feeds the next estimate. */
+  unit_retail_cents: number | null
+  price_basis: 'walkin' | 'matrix' | 'cost_plus' | 'cost' | 'manual' | null
   created_at: string
   updated_at: string
 }
+
+/** AS 45.45.190: every replaced part is identified as one of these. */
+export type PartCondition = 'new' | 'used' | 'rebuilt' | 'reconditioned'
 
 /** One customer-facing line frozen into an invoice snapshot. */
 export interface DocLine {
@@ -172,6 +208,26 @@ export interface DocLine {
   qty: number
   unit_charge_cents: number
   line_total_cents: number
+  /** Parts only (fees, freight and adjustments carry none). Absent on invoices
+   *  issued before 0032 — they render exactly as issued. */
+  condition?: PartCondition
+}
+
+/** One approval behind a bill, frozen onto the invoice (AS 45.45.170(d)). */
+export interface AuthorizationEntry {
+  /** 'quote' = an estimate approved; 'ok' = a recorded OK past the estimate. */
+  kind: 'quote' | 'ok'
+  /** e.g. "Estimate Q008 approved" or "Additional work OK'd: rear pads". */
+  label: string
+  by_name: string | null
+  /** online / phone / in_person / text */
+  method: string | null
+  /** Full on the owner's copy; last four digits only on the public link. */
+  phone_called: string | null
+  /** ISO timestamp of the approval. */
+  at: string
+  /** The pre-tax total approved at that point. */
+  amount_cents: number
 }
 
 export interface Invoice {
@@ -195,6 +251,8 @@ export interface Invoice {
   tax_cents: number
   total_cents: number
   memo: string | null
+  /** The approvals behind this bill, frozen with it (AS 45.45.170(d)). */
+  authorizations: AuthorizationEntry[]
   public_token: string
   sent_at: string | null
   paid_at: string | null
@@ -227,6 +285,10 @@ export interface ExtractionResult {
   /** Sales tax as printed. A cost of the job, reported separately so it can
    *  never become a customer-billed line. */
   sales_tax: number | null
+  /** PO / job reference printed on the ticket (the shop writes its job number there). */
+  po_number?: string | null
+  /** The store's own invoice / ticket number. */
+  invoice_number?: string | null
   lines: ExtractedLine[]
 }
 

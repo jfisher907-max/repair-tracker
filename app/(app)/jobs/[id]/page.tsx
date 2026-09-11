@@ -12,6 +12,13 @@ import { formatDate, todayLocalIso } from '@/lib/date'
 import { saveJobAsTemplate } from '@/lib/templates'
 import JobPhotos from '@/components/JobPhotos'
 import RecommendationList from '@/components/RecommendationList'
+import BillingCheck, { type BillingSheet } from '@/components/BillingCheck'
+import {
+  buildAuthorizationTrail,
+  isOverApproval,
+  loadJobAuthorization,
+  type JobAuthorization,
+} from '@/lib/authorization'
 import { listForJob, toMemo, type Recommendation } from '@/lib/recommendations'
 import { markedUpCharge, type MarkupConfig } from '@/lib/markup'
 import {
@@ -84,6 +91,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [taxEditId, setTaxEditId] = useState<string | null>(null)
   const [taxInput, setTaxInput] = useState('')
   const [taxBusy, setTaxBusy] = useState(false)
+  /** Entering the real cost on an approved part that's still waiting for one. */
+  const [costEditId, setCostEditId] = useState<string | null>(null)
+  const [costInput, setCostInput] = useState('')
+  const [costBusy, setCostBusy] = useState(false)
+  /** On a quoted job a part added by hand is shop cost unless this is ticked:
+   *  billing it goes past what the customer approved. */
+  const [billNewPart, setBillNewPart] = useState(false)
+  /** Approved vs. now (job_authorized_totals) and which billing panel is open. */
+  const [auth, setAuth] = useState<JobAuthorization | null>(null)
+  /** The approval check itself couldn't be read — not the same as "it's fine". */
+  const [authFailed, setAuthFailed] = useState(false)
+  const [billingSheet, setBillingSheet] = useState<BillingSheet>(null)
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
   const [markup, setMarkup] = useState<MarkupConfig>({ enabled: false, tiers: [] })
@@ -160,6 +179,16 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         totalsByQuote[t.quote_id] = t.total_cents
     }
     setLinkedQuotes(quoteRows.map((q) => ({ ...q, total_cents: totalsByQuote[q.id] ?? null })))
+    // What the customer approved vs. what the job adds up to now. A failed
+    // read must never read as "inside the estimate": it shows as a warning
+    // here, and every write path re-reads it and refuses rather than guessing.
+    try {
+      setAuth(await loadJobAuthorization(id))
+      setAuthFailed(false)
+    } catch {
+      setAuth(null)
+      setAuthFailed(true)
+    }
   }, [id])
 
   useEffect(() => {
@@ -196,6 +225,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const balanceDue = Math.max(0, owedTarget - paidFromLedger - legacyPaid)
   // Payments recorded here default onto the job's open invoice so it settles.
   const openInvoice = invoices.find((i) => i.status === 'draft' || i.status === 'sent')
+  /** The job came from a quote: anything not on it goes past what the
+   *  customer approved (Alaska allows no overage without their OK). */
+  const quotedJob = linkedQuotes.some((q) => q.applied_at)
+  /** A sent or paid invoice froze the customer's bill. */
+  const lockedByInvoice = invoices.some((i) => i.status === 'sent' || i.status === 'paid')
+  /** Approved parts still waiting for their cost, and what's charged on them —
+   *  until they're costed the profit figure counts that charge as margin. */
+  const awaitingLines = lines.filter((l) => l.awaiting_cost)
+  const awaitingChargedCents = awaitingLines.reduce((s, l) => s + l.line_charge_total_cents, 0)
+  const billedLines = lines.filter((l) => l.on_invoice !== false)
+  const shopCostLines = lines.filter((l) => l.on_invoice === false)
+  /** Uploaded but never saved: it can be finished instead of re-shot. */
+  const receiptsWithLines = new Set(lines.map((l) => l.receipt_id).filter(Boolean))
+  const isUnfinished = (r: Receipt) => !r.saved_at && !receiptsWithLines.has(r.id)
 
   /** First ledger entry on a legacy-partial job carries the old credit in, so it isn't erased. */
   async function ensureLegacyCredit() {
@@ -265,6 +308,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
     setLineMsg(null)
     setSavingLine(true)
+    const editing = editingLineId ? (lines.find((l) => l.id === editingLineId) ?? null) : null
+    // A part added by hand to a quoted job goes past what the customer
+    // approved, so it's shop cost unless Jake ticks "bill the customer".
+    // Editing keeps a line where it is; "Bill it" / "Off the bill" move it.
+    // A sent or paid invoice freezes the bill: the scan screen and "Bill it"
+    // both refuse to move money past it, and adding a part by hand was the one
+    // way left to push what's owed past an invoice the customer already has.
+    const offBill = editing
+      ? editing.on_invoice === false
+      : lockedByInvoice || (quotedJob && !billNewPart)
+    const typedCharge = draft.unit_charge.trim() !== '' ? parseMoney(draft.unit_charge) : undefined
     const payload = {
       job_id: id,
       purchase_date: draft.purchase_date || null,
@@ -273,16 +327,22 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       description: draft.description.trim(),
       qty: draft.qty ? Number(draft.qty) : 1,
       unit_cost_cents: parseMoney(draft.unit_cost) ?? 0,
-      // On a NEW line a blank charge means "price it for me" and the matrix
-      // fills it in. On an EDIT it means "sell this at cost": the box was
-      // pre-populated from the row, so empty is the state that was loaded, not
-      // a request to re-price. Without this split, correcting a store name on
-      // an at-cost line silently multiplied what the customer owes.
-      unit_charge_cents:
-        draft.unit_charge.trim() !== ''
-          ? parseMoney(draft.unit_charge)
-          : editingLineId
-            ? null
+      on_invoice: !offBill,
+      // Off the bill a line charges exactly 0 (the database refuses anything
+      // else). On a NEW billed line a blank charge means "price it for me" and
+      // the matrix fills it in. On an EDIT, blank keeps what was agreed: an
+      // approved line keeps the price the customer approved, any other line
+      // sells at cost — the box was pre-populated, so empty is the state that
+      // was loaded, not a request to re-price. Without that split, correcting
+      // a store name on an at-cost line silently multiplied what's owed.
+      unit_charge_cents: offBill
+        ? 0
+        : typedCharge !== undefined
+          ? typedCharge
+          : editing
+            ? editing.quote_line_id
+              ? editing.unit_charge_cents
+              : null
             : markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup, draft.description),
     }
     const result = editingLineId
@@ -300,7 +360,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     } else {
       // Adding stays open for the next part — a parts run is rarely one line.
       // Store and date carry over since they're usually the same receipt/trip.
+      // "Bill the customer" does NOT: it's a per-part decision about work the
+      // customer never approved, and leaving it ticked quietly billed every
+      // following part on the same run.
       setDraft({ ...emptyDraft, store: draft.store, purchase_date: draft.purchase_date })
+      setBillNewPart(false)
       setAddedFlash(draft.description.trim())
       setTimeout(() => setAddedFlash(null), 2500)
       descriptionRef.current?.focus()
@@ -349,6 +413,86 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     await load()
   }
 
+  /** Cost only: the approved charge never moves, so a paid job stays paid and
+   *  the customer's bill can't change. The database clears the awaiting tag
+   *  the moment a real cost lands (migration 0030). */
+  async function saveLineCost(l: PartLine) {
+    if (costBusy) return
+    const cents = parseMoney(costInput)
+    if (cents == null) {
+      setLineMsg('Type what you paid for it, like 94.99.')
+      return
+    }
+    setCostBusy(true)
+    // $0 means it genuinely cost nothing (customer-supplied, a warranty swap):
+    // say so, rather than leave it waiting forever.
+    const patch = cents === 0 ? { awaiting_cost: false } : { unit_cost_cents: cents }
+    const { error } = await supabase.from('part_lines').update(patch).eq('id', l.id)
+    setCostBusy(false)
+    if (error) {
+      setLineMsg(error.message)
+      return
+    }
+    setCostEditId(null)
+    setCostInput('')
+    await load()
+  }
+
+  /** Move a line on or off the customer's bill. Off the bill it charges
+   *  exactly 0 (the database refuses anything else); back on, it's priced
+   *  like any new part. */
+  async function setOnInvoice(l: PartLine, on: boolean) {
+    if (busyLineId === l.id) return
+    if (l.is_adjustment) {
+      alert(
+        'This line is the record of billing the approved estimate. Change it through “Bill the approved amount”, not by taking it off the bill.',
+      )
+      return
+    }
+    if (lockedByInvoice) {
+      alert(
+        'This job’s invoice is already sent or paid, so the bill is frozen. Void and reissue the invoice to change what the customer pays.',
+      )
+      return
+    }
+    // The toggle can't remember a price: off the bill a line must charge
+    // exactly 0, so whatever was agreed is gone and coming back it is priced
+    // from the markup. Both directions now say so with the figure.
+    const nextCharge = on
+      ? (markedUpCharge(l.unit_cost_cents, markup, l.description) ?? l.unit_cost_cents)
+      : 0
+    if (on) {
+      const priceNote = `It goes back on at ${formatCents(nextCharge)} — your markup on what it cost, not any price it carried before.`
+      const ask = quotedJob
+        ? `“${l.description}” isn’t on what the customer approved. Only bill it if they've OK'd the extra — Alaska law allows no charge over the approved estimate without it. ${priceNote}`
+        : `Bill “${l.description}” to the customer? ${priceNote}`
+      if (!confirm(ask)) return
+    } else if ((l.unit_charge_cents ?? 0) > 0) {
+      if (
+        !confirm(
+          `Take “${l.description}” off the bill? Its ${formatCents(l.unit_charge_cents ?? 0)} price is cleared, and putting it back later prices it from your markup instead.`,
+        )
+      ) {
+        return
+      }
+    }
+    setBusyLineId(l.id)
+    const patch = on
+      ? { on_invoice: true, unit_charge_cents: nextCharge }
+      : { on_invoice: false, unit_charge_cents: 0 }
+    const { error } = await supabase.from('part_lines').update(patch).eq('id', l.id)
+    setBusyLineId(null)
+    if (error) {
+      setLineMsg(error.message)
+      return
+    }
+    // What the customer owes just moved.
+    try {
+      await syncJobPayment(id)
+    } catch {}
+    await load()
+  }
+
   async function deleteReceipt(r: Receipt) {
     // Post-0027 a receipt row carries recorded cost, so the old reassurance
     // ("part lines from it stay") is no longer the whole truth.
@@ -394,17 +538,36 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
     setInvoicing(true)
     try {
-      const [{ data: settings }, { data: sourceQuote }] = await Promise.all([
+      // Fresh reads: the checks below may have just changed conditions or
+      // prices, and this can run from a panel holding an older render.
+      const [{ data: settings }, { data: freshLines }, freshAuth] = await Promise.all([
         supabase.from('settings').select('default_tax_rate_bp, default_invoice_terms_days').single(),
-        supabase.from('quotes').select('tax_rate_bp').eq('job_id', id).limit(1).maybeSingle(),
+        supabase.from('part_lines').select('*').eq('job_id', id).order('created_at'),
+        loadJobAuthorization(id),
       ])
+      const current = (freshLines as PartLine[]) ?? []
+      setAuth(freshAuth)
+      // AS 45.45.140 / .170: never bill past what the customer approved. The
+      // panel offers the two lawful ways out.
+      if (isOverApproval(freshAuth)) {
+        setBillingSheet('over')
+        setInvoicing(false)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+      // AS 45.45.190: every replaced part identified new / used / rebuilt /
+      // reconditioned before it goes on the invoice.
+      if (current.some((l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null)) {
+        setBillingSheet('conditions')
+        setInvoicing(false)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
       // Settings is the rate the shop actually charges, and it is the control
-      // the owner turns — so it wins. A quote's rate used to override it here,
-      // which made setting tax to 0% look broken on any quoted job. The rate
-      // stays editable on the draft invoice for one-off cases.
-      void sourceQuote
+      // the owner turns — so it wins over any quote's rate. It stays editable
+      // on the draft invoice for one-off cases.
       const taxRateBp = settings?.default_tax_rate_bp ?? 0
-      const snapshot = buildInvoiceSnapshot(job!, lines, taxRateBp)
+      const snapshot = buildInvoiceSnapshot(job!, current, taxRateBp)
       // Terms from Settings: 0 = due on receipt (due date = issue date).
       const termsDays = settings?.default_invoice_terms_days ?? 0
       const due = new Date()
@@ -423,6 +586,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           // What was flagged on the job travels to the customer's copy, then
           // freezes with the rest of the invoice.
           memo: toMemo(recs),
+          // The approvals behind this bill, frozen with it (AS 45.45.170(d)).
+          authorizations: await buildAuthorizationTrail(id),
           ...snapshot,
         })
         .select('id')
@@ -462,6 +627,23 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold" style={{ color: 'var(--accent2)' }}>{job.job_number}</span>
+              {/* The O'Reilly PO: the job number on every order puts it on the
+                  ticket, so each receipt names the job it belongs to. */}
+              <button
+                type="button"
+                className="chip"
+                style={{ background: 'var(--bg3)', cursor: 'pointer' }}
+                title="Copy — use it as the PO on your O'Reilly order"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(job.job_number)
+                    setActionMsg({ text: `Copied ${job.job_number} — use it as the PO on the O’Reilly order.`, ok: true })
+                    setTimeout(() => setActionMsg(null), 2500)
+                  } catch {}
+                }}
+              >
+                PO {job.job_number}
+              </button>
               <span className={`chip chip-${job.payment_status}`}>{job.payment_status}</span>
               {job.promised_date && job.payment_status !== 'paid' && (
                 <span
@@ -539,6 +721,16 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               style={{ borderColor: 'var(--green)', color: 'var(--green)' }}
               onClick={() => {
                 setActionMsg(null)
+                // Settling the whole balance while the job is past its
+                // approval would collect the unapproved extra — offer the two
+                // lawful ways out instead. Once an invoice is sent or paid,
+                // though, THAT invoice is what's owed and nothing here can
+                // change it, so holding the payment only dead-ends the screen.
+                if (!lockedByInvoice && isOverApproval(auth)) {
+                  setBillingSheet('over')
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                  return
+                }
                 setPayQuickOpen(!payQuickOpen)
               }}
             >
@@ -676,6 +868,30 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </p>
         )}
       </div>
+
+      {/* Never bill past what the customer approved; part conditions before
+          an invoice. Renders nothing while the job is within its approval. */}
+      {authFailed && (
+        <div className="card" style={{ borderLeft: '3px solid var(--status-wait-solid)' }}>
+          <p className="text-sm" style={{ color: 'var(--status-wait-fg)' }}>
+            Couldn&apos;t check this job against the approved estimate just now. Reload before you
+            invoice — billing and &ldquo;Mark paid&rdquo; will refuse until the check reads again.
+          </p>
+        </div>
+      )}
+      <BillingCheck
+        jobId={id}
+        customer={customer}
+        lines={lines}
+        partsOverrideCents={job.parts_charged_override_cents}
+        auth={auth}
+        locked={lockedByInvoice}
+        hasDraftInvoice={invoices.some((i) => i.status === 'draft')}
+        sheet={billingSheet}
+        setSheet={setBillingSheet}
+        onChanged={load}
+        onProceed={createInvoice}
+      />
 
       {/* Work performed */}
       {job.work_performed && (
@@ -824,47 +1040,115 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             No parts yet — scan a receipt or add one manually.
           </p>
         )}
-        {lines.map((l) => (
+        {/* Billed lines first, then the shop's own cost (never on the bill). */}
+        {[...billedLines, ...shopCostLines].map((l, idx, all) => (
           <div
             key={l.id}
-            className="flex items-center justify-between gap-2 border-b pb-2 last:border-b-0"
+            className="border-b pb-2 last:border-b-0"
             style={{ borderColor: 'var(--border)' }}
           >
-            <div className="min-w-0">
-              <div className="truncate font-medium">
-                {l.description}
-                {l.part_number && (
-                  <span className="ml-2 text-xs" style={{ color: 'var(--text3)' }}>#{l.part_number}</span>
-                )}
-              </div>
-              <div className="text-xs" style={{ color: 'var(--text3)' }}>
-                {[l.store, l.purchase_date, l.receipt_id ? '📎 receipt' : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <div className="money font-medium">{formatCents(l.line_charge_total_cents)}</div>
-                <div className="text-xs" style={{ color: 'var(--text3)' }}>
-                  {Number(l.qty)} × {formatCents(l.unit_charge_cents ?? l.unit_cost_cents)}
+            {l.on_invoice === false && (idx === 0 || all[idx - 1].on_invoice !== false) && (
+              <div className="label !mb-1 pt-1">Shop cost — not on the customer’s bill</div>
+            )}
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="truncate font-medium">
+                  {l.description}
+                  {l.part_number && (
+                    <span className="ml-2 text-xs" style={{ color: 'var(--text3)' }}>#{l.part_number}</span>
+                  )}
                 </div>
-                {l.unit_charge_cents != null && l.unit_charge_cents !== l.unit_cost_cents && (
-                  <div className="text-xs" style={{ color: 'var(--accent2)' }}>
-                    cost {formatCents(l.line_total_cents)}
-                  </div>
-                )}
+                <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                  {[
+                    l.store,
+                    l.purchase_date,
+                    l.receipt_id ? '📎 receipt' : null,
+                    l.substituted_from ? `quoted #${l.substituted_from}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </div>
+                {l.awaiting_cost && <span className="chip chip-open mt-1">awaiting cost</span>}
               </div>
-              <button className="btn btn-sm" aria-label="Edit part" onClick={() => startEditLine(l)}>✎</button>
-              <button
-                className="btn btn-sm btn-danger"
-                aria-label="Delete part"
-                disabled={busyLineId === l.id}
-                onClick={() => deleteLine(l.id)}
-              >
-                {busyLineId === l.id ? '…' : '✕'}
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="text-right">
+                  {l.on_invoice === false ? (
+                    <>
+                      <div className="money font-medium" style={{ color: 'var(--text2)' }}>
+                        {formatCents(l.line_total_cents)}
+                      </div>
+                      <div className="text-xs" style={{ color: 'var(--text3)' }}>your cost</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="money font-medium">{formatCents(l.line_charge_total_cents)}</div>
+                      <div className="text-xs" style={{ color: 'var(--text3)' }}>
+                        {Number(l.qty)} × {formatCents(l.unit_charge_cents ?? l.unit_cost_cents)}
+                      </div>
+                      {!l.awaiting_cost &&
+                        l.unit_charge_cents != null &&
+                        l.unit_charge_cents !== l.unit_cost_cents && (
+                          <div className="text-xs" style={{ color: 'var(--accent2)' }}>
+                            cost {formatCents(l.line_total_cents)}
+                          </div>
+                        )}
+                    </>
+                  )}
+                </div>
+                <button className="btn btn-sm" aria-label="Edit part" onClick={() => startEditLine(l)}>✎</button>
+                <button
+                  className="btn btn-sm btn-danger"
+                  aria-label="Delete part"
+                  disabled={busyLineId === l.id}
+                  onClick={() => deleteLine(l.id)}
+                >
+                  {busyLineId === l.id ? '…' : '✕'}
+                </button>
+              </div>
             </div>
+            {l.awaiting_cost &&
+              (costEditId === l.id ? (
+                <div className="panel-in mt-1 flex items-center gap-1">
+                  <input
+                    className="input !min-h-[40px]"
+                    inputMode="decimal"
+                    autoFocus
+                    aria-label={`What you paid for ${l.description}, per unit`}
+                    placeholder="What you paid, per unit (0 if nothing)"
+                    value={costInput}
+                    onChange={(e) => setCostInput(e.target.value)}
+                  />
+                  <button className="btn btn-sm btn-primary !min-h-[40px]" disabled={costBusy} onClick={() => saveLineCost(l)}>
+                    {costBusy ? '…' : '✓'}
+                  </button>
+                  <button className="btn btn-sm !min-h-[40px]" onClick={() => setCostEditId(null)}>✕</button>
+                </div>
+              ) : (
+                <button
+                  className="btn btn-sm mt-1"
+                  onClick={() => {
+                    setCostEditId(l.id)
+                    setCostInput('')
+                  }}
+                >
+                  Enter cost
+                </button>
+              ))}
+            {/* Never on the adjustment line: it IS the record of billing the
+                approved estimate, and one stray tap would undo that. */}
+            {!lockedByInvoice &&
+              !l.awaiting_cost &&
+              !l.is_adjustment &&
+              (l.on_invoice === false || (quotedJob && !l.quote_line_id)) && (
+              <button
+                className="mt-1 text-xs underline"
+                style={{ color: 'var(--blue)' }}
+                disabled={busyLineId === l.id}
+                onClick={() => setOnInvoice(l, l.on_invoice === false)}
+              >
+                {l.on_invoice === false ? 'Bill it to the customer' : 'Take it off the bill'}
+              </button>
+            )}
           </div>
         ))}
 
@@ -919,16 +1203,56 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   onChange={(e) => setDraft({ ...draft, unit_cost: e.target.value })}
                 />
               </div>
-              <div className="col-span-2">
-                <label className="label">Charge customer ($ per unit)</label>
-                <input
-                  className="input"
-                  inputMode="decimal"
-                  placeholder="Blank = same as cost"
-                  value={draft.unit_charge}
-                  onChange={(e) => setDraft({ ...draft, unit_charge: e.target.value })}
-                />
-              </div>
+              {(() => {
+                const editingLine = editingLineId
+                  ? (lines.find((l) => l.id === editingLineId) ?? null)
+                  : null
+                const offBill = editingLine
+                  ? editingLine.on_invoice === false
+                  : lockedByInvoice || (quotedJob && !billNewPart)
+                return (
+                  <div className="col-span-2 space-y-1">
+                    {!editingLine && quotedJob && !lockedByInvoice && (
+                      <label className="flex min-h-[44px] items-center gap-2 text-sm" style={{ color: 'var(--text2)' }}>
+                        <input
+                          type="checkbox"
+                          checked={billNewPart}
+                          onChange={(e) => setBillNewPart(e.target.checked)}
+                        />
+                        Bill the customer for this part
+                      </label>
+                    )}
+                    {offBill ? (
+                      <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                        {editingLine
+                          ? 'Off the bill — your cost only. “Bill it to the customer” on the part changes that.'
+                          : lockedByInvoice
+                            ? 'The invoice for this job is already out, so a part added now goes on your books as cost. To bill it, void that invoice and reissue.'
+                            : 'Not on what the customer approved, so it goes on your books as shop cost. Tick the box only if they’ve OK’d it.'}
+                      </p>
+                    ) : (
+                      <>
+                        <label className="label">Charge customer ($ per unit)</label>
+                        <input
+                          className="input"
+                          inputMode="decimal"
+                          placeholder={
+                            editingLine
+                              ? editingLine.quote_line_id
+                                ? 'Blank = keep the approved price'
+                                : 'Blank = same as cost'
+                              : markup.enabled
+                                ? 'Blank = your markup matrix (tax, freight, cores at cost)'
+                                : 'Blank = same as cost'
+                          }
+                          value={draft.unit_charge}
+                          onChange={(e) => setDraft({ ...draft, unit_charge: e.target.value })}
+                        />
+                      </>
+                    )}
+                  </div>
+                )
+              })()}
               <div className="col-span-2">
                 <label className="label">Purchase date</label>
                 <input
@@ -1034,6 +1358,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                         ✕
                       </button>
                     </div>
+                  ) : isUnfinished(r) ? (
+                    // Uploaded but never saved: finish it on the stored file
+                    // instead of re-shooting it (and doubling the receipt).
+                    <Link
+                      href={`/jobs/${id}/scan?receipt=${r.id}`}
+                      className="btn btn-sm btn-primary mt-1 w-full !py-1 !text-[0.7rem]"
+                    >
+                      Finish receipt
+                    </Link>
                   ) : (
                     <button
                       className="btn btn-sm mt-1 w-full !py-1 !text-[0.7rem]"
@@ -1134,6 +1467,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             {formatCents(totals.profit_cents)}
           </span>
         </div>
+        {awaitingLines.length > 0 && (
+          <p className="text-xs" style={{ color: 'var(--status-wait-fg)' }}>
+            Not final: {formatCents(awaitingChargedCents)} is charged on {awaitingLines.length} part
+            {awaitingLines.length === 1 ? '' : 's'} with no cost entered yet, so it counts as profit
+            until you enter what you paid.
+          </p>
+        )}
       </div>
 
       {/* Invoices */}

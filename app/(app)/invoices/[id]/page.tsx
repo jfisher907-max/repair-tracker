@@ -8,6 +8,7 @@ import { useDocumentTitle } from '@/lib/title'
 import { listForJob, toMemo } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
 import { buildInvoiceSnapshot, statusChipClass } from '@/lib/billing'
+import { buildAuthorizationTrail, isOverApproval, loadJobAuthorization } from '@/lib/authorization'
 import { PAYMENT_METHODS, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
@@ -87,13 +88,32 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     if (!invoice) return
     setRefreshing(true)
     try {
-      const [{ data: job }, { data: partLines }, { data: quote }] = await Promise.all([
+      const [{ data: job }, { data: partLines }, auth] = await Promise.all([
         supabase.from('jobs').select('*').eq('id', invoice.job_id).single(),
         supabase.from('part_lines').select('*').eq('job_id', invoice.job_id).order('created_at'),
-        supabase.from('quotes').select('tax_rate_bp').eq('job_id', invoice.job_id).limit(1).maybeSingle(),
+        loadJobAuthorization(invoice.job_id),
       ])
-      void quote
       if (!job) throw new Error('The job behind this invoice is gone.')
+      // The same two checks Create invoice runs on the job page: never past
+      // what the customer approved (AS 45.45.140/.170), and every part
+      // identified new / used / rebuilt / reconditioned (AS 45.45.190).
+      if (isOverApproval(auth)) {
+        alert(
+          `The job now comes to ${formatCents(auth!.current_cents)} before tax, over the ${formatCents(auth!.authorized_cents)} the customer approved. Open the job to bill the approved amount or record their OK, then update this draft.`,
+        )
+        setRefreshing(false)
+        return
+      }
+      const unconfirmed = ((partLines as PartLine[]) ?? []).filter(
+        (l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null,
+      )
+      if (unconfirmed.length) {
+        alert(
+          `Confirm the condition of ${unconfirmed.length} part${unconfirmed.length === 1 ? '' : 's'} on the job page first (new, used, rebuilt or reconditioned) — Alaska law wants it on the invoice.`,
+        )
+        setRefreshing(false)
+        return
+      }
       // The invoice owns its tax rate once created — re-deriving it from the
       // source quote here would silently undo a rate set on this invoice.
       const taxRateBp = taxRateBpOverride ?? invoice.tax_rate_bp ?? 0
@@ -107,6 +127,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           // this invoice is the owner's, and a refresh must not eat it.
           // From the live recommendation items, not the superseded column.
           ...(invoice.memo ? {} : { memo: toMemo(await listForJob(invoice.job_id)) }),
+          // Re-freeze the approvals behind the bill with the figures.
+          authorizations: await buildAuthorizationTrail(invoice.job_id),
           ...snapshot,
         })
         .eq('id', invoice.id)
@@ -169,6 +191,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     taxCents: invoice.tax_cents,
     totalCents: invoice.total_cents,
     memo: invoice.memo,
+    // The owner's copy shows the full number called; the public link masks it.
+    authorizations: invoice.authorizations ?? [],
     paymentInstructions: settings?.invoice_payment_instructions || null,
     paidDate: invoice.paid_at ? invoice.paid_at.slice(0, 10) : null,
     paidCents: payments.reduce((s, p) => s + p.amount_cents, 0),

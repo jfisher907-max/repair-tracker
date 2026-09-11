@@ -209,8 +209,9 @@ export default function JobForm({ job }: { job?: Job }) {
           createdJobId.current = data.id
           jobId = data.id
         }
-        // A template's lines come along as pre-priced charge lines; costs stay
-        // zero until the real parts are bought and the receipt is scanned.
+        // A template's lines come along as pre-priced charge lines tagged
+        // awaiting_cost, so the receipt fills them (migration 0030) instead
+        // of adding a second, matrix-priced copy beside each one.
         if (templateLines.length) {
           const { error: lineErr } = await supabase.from('part_lines').insert(
             templateLines.map((l) => ({
@@ -219,6 +220,7 @@ export default function JobForm({ job }: { job?: Job }) {
               qty: l.qty,
               unit_cost_cents: 0,
               unit_charge_cents: l.unit_charge_cents,
+              awaiting_cost: true,
             })),
           )
           if (lineErr) throw lineErr

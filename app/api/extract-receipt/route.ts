@@ -12,9 +12,17 @@ type SupportedMedia = (typeof SUPPORTED_MEDIA)[number]
 const EXTRACTION_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['store', 'purchase_date', 'receipt_total', 'sales_tax', 'lines'],
+  required: ['store', 'purchase_date', 'receipt_total', 'sales_tax', 'po_number', 'invoice_number', 'lines'],
   properties: {
     store: { type: ['string', 'null'], description: 'Store/vendor name as printed' },
+    po_number: {
+      type: ['string', 'null'],
+      description: 'PO / P.O. / purchase order / job reference printed on the ticket, exactly as printed. Null if none.',
+    },
+    invoice_number: {
+      type: ['string', 'null'],
+      description: "The store's own invoice, ticket or transaction number, exactly as printed. Null if none.",
+    },
     purchase_date: { type: ['string', 'null'], description: 'Purchase date as YYYY-MM-DD, null if unreadable' },
     receipt_total: { type: ['number', 'null'], description: 'Grand total as printed, in dollars' },
     sales_tax: {
@@ -48,6 +56,7 @@ const PROMPT = `Extract the line items from this store receipt photo. Rules:
 - Ignore marketing text, surveys, loyalty-program blurbs, and store addresses.
 - qty defaults to 1 when not printed. unit_cost is the per-unit price so qty × unit_cost equals the line amount.
 - receipt_total is the grand total as printed on the receipt. lines + sales_tax should equal it.
+- po_number: a PO / P.O. / purchase order / job reference if one is printed (this shop writes its job number there, like J014). invoice_number: the store's own invoice or ticket number. Never guess either — null when not clearly printed.
 Receipts are often thermal-faded, crumpled, or photographed at an angle — do your best, and prefer null/low confidence over guessing.`
 
 function validateExtraction(raw: unknown): ExtractionResult {
@@ -74,6 +83,11 @@ function validateExtraction(raw: unknown): ExtractionResult {
       typeof o.receipt_total === 'number' && Number.isFinite(o.receipt_total) ? o.receipt_total : null,
     sales_tax:
       typeof o.sales_tax === 'number' && Number.isFinite(o.sales_tax) ? o.sales_tax : null,
+    // Returned for the review screen only — never written to the receipt
+    // before Save, like everything else the model read.
+    po_number: typeof o.po_number === 'string' && o.po_number.trim() ? o.po_number.trim() : null,
+    invoice_number:
+      typeof o.invoice_number === 'string' && o.invoice_number.trim() ? o.invoice_number.trim() : null,
     lines,
   }
 }
