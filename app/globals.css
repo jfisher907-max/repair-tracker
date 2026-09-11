@@ -461,6 +461,148 @@ a.card:focus-visible {
 .money-in { color: var(--text-money-in); }
 .money-owed { color: var(--text-money-owed); }
 
+/* ---------- Month-by-month chart (dashboard) ---------- */
+/* Bar fills are their own steps, deepened from the mint / ember / gold ramps so
+   they sit in the dark chart band and clear 3:1 on the card. Validated with the
+   dataviz palette checker against the card surface #141922 - profit vs loss is
+   CVD delta-E 9.8 (deutan), 29.2 to normal vision. Profit never shares a plot
+   with the two "how busy" panels (each small chart is one series, named by its
+   own heading), so those hues only have to read against the card. Text never
+   wears these colors - labels stay on the text tokens. */
+:root {
+  --chart-profit: #2fae5f;
+  --chart-loss: #b94a47;
+  --chart-busy: var(--gold-700);
+}
+
+.mchart-panel { --plot-h: 104px; min-width: 0; }
+.mchart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.mchart-name { font-size: 13px; font-weight: 600; color: var(--text-heading); white-space: nowrap; }
+.mchart-read {
+  min-width: 0;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-body);
+  text-align: right;
+}
+.mchart-body { display: grid; grid-template-columns: 34px 1fr; margin-top: 18px; }
+.mchart-y { position: relative; height: var(--plot-h); }
+.mchart-y span {
+  position: absolute;
+  right: 6px;
+  transform: translateY(50%);
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mchart-plot {
+  position: relative;
+  height: var(--plot-h);
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+/* Hairline, solid, one step off the surface: the grid never competes with a bar. */
+.mchart-grid {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-hairline);
+  pointer-events: none;
+}
+.mchart-grid[data-zero] { background: var(--border-strong); }
+.mchart-col { position: relative; cursor: pointer; }
+.mchart-col[data-active]::before {
+  content: '';
+  position: absolute;
+  inset: -14px 1px -2px;
+  border-radius: var(--wnt-radius-xs);
+  background: var(--surface-hover);
+}
+.mchart-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  z-index: 1;
+  width: min(24px, 64%);
+  min-height: 2px;
+  background: var(--bar);
+  border-radius: 4px 4px 0 0;
+  transform-origin: bottom;
+  animation: mchart-grow var(--dur-slow) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 22ms);
+  transition: opacity var(--dur-fast) var(--ease);
+}
+.mchart-bar[data-neg] {
+  background: var(--chart-loss);
+  border-radius: 0 0 4px 4px;
+  transform-origin: top;
+}
+.mchart-plot[data-has-active] .mchart-col:not([data-active]) .mchart-bar { opacity: 0.35; }
+.mchart-cap {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  z-index: 1;
+  text-align: center;
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 700;
+  color: var(--text-heading);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.mchart-x {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  margin-left: 34px;
+  margin-top: 6px;
+}
+.mchart-x span { text-align: center; font-size: 10px; line-height: 12px; color: var(--text-muted); }
+.mchart-x span[data-muted] { color: var(--text-faint); }
+.mchart-x span[data-active] { color: var(--text-heading); font-weight: 700; }
+.mchart-dot {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--wnt-radius-pill);
+  background: var(--status-wait-solid);
+}
+/* Centred under the month label on the axis only — the auto margins would
+   shove the footnote's text away from its own dot. */
+.mchart-x .mchart-dot { margin: 3px auto 0; }
+.mchart-group:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--wnt-radius-sm); }
+@keyframes mchart-grow { from { transform: scaleY(0); } }
+
+.mchart-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mchart-table th,
+.mchart-table td {
+  padding: 0.35rem 0.4rem;
+  text-align: right;
+  border-bottom: 1px solid var(--border-hairline);
+  font-variant-numeric: tabular-nums;
+}
+.mchart-table th:first-child { text-align: left; }
+.mchart-table thead th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.mchart-table tbody th { font-weight: 500; color: var(--text-body); }
+.mchart-table tr[data-muted] { color: var(--text-faint); }
+.mchart-table tfoot th,
+.mchart-table tfoot td { border-bottom: 0; font-weight: 700; color: var(--text-heading); }
+
 /* ---------- App chrome (header + tab bar) ---------- */
 
 /* Note: declare only the standard backdrop-filter — LightningCSS adds the
@@ -926,6 +1068,24 @@ a.card:focus-visible {
   color: var(--doc-muted);
 }
 .doc-foot p { margin: 0; white-space: pre-wrap; }
+/* AS 45.45.210 wants this "conspicuously printed": its own row, in normal
+   ink — not the muted small print around it. */
+.doc-foot p.doc-legal { flex-basis: 100%; font-size: 12.5px; font-weight: 500; color: var(--doc-ink); }
+
+/* AS 45.45.190: each part's condition, its own small word under the description. */
+.doc-cond {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--doc-muted);
+}
+
+/* The approvals behind the bill (AS 45.45.170(d)): who, how, when. */
+.doc-auth { margin-top: 22px; break-inside: avoid; }
+.doc-auth ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.doc-auth li { font-size: 12.5px; line-height: 1.55; color: var(--doc-ink); overflow-wrap: anywhere; }
 
 /* Statements & service records: multi-column data tables and per-section totals. */
 .doc-table--tight tbody td { font-size: 12.5px; padding: 8px 0; }

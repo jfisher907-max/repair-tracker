@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import JobRow from '@/components/JobRow'
+import MonthlyChart, { type MonthlyJob } from '@/components/MonthlyChart'
 import { SkeletonDashboard } from '@/components/Skeleton'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { collectedForJob, unpaidBalanceCents } from '@/lib/calc'
@@ -52,6 +53,8 @@ export default function Dashboard() {
   const [newRequests, setNewRequests] = useState(0)
   /** Overhead — the spending that isn't parts for a specific job. */
   const [expenses, setExpenses] = useState<{ amount_cents: number; date: string }[]>([])
+  /** Jobs still carrying approved parts with no cost entered: their profit reads high. */
+  const [uncostedJobs, setUncostedJobs] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchJobsWithContext().then(setItems).catch((e) => setError(String(e.message ?? e)))
@@ -87,17 +90,24 @@ export default function Dashboard() {
     Promise.all([
       supabase
         .from('part_lines')
-        .select('line_total_cents, purchase_date, job:jobs(date, deleted_at)'),
+        .select('job_id, line_total_cents, purchase_date, awaiting_cost, job:jobs(date, deleted_at)'),
       supabase
         .from('receipts')
         .select('tax_cents, purchase_date, job:jobs(date, deleted_at)'),
     ]).then(([lines, receipts]) => {
       const lineRows =
         (lines.data as unknown as {
+          job_id: string
           line_total_cents: number
           purchase_date: string | null
+          awaiting_cost: boolean
           job: { date: string; deleted_at: string | null } | null
         }[]) ?? []
+      setUncostedJobs(
+        new Set(
+          lineRows.filter((r) => r.awaiting_cost && r.job && !r.job.deleted_at).map((r) => r.job_id),
+        ),
+      )
       const taxRows =
         (receipts.data as unknown as {
           tax_cents: number
@@ -251,6 +261,21 @@ export default function Dashboard() {
       overhead,
     }
   }, [scoped, payments, partOutflows, taxableInvoices, expenses, year])
+
+  // The chart buckets by JOB date, so profit, job count and hours for a month
+  // all come from the same jobs and the three panels line up. It does its own
+  // year filtering (it needs all years to know when tracking started), so it
+  // gets every job, not the scoped list.
+  const chartJobs = useMemo<MonthlyJob[]>(
+    () =>
+      (items ?? []).map((it) => ({
+        date: it.job.date,
+        hours: Number(it.job.labor_hours),
+        profitCents: it.totals?.profit_cents ?? 0,
+        uncosted: uncostedJobs.has(it.job.id),
+      })),
+    [items, uncostedJobs],
+  )
 
   const unpaidJobs = scoped.filter((it) => it.job.payment_status !== 'paid')
   const recent = scoped.slice(0, 6)
@@ -459,6 +484,8 @@ export default function Dashboard() {
           </span>
         </Link>
       )}
+
+      <MonthlyChart jobs={chartJobs} year={year} />
 
       {unpaidJobs.length > 0 && (
         <section className="space-y-2">
