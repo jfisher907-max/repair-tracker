@@ -124,7 +124,7 @@ function JobsInner() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl">Jobs</h1>
+        <h1 className="text-2xl">Jobs &amp; Quotes</h1>
         {tab === 'quotes' ? (
           <Link href="/quotes/new" className="btn btn-primary">+ New Quote</Link>
         ) : (

@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import WingMark from '@/components/WingMark'
 import { BRAND_NAME } from '@/lib/brand'
-import { usePathname, useSearchParams } from 'next/navigation'
-import { Suspense, useSyncExternalStore } from 'react'
+import { usePathname } from 'next/navigation'
+import { useSyncExternalStore } from 'react'
 
 const tabs = [
   { href: '/dashboard', label: 'Home', icon: '🏠' },
@@ -27,13 +27,12 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
   },
   {
     // Quotes live with the work they describe, not with the money: a quote is
-    // a job that has not started yet.
+    // a job that has not started yet. One door for both (owner rule
+    // 2026-09-12); the page's own bar switches between the two lists, and the
+    // New Job / New Quote buttons live inside those lists, not in the rail.
     label: 'Work',
     items: [
-      // "New Job" and "New Quote" live INSIDE the Jobs and Quotes views (owner
-      // rule 2026-09-12), so the rail lists the places, not the actions.
-      { href: '/jobs', label: 'Jobs' },
-      { href: '/jobs?tab=quotes', label: 'Quotes' },
+      { href: '/jobs', label: 'Jobs & Quotes' },
       { href: '/requests', label: 'Requests' },
       { href: '/followups', label: 'Follow-ups' },
     ],
@@ -59,36 +58,25 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
 ]
 
 /**
- * Which nav item a route lights up. `tab` is the ?tab= of the current URL
- * (null when the caller cannot read it) — it only matters on /jobs, where
- * ?tab=quotes lights "Quotes" instead of "Jobs".
- *
- * Quote pages count as Jobs work (the phone tab bar has no Quotes tab), and
- * invoice pages count as Billing.
+ * Which nav item a route lights up. Every job AND quote route (the two forms
+ * included) is "Jobs & Quotes" work; invoice pages count as Billing. The
+ * phone bar has its own New Job tab, so /jobs/new lights that one there and
+ * not "Jobs".
  */
-function isActive(href: string, pathname: string, tab: string | null) {
-  const onQuotesTab = pathname === '/jobs' && tab === 'quotes'
-  // Every quote route, the new-quote form included, is "Quotes" work.
-  const onQuotePage = pathname.startsWith('/quotes')
+function isActive(href: string, pathname: string, surface: 'rail' | 'bar') {
   if (href === '/dashboard') return pathname === '/dashboard'
   if (href === '/jobs/new') return pathname === '/jobs/new'
   if (href === '/hangar') return pathname === '/hangar'
-  if (href === '/jobs?tab=quotes') return onQuotesTab || onQuotePage
   if (href === '/jobs') {
-    // The sidebar (tab known) hands quote routes to its own "Quotes" item; the
-    // phone tab bar (tab unknown) has no such item, so Jobs takes them. The
-    // phone bar has its own New Job tab, so /jobs/new lights that one there.
-    if (tab !== null && (onQuotesTab || onQuotePage)) return false
-    if (tab === null && pathname === '/jobs/new') return false
-    return pathname.startsWith('/jobs') || onQuotePage
+    if (surface === 'bar' && pathname === '/jobs/new') return false
+    return pathname.startsWith('/jobs') || pathname.startsWith('/quotes')
   }
   if (href === '/billing') return pathname.startsWith('/billing') || pathname.startsWith('/invoices')
   return pathname.startsWith(href)
 }
 
-/** The sidebar links. Split out so the search-param read sits under its own
- *  Suspense boundary instead of bailing the whole shell out of prerendering. */
-function SideNavLinks({ pathname, tab }: { pathname: string; tab: string | null }) {
+/** The sidebar links. */
+function SideNavLinks({ pathname }: { pathname: string }) {
   return (
     <>
       {sideNav.map((group) => (
@@ -98,7 +86,7 @@ function SideNavLinks({ pathname, tab }: { pathname: string; tab: string | null 
             <Link
               key={item.href}
               href={item.href}
-              className={`side-item ${isActive(item.href, pathname, tab) ? 'active' : ''}`}
+              className={`side-item ${isActive(item.href, pathname, 'rail') ? 'active' : ''}`}
             >
               {item.label}
             </Link>
@@ -107,11 +95,6 @@ function SideNavLinks({ pathname, tab }: { pathname: string; tab: string | null 
       ))}
     </>
   )
-}
-
-function SideNavWithParams({ pathname }: { pathname: string }) {
-  const params = useSearchParams()
-  return <SideNavLinks pathname={pathname} tab={params.get('tab') ?? ''} />
 }
 
 function subscribeOnline(onChange: () => void) {
@@ -137,9 +120,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <WingMark size={22} /> {BRAND_NAME}
         </Link>
         <nav className="mt-2 flex-1">
-          <Suspense fallback={<SideNavLinks pathname={pathname} tab={null} />}>
-            <SideNavWithParams pathname={pathname} />
-          </Suspense>
+          <SideNavLinks pathname={pathname} />
         </nav>
         <Link
           href="/settings"
@@ -192,7 +173,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Phone bottom tab bar */}
       <nav className="tabbar fixed inset-x-0 bottom-0 z-40 flex sm:hidden">
         {tabs.map((t) => {
-          const active = isActive(t.href, pathname, null)
+          const active = isActive(t.href, pathname, 'bar')
           return (
             <Link
               key={t.href}
