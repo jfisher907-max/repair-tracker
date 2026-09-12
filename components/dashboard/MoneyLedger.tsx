@@ -41,6 +41,16 @@ export default function MoneyLedger({
   // Earned − owed equals cash profit only when the parts on this scope's jobs
   // are the parts bought in this scope — true inside a year, not across one.
   const bridgeGap = f.earned - f.unpaid - f.cashProfit
+  // Sales tax the state is owed comes in two ways: charged on a tax line, or
+  // hidden inside a total that went out with no tax line (the owner's rule:
+  // 5% of what those customers paid is the state's). Both add to the same
+  // "held for the state" figure; the split is shown so the second kind is
+  // never mistaken for money the shop kept. The invoice COUNT belongs only on
+  // the job-dated "Billed" caption: the collected-side amounts follow payment
+  // dates, and last year's untaxed job paid this year would show "0 invoices"
+  // beside a real amount.
+  const taxChargedCollected = f.taxCollected - f.taxIncludedCollected
+  const taxNotYetCollected = f.taxBilled - f.taxCollected
 
   const laborShare = f.earned > 0 ? Math.max(0, Math.min(1, f.laborCharged / f.earned)) : 0
   const partsShare = f.earned > 0 ? Math.max(0, Math.min(1 - laborShare, f.partsMarkup / f.earned)) : 0
@@ -50,7 +60,16 @@ export default function MoneyLedger({
     <div className="ledger-grid">
       <div className="ledger-block" aria-label="How the money moves from billed to cash profit">
         <span className="label">From billed to cash profit</span>
-        <Row op="" label="Billed to customers, before sales tax" cap={`${plural(f.count, 'job')} dated ${scopeWords}, paid or not`} amount={f.charged} />
+        <Row
+          op=""
+          label="Billed to customers, before sales tax"
+          cap={`${plural(f.count, 'job')} dated ${scopeWords}, paid or not${
+            f.taxIncludedBilled > 0
+              ? `; net of the ${money(f.taxIncludedBilled)} sales tax inside ${plural(f.taxIncludedInvoices, 'untaxed total')}`
+              : ''
+          }`}
+          amount={f.charged}
+        />
         <Row
           op="−"
           label="Still owed to you"
@@ -71,7 +90,15 @@ export default function MoneyLedger({
           />
         )}
         <Row op="=" label="Collected on the work, before tax" amount={collectedOnWork} sum />
-        <Row op="+" label="Sales tax the customers paid on top" cap="rides along inside the payments" amount={f.taxCollected} />
+        <Row op="+" label="Sales tax the customers paid on top" cap="charged on a tax line; rides along inside the payments" amount={taxChargedCollected} />
+        {f.taxIncludedCollected > 0 && (
+          <Row
+            op="+"
+            label="Sales tax included in untaxed totals"
+            cap="on invoices that went out with no tax line; 5% of what those customers paid is the state's"
+            amount={f.taxIncludedCollected}
+          />
+        )}
         <Row op="=" label="Payments received" cap="what actually landed, by payment date" amount={f.collected} sum tone="in" />
         <Row
           op="−"
@@ -79,7 +106,12 @@ export default function MoneyLedger({
           cap={`your cost, counted when bought${f.owedJobs > 0 ? `; includes the parts on the ${plural(f.owedJobs, 'unpaid job')}` : ''}`}
           amount={-f.partsSpend}
         />
-        <Row op="−" label="Sales tax held for the state" cap="the state's money, never yours" amount={-f.taxCollected} />
+        <Row
+          op="−"
+          label="Sales tax held for the state"
+          cap={f.taxIncludedCollected > 0 ? 'the state’s money, never yours: charged on top and included in untaxed totals' : 'the state’s money, never yours'}
+          amount={-f.taxCollected}
+        />
         <Row op="=" label="Cash profit, before overhead" amount={f.cashProfit} sum total tone={f.cashProfit >= 0 ? 'in' : 'owed'} />
         {f.overhead > 0 && (
           <>
@@ -146,12 +178,23 @@ export default function MoneyLedger({
           sum
           total
         />
-        {f.taxBilled - f.taxCollected > 0 && (
+        {taxChargedCollected > 0 && (
+          <Row op="" label="of which, charged on invoices" cap="a tax line the customer saw and paid on top" amount={taxChargedCollected} />
+        )}
+        {f.taxIncludedCollected > 0 && (
+          <Row
+            op=""
+            label="of which, included in untaxed totals"
+            cap="invoices with no tax line; the 5% comes out of what was paid, not on top"
+            amount={f.taxIncludedCollected}
+          />
+        )}
+        {taxNotYetCollected > 0 && (
           <Row
             op=""
             label="Billed, not collected yet"
             cap="tax on invoices still unpaid; it moves to the line above when those customers pay"
-            amount={f.taxBilled - f.taxCollected}
+            amount={taxNotYetCollected}
           />
         )}
         <p className="ledger-bridge">

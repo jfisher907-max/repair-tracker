@@ -178,7 +178,8 @@ export default function QuoteForm({
         ? centsToInput(addOnJob.labor_rate_cents)
         : '',
   )
-  const [taxRate, setTaxRate] = useState(quote ? String(quote.tax_rate_bp / 100) : '')
+  // A new quote starts at Juneau's 5% until settings load (0041): never untaxed by accident.
+  const [taxRate, setTaxRate] = useState(quote ? String(quote.tax_rate_bp / 100) : '5')
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? plusDays(30))
   const [notes, setNotes] = useState(quote?.notes ?? '')
   // The deposit is a RULE (parts / 50% / fixed), resolved against whatever the
@@ -258,7 +259,7 @@ export default function QuoteForm({
           // An add-on bills at ITS JOB's rate, not the shop default — the
           // quoted total must match what lands on the job.
           if (!addOnJob) setLaborRate(centsToInput(data.default_labor_rate_cents))
-          setTaxRate(String((data.default_tax_rate_bp ?? 0) / 100))
+          setTaxRate(String((data.default_tax_rate_bp ?? 500) / 100))
         }
       })
     // Every walk-in price Jake has checked teaches the estimate.

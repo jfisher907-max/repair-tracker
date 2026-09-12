@@ -256,6 +256,10 @@ export interface Invoice {
   tax_rate_bp: number
   tax_cents: number
   total_cents: number
+  /** Sales tax hidden inside total_cents when no tax line was charged (0041):
+   *  the state's 5% of what the customer paid. Books only — the document the
+   *  customer sees is total_cents, unchanged. Always 0 when tax_cents > 0. */
+  included_tax_cents: number
   memo: string | null
   /** The approvals behind this bill, frozen with it (AS 45.45.170(d)). */
   authorizations: AuthorizationEntry[]
@@ -272,6 +276,9 @@ export interface JobTotals {
   parts_cost_cents: number
   parts_charged_cents: number
   total_charged_cents: number
+  /** The governing (largest live) invoice's included_tax_cents; 0 when none. */
+  included_tax_cents: number
+  /** total_charged − parts cost − included tax. total_charged itself is untouched. */
   profit_cents: number
 }
 

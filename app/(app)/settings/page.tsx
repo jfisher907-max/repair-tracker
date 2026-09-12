@@ -216,6 +216,9 @@ export default function SettingsPage() {
           <div>
             <label className="label">Sales tax % (0 = no tax line)</label>
             <input className="input" inputMode="decimal" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+            <p className="mt-1 text-xs" style={{ color: 'var(--text3)' }}>
+              Every new quote and invoice starts at this rate. 0% means documents go out untaxed.
+            </p>
           </div>
           <div>
             <label className="label">Invoice payment terms</label>

@@ -210,7 +210,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  does it, and broken out below the cost line so the figure can be
    *  reconciled against the paper receipt. */
   const receiptTaxCents = receipts.reduce((s, r) => s + (r.tax_cents ?? 0), 0)
-  const totals = computeTotals(job, lines, receiptTaxCents)
+  /** The governing invoice: the LARGEST live one (ties to the newest — the
+   *  list is in created_at order, so `>=` keeps the later revision), the same
+   *  rule job_totals and finances.ts use. Its included_tax_cents is the 5% the
+   *  state is owed out of a total that went out with no tax line (0041); it
+   *  comes off profit here so the figure matches job_totals. `?? 0` covers a
+   *  row read before the column exists. */
+  const governingInvoice = invoices
+    .filter((i) => i.status !== 'void')
+    .reduce<Invoice | null>((best, i) => (!best || i.total_cents >= best.total_cents ? i : best), null)
+  const includedTaxCents = governingInvoice?.included_tax_cents ?? 0
+  const totals = computeTotals(job, lines, receiptTaxCents, includedTaxCents)
   // Ledger is authoritative once it has entries; jobs settled before payment
   // tracking existed fall back to their cached status/amount.
   const paidFromLedger = payments.reduce((s, p) => s + p.amount_cents, 0)
@@ -649,8 +659,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       }
       // Settings is the rate the shop actually charges, and it is the control
       // the owner turns — so it wins over any quote's rate. It stays editable
-      // on the draft invoice for one-off cases.
-      const taxRateBp = settings?.default_tax_rate_bp ?? 0
+      // on the draft invoice for one-off cases. If settings did not load, the
+      // fallback is Juneau's 5% (0041): an invoice must never go out untaxed
+      // by accident.
+      const taxRateBp = settings?.default_tax_rate_bp ?? 500
       const snapshot = buildInvoiceSnapshot(job!, current, taxRateBp)
       // Terms from Settings: 0 = due on receipt (due date = issue date).
       const termsDays = settings?.default_invoice_terms_days ?? 0
@@ -1555,6 +1567,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             {formatCents(totals.profit_cents)}
           </span>
         </div>
+        {includedTaxCents > 0 && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Includes {formatCents(includedTaxCents)} sales tax owed to the state (this invoice went
+            out with no tax line).
+          </p>
+        )}
         {awaitingLines.length > 0 && (
           <p className="text-xs" style={{ color: 'var(--status-wait-fg)' }}>
             Not final: {formatCents(awaitingChargedCents)} is charged on {awaitingLines.length} part

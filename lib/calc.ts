@@ -7,6 +7,7 @@ export interface ComputedTotals {
   parts_cost_cents: number
   parts_charged_cents: number
   total_charged_cents: number
+  included_tax_cents: number
   profit_cents: number
 }
 
@@ -17,11 +18,20 @@ export interface ComputedTotals {
  * receipts. It is a COST and never a customer charge: it raises parts cost and
  * lowers profit, and touches nothing on the charged side (see migration 0027).
  * Omitting it here while the view counts it is exactly how the two drift.
+ *
+ * includedTaxCents is the governing (largest live) invoice's included_tax_cents:
+ * the 5% the state is owed out of a total that carried no tax line (migration
+ * 0041). It lowers profit only. It is not a cost of the job and not a charge,
+ * so parts cost and total_charged are untouched — the customer paid exactly
+ * what the invoice said. The view reads it off the invoice itself; a caller
+ * that has the job's invoices passes it, and a caller that omits it gets a
+ * profit that reads high by that amount on the six pre-rule jobs.
  */
 export function computeTotals(
   job: Pick<Job, 'labor_hours' | 'labor_rate_cents' | 'parts_charged_override_cents'>,
   lines: Pick<PartLine, 'line_total_cents' | 'line_charge_total_cents'>[],
   receiptTaxCents = 0,
+  includedTaxCents = 0,
 ): ComputedTotals {
   const labor = Math.round(Number(job.labor_hours) * job.labor_rate_cents)
   const partsCost =
@@ -37,7 +47,8 @@ export function computeTotals(
     parts_cost_cents: partsCost,
     parts_charged_cents: partsCharged,
     total_charged_cents: total,
-    profit_cents: total - partsCost,
+    included_tax_cents: includedTaxCents,
+    profit_cents: total - partsCost - includedTaxCents,
   }
 }
 

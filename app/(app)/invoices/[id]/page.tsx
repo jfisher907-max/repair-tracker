@@ -310,6 +310,32 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               {refreshing ? 'Updating…' : '↻ Update from job'}
             </button>
           )}
+          {/* Owner rule 2026-09-12: every invoice defaults to sales tax, and six
+              went out untaxed before he knew the system. A 0% draft says so out
+              loud, with the fix one tap away; an issued invoice is left alone. */}
+          {invoice.status === 'draft' && (invoice.tax_rate_bp ?? 0) === 0 && (
+            <div
+              className="flex basis-full flex-wrap items-center gap-2 rounded-lg p-2 text-sm"
+              style={{ background: 'var(--status-wait-bg)', color: 'var(--status-wait-fg)' }}
+              role="status"
+            >
+              <span className="min-w-0 flex-1">
+                No sales tax on this draft. Every invoice defaults to 5%, and an untaxed one still owes
+                the state 5% out of its total.
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={refreshing}
+                onClick={async () => {
+                  const { data } = await supabase.from('settings').select('default_tax_rate_bp').single()
+                  await refreshFromJob(data?.default_tax_rate_bp || 500)
+                }}
+              >
+                Apply 5%
+              </button>
+            </div>
+          )}
           {invoice.status !== 'paid' && invoice.status !== 'void' && (
             <button
               className="btn btn-sm"
@@ -499,6 +525,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <DocView doc={doc} />
+      {/* Books only (0041): the document above is exactly what the customer
+          paid; this tells the owner how much of it belongs to the state. Never
+          passed into DocView, never on the public link, and off the print. */}
+      {(invoice.included_tax_cents ?? 0) > 0 && (
+        <p className="no-print text-xs" style={{ color: 'var(--text3)' }}>
+          No tax line was charged; {formatCents(invoice.included_tax_cents)} of this total is sales
+          tax owed to the state.
+        </p>
+      )}
     </div>
   )
 }

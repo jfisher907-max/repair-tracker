@@ -60,6 +60,8 @@ export default function ReportsPage() {
         setPayments(rows.filter((p) => !p.job?.deleted_at).map(({ job: _job, ...p }) => p as Payment))
       })
     supabase.from('expenses').select('*').then(({ data }) => setExpenses((data as Expense[]) ?? []))
+    // `*` carries included_tax_cents (0041) — the tax inside an untaxed total —
+    // which the sales-tax table below adds to tax_cents.
     supabase.from('invoices').select('*').then(({ data }) => setInvoices((data as Invoice[]) ?? []))
     supabase.from('settings').select('*').single().then(({ data }) => setSettings(data as Settings))
   }, [])
@@ -87,7 +89,15 @@ export default function ReportsPage() {
     const months = MONTHS.map(() => ({ revenue: 0, parts: 0, overhead: 0, collected: 0, partsPaid: 0 }))
     for (const j of jobs.filter((j) => inYear(j.job.date))) {
       const m = months[monthOf(j.job.date)]
-      m.revenue += j.totals?.total_charged_cents ?? 0
+      // Revenue is the job's charge NET of the sales tax hidden inside an
+      // untaxed invoice's total (0041): that 5% was never the shop's money.
+      // job_totals.included_tax_cents is the governing invoice's figure — the
+      // job's LARGEST live (non-void) invoice, ties to the newest — resolved
+      // in the view itself, the same rule finances.ts and the job page apply.
+      // It comes off in the job's own month, where the charge was booked.
+      // total_charged_cents is untouched: the customer paid what the paper said.
+      const included = j.totals?.included_tax_cents ?? 0
+      m.revenue += (j.totals?.total_charged_cents ?? 0) - included
       m.parts += j.totals?.parts_cost_cents ?? 0
     }
     for (const e of expenses.filter((e) => inYear(e.date))) {
@@ -105,12 +115,18 @@ export default function ReportsPage() {
       byMethod.set(p.method, (byMethod.get(p.method) ?? 0) + p.amount_cents)
     }
 
-    // Sales tax by filing quarter — issued (sent/paid) invoices only.
+    // Sales tax by filing quarter — issued (sent/paid) invoices only. The tax
+    // charged on a line and the tax included in an untaxed total (0041) are
+    // one amount to the state, so both count; the included part is kept
+    // separately for the caption under the table.
     const taxQuarters = [0, 0, 0, 0]
+    let taxIncludedIssued = 0
     for (const i of invoices.filter(
       (i) => (i.status === 'sent' || i.status === 'paid') && inYear(i.issue_date),
     )) {
-      taxQuarters[Math.floor(monthOf(i.issue_date) / 3)] += i.tax_cents
+      const included = i.included_tax_cents ?? 0
+      taxQuarters[Math.floor(monthOf(i.issue_date) / 3)] += i.tax_cents + included
+      taxIncludedIssued += included
     }
 
     const totals = months.reduce(
@@ -126,7 +142,7 @@ export default function ReportsPage() {
 
     const taxCollected = invoices
       .filter((i) => i.status !== 'void' && inYear(i.issue_date))
-      .reduce((s, i) => s + i.tax_cents, 0)
+      .reduce((s, i) => s + i.tax_cents + (i.included_tax_cents ?? 0), 0)
 
     // Receivables as of today (not year-scoped): who owes what, and for how long.
     const now = new Date()
@@ -162,6 +178,7 @@ export default function ReportsPage() {
       totals,
       taxCollected,
       taxQuarters,
+      taxIncludedIssued,
       byMethod: [...byMethod.entries()].sort((a, b) => b[1] - a[1]),
       aging,
       owed,
@@ -304,7 +321,7 @@ export default function ReportsPage() {
             )}
             <p className="report-meta mt-1">
               {basis === 'accrual'
-                ? `Billed = customer charges on jobs dated in ${year} (labor + parts at your prices). Collected = payments recorded in the ledger. Net = billed − parts cost − overhead.`
+                ? `Billed = customer charges on jobs dated in ${year} (labor + parts at your prices), less any sales tax inside an invoice that went out with no tax line. Collected = payments recorded in the ledger. Net = billed − parts cost − overhead.`
                 : `Cash basis: money in = payments received in ${year}; parts paid by purchase date; net cash = in − parts − overhead. This is the view that matches the bank account (Schedule C cash filers report this).`}
             </p>
           </section>
@@ -360,6 +377,12 @@ export default function ReportsPage() {
             <p className="report-meta mt-1">
               Issued (sent or paid) invoices only, by issue date — the numbers for your filing periods.
             </p>
+            {report.taxIncludedIssued > 0 && (
+              <p className="report-meta mt-1">
+                {formatCents(report.taxIncludedIssued)} of this is tax inside invoices that went out
+                with no tax line.
+              </p>
+            )}
           </section>
 
           <section>
