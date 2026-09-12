@@ -86,6 +86,8 @@ export interface Finances {
   /** Payments received, sales tax included. */
   collected: number
   taxCollected: number
+  /** Sales tax on the governing invoices of this year's jobs, collected or not. */
+  taxBilled: number
   /** collected − partsSpend − taxCollected: the cash side, before overhead. */
   cashProfit: number
   unpaid: number
@@ -331,6 +333,14 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     taxCollected += taxSoFar
   }
 
+  // What the invoices of this year's jobs carry in tax, paid or not: the part
+  // above taxCollected is owed to the state the day those customers pay.
+  let taxBilled = 0
+  for (const it of scoped) {
+    const inv = govByJob.get(it.job.id)
+    if (inv && inv.tax_cents > 0) taxBilled += inv.tax_cents
+  }
+
   const overhead = rows.expenses.filter((e) => inYear(e.date)).reduce((s, e) => s + e.amount_cents, 0)
 
   // Month state. The months before the first job ever logged weren't slow —
@@ -357,6 +367,7 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     partsSpend,
     collected,
     taxCollected,
+    taxBilled,
     cashProfit: collected - partsSpend - taxCollected,
     unpaid,
     laborCharged,

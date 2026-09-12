@@ -132,6 +132,33 @@ export default function MoneyLedger({
         {/* Overhead is taken off once, after cash profit in the first block. */}
         <Row op="=" label="Earned on the work" cap="labor plus parts margin, paid or not, before overhead" amount={f.earned} sum total tone={f.earned >= 0 ? 'in' : 'owed'} />
       </div>
+
+      {/* The state's money, shown as what it is: a figure you owe, not a
+          subtraction buried mid-chain. Same number as the "held for the
+          state" line above; Reports breaks it down by filing quarter. */}
+      <div className="ledger-block" aria-label="Sales tax owed to the state">
+        <span className="label">Owed to the state</span>
+        <Row
+          op=""
+          label="Sales tax collected, to remit"
+          cap="5% on the paid share of each invoice; it rode in with the payments and is the state's money"
+          amount={f.taxCollected}
+          sum
+          total
+        />
+        {f.taxBilled - f.taxCollected > 0 && (
+          <Row
+            op=""
+            label="Billed, not collected yet"
+            cap="tax on invoices still unpaid; it moves to the line above when those customers pay"
+            amount={f.taxBilled - f.taxCollected}
+          />
+        )}
+        <p className="ledger-bridge">
+          The gross figure for {year === 'all' ? 'all time' : year}. Reports has it by filing quarter. Remittances are not
+          recorded here yet, so nothing is taken off for returns already filed.
+        </p>
+      </div>
     </div>
   )
 
