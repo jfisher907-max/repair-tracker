@@ -1,7 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { formatCents } from '@/lib/money'
+import { vehicleLabel } from '@/lib/types'
 import {
   coreDepositTotalCents,
   coreState,
@@ -90,6 +92,19 @@ export default function CoreDeposits({
   )
   const outCents = ledger.out.cents + ledger.awaitingCredit.cents
   const settled = ledger.credited.count + ledger.deniedAbsorbed.count + ledger.deniedBilled.count
+  // Cores belong to a job, so they are listed under it: the job is the door and
+  // the cores hang beneath it. Groups keep the worst-first order of their
+  // first row, so a job with a wrongly billed core still leads the card.
+  const groups: { key: string; job: CoreOut['job']; rows: typeof open }[] = []
+  for (const x of open) {
+    const key = x.core.job?.id ?? x.core.job_id
+    let g = groups.find((it) => it.key === key)
+    if (!g) {
+      g = { key, job: x.core.job, rows: [] }
+      groups.push(g)
+    }
+    g.rows.push(x)
+  }
 
   return (
     <div className="card space-y-2">
@@ -118,7 +133,19 @@ export default function CoreDeposits({
         </span>
       </div>
 
-      {open.map(({ core: c, watch }) => {
+      {groups.map((g) => (
+        <section
+          key={g.key}
+          className="core-job"
+          aria-label={g.job ? `Cores on ${g.job.job_number}` : 'Cores with no job'}
+          style={{
+            borderLeftColor: g.rows.some((r) => r.watch.wronglyBilled || r.watch.overdue)
+              ? 'var(--status-stop-solid)'
+              : 'var(--status-wait-solid)',
+          }}
+        >
+          <JobHead job={g.job} count={g.rows.reduce((n, r) => n + (Number(r.core.qty) || 1), 0)} />
+          {g.rows.map(({ core: c, watch }) => {
         const deposit = coreDepositTotalCents(c)
         const state = coreState(c)
         return (
@@ -127,7 +154,11 @@ export default function CoreDeposits({
               <div className="min-w-0">
                 <span className="font-semibold">{c.description}</span>{' '}
                 <span style={{ color: 'var(--text3)' }}>
-                  {[c.store, c.job?.job_number, watch.days > 0 ? `${watch.days}d` : 'today']
+                  {[
+                    Number(c.qty) > 1 ? `×${Number(c.qty)}` : '',
+                    c.store,
+                    watch.days > 0 ? `${watch.days}d` : 'today',
+                  ]
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
@@ -247,6 +278,8 @@ export default function CoreDeposits({
           </div>
         )
       })}
+        </section>
+      ))}
 
       {msg && (
         <p className="flash-in text-xs" style={{ color: 'var(--text2)' }} role="status">
@@ -289,5 +322,30 @@ export default function CoreDeposits({
         once the store credits it back. Only a core the store denies ever goes on a bill.
       </p>
     </div>
+  )
+}
+
+/** The job a group of cores belongs to: gold id, title, who and what — and a door to it. */
+function JobHead({ job, count }: { job: CoreOut['job']; count: number }) {
+  const units = `${count} core${count === 1 ? '' : 's'}`
+  if (!job) {
+    return (
+      <div className="core-job-head">
+        <span className="font-semibold">No job attached</span>
+        <span className="ml-auto text-xs" style={{ color: 'var(--text3)' }}>{units}</span>
+      </div>
+    )
+  }
+  return (
+    <Link href={`/jobs/${job.id}`} className="core-job-head">
+      <span className="wnt-id text-xs">{job.job_number}</span>
+      <span className="min-w-0 truncate font-semibold">{job.title}</span>
+      <span className="min-w-0 truncate text-sm" style={{ color: 'var(--text2)' }}>
+        {job.vehicle?.customer?.name ?? 'Unknown customer'} · {vehicleLabel(job.vehicle)}
+      </span>
+      <span className="ml-auto flex-none text-xs" style={{ color: 'var(--text3)' }}>
+        {units} →
+      </span>
+    </Link>
   )
 }

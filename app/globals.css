@@ -992,6 +992,32 @@ a.card:focus-visible {
 .recent { animation-delay: 200ms; }
 .doors { animation-delay: 220ms; }
 
+/* ---------- Core worklist (follow-ups) ---------- */
+/* Cores are grouped under the job they belong to. The job row is the door
+   (gold id, title, who and what) and the cores hang beneath it behind the
+   group's status edge: gold while the deposit is out, ember when one is
+   overdue or wrongly on a customer's bill. */
+.core-job {
+  border-left: var(--edge-width) solid var(--status-wait-solid);
+  padding-left: 0.6rem;
+  margin-top: 0.6rem;
+}
+.core-job-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.5rem;
+  min-height: 44px;
+  padding: 0.3rem 0;
+  color: var(--text-heading);
+  text-decoration: none;
+  border-radius: var(--wnt-radius-xs);
+  transition: var(--transition-control);
+}
+a.core-job-head:hover .font-semibold { color: var(--gold-400); }
+a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.core-job > div { padding: 0.4rem 0 0.4rem 0.25rem; border-top: 1px solid var(--border-hairline); }
+
 /* ---------- App chrome (header + tab bar) ---------- */
 
 /* Note: declare only the standard backdrop-filter — LightningCSS adds the
