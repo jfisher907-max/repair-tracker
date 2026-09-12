@@ -7,7 +7,8 @@ import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { quoteStatusColors, statusChipClass } from '@/lib/billing'
 import { syncJobPayment } from '@/lib/payments'
-import { computeFinances, financeYears, loadFinanceRows, type FinanceRows } from '@/lib/finances'
+import { computeFinances, financeYears, jobsToInvoice, loadFinanceRows, type FinanceRows } from '@/lib/finances'
+import JobRow from '@/components/JobRow'
 import MoneyLedger from '@/components/dashboard/MoneyLedger'
 import { SkeletonList } from '@/components/Skeleton'
 import SwipeableRow from '@/components/SwipeableRow'
@@ -54,6 +55,7 @@ export default function BillingPage() {
 
   const years = useMemo(() => (rows ? financeYears(rows) : []), [rows])
   const f = useMemo(() => (rows ? computeFinances(rows, year) : null), [rows, year])
+  const toInvoice = useMemo(() => (rows ? jobsToInvoice(rows) : null), [rows])
 
   async function deleteInvoice(inv: Invoice) {
     // The swipe affordance already excludes sent/paid invoices; this re-check
@@ -115,6 +117,24 @@ export default function BillingPage() {
           </section>
         )}
       </section>
+
+      {/* Work done, nothing sent: the first thing billing has to do. Same
+          definition as the dashboard's Billing door (lib/finances jobsToInvoice). */}
+      {toInvoice && toInvoice.length > 0 && (
+        <section className="space-y-2" aria-labelledby="to-invoice-heading">
+          <h2 id="to-invoice-heading" className="label !mb-0">
+            To invoice ({toInvoice.length})
+          </h2>
+          <p className="text-sm" style={{ color: 'var(--text2)' }}>
+            Finished jobs with no invoice yet. Open one and tap Create invoice.
+          </p>
+          <div className="space-y-2">
+            {toInvoice.map((it) => (
+              <JobRow key={it.job.id} item={it} />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-2" aria-labelledby="invoices-heading">
         <h2 id="invoices-heading" className="label !mb-0">

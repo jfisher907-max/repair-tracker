@@ -72,44 +72,65 @@ export default function ActionLane({
         ? `back by ${shortDate(returnBy(earliest))}`
         : 'check the credit landed'
 
-  const owedSub =
-    f.owedJobs === 0 ? (
-      'nothing owed'
-    ) : f.uninvoicedJobs > 0 ? (
+  // One money door (owner, 2026-09-12: "the 4 invoices under owed-to-you
+  // should be associated with billing"). Work done but not yet invoiced and
+  // invoices out unpaid are the same list to him: what has to be billed and
+  // collected. The count is the paperwork; the title carries the money.
+  const billingParts: ReactNode[] = []
+  if (f.uninvoicedJobs > 0) {
+    billingParts.push(
       <>
-        {f.uninvoicedJobs} not invoiced yet
+        {f.uninvoicedJobs} to invoice
         {f.oldestOwed && (
           <>
-            {' · '}
-            <span className="wnt-id">{f.oldestOwed.jobNumber}</span>
+            {' '}
+            (<span className="wnt-id">{f.oldestOwed.jobNumber}</span> oldest)
           </>
         )}
-      </>
-    ) : (
-      'all invoiced'
+      </>,
     )
-
-  // Billing is the invoices side only; open quotes get their own door.
+  }
+  if (billing.unpaidInvoices > 0) {
+    billingParts.push(
+      `${billing.unpaidInvoices} invoice${billing.unpaidInvoices === 1 ? '' : 's'} out${billing.overdue > 0 ? ` · ${billing.overdue} overdue` : ''}`,
+    )
+  }
   const billingSub =
-    billing.unpaidInvoices === 0
-      ? 'nothing outstanding'
-      : `${billing.unpaidInvoices} unpaid · ${billing.overdue} overdue`
+    billingParts.length === 0 ? (
+      'nothing outstanding'
+    ) : (
+      <>
+        {billingParts.map((part, i) => (
+          <span key={i}>
+            {i > 0 && ' · '}
+            {part}
+          </span>
+        ))}
+      </>
+    )
+  const billingCount = f.uninvoicedJobs + billing.unpaidInvoices
 
   const doors: Door[] = [
     {
-      href: '/jobs?status=unpaid',
-      n: f.owedJobs,
-      label: 'Owed to you',
+      href: '/billing',
+      n: billingCount,
+      label: 'Billing',
       title:
-        f.owedJobs > 0 ? (
+        f.unpaid > 0 ? (
           <>
-            Owed to you <span className="money money-owed">{money(f.unpaid)}</span>
+            Billing <span className="money money-owed">{money(f.unpaid)} owed</span>
           </>
         ) : (
-          'Owed to you'
+          'Billing'
         ),
-      sub: owedSub,
-      edge: f.owedJobs > 0 ? 'stop' : 'idle',
+      sub: billingSub,
+      // Finished work with no bill sent is the most urgent thing on the board.
+      edge:
+        billing.overdue > 0 || f.uninvoicedJobs > 0
+          ? 'stop'
+          : billing.unpaidInvoices > 0
+            ? 'wait'
+            : 'idle',
     },
     {
       href: '/followups',
@@ -126,14 +147,6 @@ export default function ActionLane({
       title: 'Requests',
       sub: newRequests > 0 ? 'a customer is waiting' : 'nothing waiting',
       edge: newRequests > 0 ? 'wait' : 'idle',
-    },
-    {
-      href: '/billing',
-      n: billing.unpaidInvoices,
-      label: 'Billing',
-      title: 'Billing',
-      sub: billingSub,
-      edge: billing.overdue > 0 ? 'stop' : billing.unpaidInvoices > 0 ? 'wait' : 'idle',
     },
   ]
   // A quote out is a customer who has not answered yet; the door only exists

@@ -516,3 +516,15 @@ export function financeYears(rows: FinanceRows): number[] {
   for (const p of rows.payments) set.add(yearOf(p.date))
   return [...set].sort((a, b) => b - a)
 }
+
+/**
+ * Work done but never billed: jobs not paid that have no live invoice, oldest
+ * first. The dashboard's Billing door counts them and the Billing page lists
+ * them, from this one definition. Not year-scoped: it is a worklist.
+ */
+export function jobsToInvoice(rows: FinanceRows): JobWithContext[] {
+  const invoiced = new Set(rows.invoices.filter((i) => i.status !== 'void').map((i) => i.job_id))
+  return rows.jobs
+    .filter((it) => it.job.payment_status !== 'paid' && !invoiced.has(it.job.id))
+    .sort((a, b) => (a.job.date < b.job.date ? -1 : a.job.date > b.job.date ? 1 : 0))
+}
