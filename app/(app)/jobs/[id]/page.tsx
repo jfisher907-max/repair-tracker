@@ -772,7 +772,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <Link href={`/jobs/${id}/edit`} className="btn btn-sm">Edit</Link>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href={`/jobs/${id}/scan`} className="btn btn-sm btn-primary"><span className="emoji-mobile">📷 </span>Scan receipt</Link>
+          <Link href={`/jobs/${id}/scan`} className="btn btn-sm btn-primary">Scan receipt</Link>
           <button
             className="btn btn-sm"
             onClick={() => {
@@ -794,7 +794,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               'Creating…'
             ) : (
               <>
-                <span className="emoji-mobile">🧾 </span>
                 {openInvoice ? `Open ${openInvoice.invoice_number}` : 'Create invoice'}
               </>
             )}
@@ -818,7 +817,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 setPayQuickOpen(!payQuickOpen)
               }}
             >
-              <span className="emoji-mobile">✓ </span>Mark paid
+              Mark paid
             </button>
           )}
           <button className="btn btn-sm" onClick={() => setMoreOpen(!moreOpen)} aria-expanded={moreOpen}>
@@ -829,11 +828,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         {moreOpen && (
           <div className="panel-in flex flex-wrap gap-2 pt-2">
             <Link href={`/report?job=${id}`} className="btn btn-sm">
-              <span className="emoji-mobile">🖨️ </span>Print this job
+              Print this job
             </Link>
             {customer && (
               <Link href={`/report?customer=${customer.id}`} className="btn btn-sm">
-                <span className="emoji-mobile">🖨️ </span>Print full history
+                Print full history
               </Link>
             )}
             <button
@@ -844,7 +843,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 setTemplateOpen(!templateOpen)
               }}
             >
-              <span className="emoji-mobile">♻️ </span>Save as template
+              Save as template
             </button>
             <Link href={`/quotes/new?job=${id}`} className="btn btn-sm">
               + Quote extra work
@@ -1012,7 +1011,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <p className="text-xs" style={{ color: 'var(--text3)' }}>
             {/* The quoted label tracks the real button, which drops its emoji
                 on desktop — so this prose has to as well. */}
-            Found more while you&apos;re in there? “<span className="emoji-mobile">➕ </span>Quote
+            Found more while you&apos;re in there? “Quote
             extra work” sends the customer the usual approval link, and approved lines land on
             this job.
           </p>
@@ -1037,7 +1036,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <span className="label !mb-0">Labor</span>
           {!editingLabor && (
             <button className="btn btn-sm" onClick={openLaborEditor}>
-              <span className="emoji-mobile">✎ </span>Adjust
+              Adjust
             </button>
           )}
         </div>
@@ -1146,7 +1145,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   {[
                     l.store,
                     l.purchase_date,
-                    l.receipt_id ? '📎 receipt' : null,
+                    l.receipt_id ? 'receipt' : null,
                     l.substituted_from ? `quoted #${l.substituted_from}` : null,
                   ]
                     .filter(Boolean)
@@ -1403,10 +1402,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       // PDFs and formats the browser can't render (e.g. HEIC
                       // photos) get a clean placeholder; the file still opens.
                       <div
-                        className="flex h-24 items-center justify-center rounded-t-lg border border-b-0 text-3xl"
-                        style={{ borderColor: 'var(--border)', background: 'var(--bg2)' }}
+                        className="flex h-24 items-center justify-center rounded-t-lg border border-b-0 text-xs"
+                        style={{ borderColor: 'var(--border)', background: 'var(--bg2)', color: 'var(--text3)' }}
                       >
-                        {pdf ? '📄' : '🧾'}
+                        {pdf ? 'PDF' : 'photo'}
                       </div>
                     )}
                     <div
@@ -1550,7 +1549,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           style={{ background: 'var(--bg2)', border: '1px dashed var(--border2)' }}
         >
           <span className="text-sm font-semibold" style={{ color: 'var(--text3)' }}>
-            <span className="emoji-mobile">🔒 </span>Profit (never shown to customers)
+            Profit (never shown to customers)
           </span>
           <span className="money font-bold" style={{ color: totals.profit_cents >= 0 ? 'var(--green)' : 'var(--red)' }}>
             {formatCents(totals.profit_cents)}
@@ -1606,7 +1605,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           >
             <span className="text-sm" style={{ color: 'var(--text2)' }}>
               {formatDate(p.date)} · {PAYMENT_METHODS.find((m) => m.value === p.method)?.label}
-              {p.invoice_id && ' · 🧾'}
+              {p.invoice_id && ' · invoiced'}
               {p.note && ` · ${p.note}`}
             </span>
             <span className="flex items-center gap-2">
@@ -1684,7 +1683,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 setPayingBusy(false)
               }}
             >
-              {payingBusy ? 'Recording…' : <><span className="emoji-mobile">💵 </span>Record</>}
+              {payingBusy ? 'Recording…' : <>Record</>}
             </button>
           </div>
         )}

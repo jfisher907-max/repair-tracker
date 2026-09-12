@@ -205,9 +205,9 @@ export default function ExpensesPage() {
               {scanning ? (
                 'Working…'
               ) : form.storage_path ? (
-                <><span className="emoji-mobile">📎 </span>Receipt attached — replace</>
+                <>Receipt attached — replace</>
               ) : (
-                <><span className="emoji-mobile">📷 </span>Scan receipt</>
+                <>Scan receipt</>
               )}
               <input
                 type="file"
@@ -325,7 +325,7 @@ export default function ExpensesPage() {
                       else win?.close()
                     }}
                   >
-                    📎
+                    receipt
                   </button>
                 )}
                 <button className="btn btn-sm" onClick={() => startEdit(e)}>✎</button>

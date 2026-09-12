@@ -199,7 +199,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
             <span className="flash-in text-xs" style={{ color: 'var(--text2)' }}>{note}</span>
           )}
           <label className="btn btn-sm cursor-pointer">
-            {busy ? 'Working…' : <><span className="emoji-mobile">📷 </span>Add photos</>}
+            {busy ? 'Working…' : <>Add photos</>}
             <input
               type="file"
               accept="image/*"
@@ -259,7 +259,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
                     onError={() => imgFailed(p)}
                   />
                 ) : (
-                  <span className="flex aspect-square items-center justify-center text-2xl">🖼️</span>
+                  <span className="flex aspect-square items-center justify-center text-xs" style={{ color: 'var(--text3)' }}>photo</span>
                 )}
               </button>
               <div className="space-y-1 p-1.5">
@@ -321,7 +321,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
         >
           <div className="flex items-center justify-between gap-2">
             <span className="truncate text-sm font-semibold">{viewing.caption || 'Photo'}</span>
-            <button className="btn btn-sm" onClick={() => setViewing(null)}><span className="emoji-mobile">✕ </span>Close</button>
+            <button className="btn btn-sm" onClick={() => setViewing(null)}>Close</button>
           </div>
           {/* The image directly, not a card inside a card — the previous
               version nested a second full-screen viewer and left most of the

@@ -254,14 +254,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       <div className="no-print space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Link href="/billing?tab=invoices" className="btn btn-sm">← Billing</Link>
+            <Link href="/billing" className="btn btn-sm">← Billing</Link>
             <Link href={`/jobs/${invoice.job_id}`} className="btn btn-sm">Job →</Link>
           </div>
           <span className={statusChipClass(invoice.status)}>{invoice.status}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn btn-sm btn-primary" onClick={shareLink}><span className="emoji-mobile">📤 </span>Send link</button>
-          <button className="btn btn-sm" onClick={() => window.print()}><span className="emoji-mobile">🖨️ </span>Print</button>
+          <button className="btn btn-sm btn-primary" onClick={shareLink}>Send link</button>
+          <button className="btn btn-sm" onClick={() => window.print()}>Print</button>
           {invoice.status === 'paid' && settings?.google_review_url && (
             <button
               className="btn btn-sm"
@@ -280,7 +280,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 } catch {}
               }}
             >
-              <span className="emoji-mobile">⭐ </span>Ask for a review
+              Ask for a review
             </button>
           )}
           {invoice.status !== 'void' && (
@@ -291,7 +291,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 setEditingMemo(!editingMemo)
               }}
             >
-              <span className="emoji-mobile">📝 </span>{invoice.memo ? 'Edit notes' : 'Add notes'}
+              {invoice.memo ? 'Edit notes' : 'Add notes'}
             </button>
           )}
           {invoice.status === 'draft' && (
@@ -319,7 +319,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 setPayOpen(!payOpen)
               }}
             >
-              <span className="emoji-mobile">💵 </span>Record payment
+              Record payment
             </button>
           )}
           {invoice.status !== 'void' && invoice.status !== 'paid' && (

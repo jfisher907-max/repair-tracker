@@ -284,7 +284,7 @@ function Report() {
             Prices
           </label>
           <button className="btn btn-sm btn-primary" onClick={() => window.print()}>
-            <span className="emoji-mobile">🖨️ </span>Print / Save PDF
+            Print / Save PDF
           </button>
         </div>
       </div>

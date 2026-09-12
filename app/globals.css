@@ -431,26 +431,9 @@ a.card:focus-visible {
   margin-top: 0.2rem;
   color: var(--text-heading);
 }
-/* Metric emoji sits in the top-right corner of the tile — phone only. */
-.stat-tile .stat-emoji {
-  position: absolute;
-  top: 0.55rem;
-  right: 0.7rem;
-  font-size: 15px;
-  opacity: 0.9;
-}
-
-/* Emoji are the icon set on the PHONE, where they are the fastest scan target
-   and screen space is scarce. Desktop is text-led, which is also where the
-   design system's "no emoji in buttons" rule applies. Nav needs no class:
-   the tab bar is phone-only and the sidebar is desktop-only, so the sidebar
-   simply carries no icons. Matches Tailwind's sm: breakpoint. */
-@media (min-width: 640px) {
-  .emoji-mobile,
-  .stat-tile .stat-emoji {
-    display: none;
-  }
-}
+/* Owner rule 2026-09-12: no emoji anywhere in the app except the phone tab
+   bar's icons. The metric-corner emoji and the phone-only label-prefix
+   wrapper are gone; a labelled tile or button needs no picture. */
 
 /* Money: bold display face with tabular figures — never mono, never rounded.
    Colored by meaning where it matters: green in, red owed, neutral otherwise. */
@@ -473,6 +456,20 @@ a.card:focus-visible {
   --chart-profit: #2fae5f;
   --chart-loss: #b94a47;
   --chart-busy: var(--gold-700);
+  /* The "last month" reference series in the strip: a step of ink, so it
+     never competes with the one series that carries meaning. */
+  --chart-neutral: var(--ink-400);
+  /* Baseline ends for the DATA gradients. Every bar runs from the series
+     colour at its data end to a darker step of the same hue at the baseline,
+     anchored to the plot: a short bar stays in the dark end and only a tall
+     one reaches the full series colour, so the ramp encodes height and is
+     never a wash on a surface. Against the card (#141922): profit-base 3.26,
+     busy-base 3.87, neutral-base 3.04 (ink-500). Loss has NO base step: its
+     darker hue measured 2.37, under the 3:1 floor, and a ramp that fails the
+     floor is worse than no ramp — loss bars are a flat fill. */
+  --chart-profit-base: #267a4a;
+  --chart-busy-base: #a06d1a;
+  --chart-neutral-base: var(--ink-500);
 }
 
 .mchart-panel { --plot-h: 104px; min-width: 0; }
@@ -498,7 +495,8 @@ a.card:focus-visible {
   transform: translateY(50%);
   font-size: 10px;
   line-height: 1;
-  color: var(--text-faint);
+  /* --text-faint is non-text (under 4.5:1 on every night surface). */
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -534,7 +532,12 @@ a.card:focus-visible {
   z-index: 1;
   width: min(24px, 64%);
   min-height: 2px;
-  background: var(--bar);
+  /* The gradient CARRIES the data: series colour at the data end, the same
+     hue one step darker at the baseline — anchored to the PLOT, not the bar. */
+  background: linear-gradient(to bottom, var(--bar), var(--bar-base, var(--bar)));
+  background-size: 100% var(--plot-h);
+  background-position: bottom;
+  background-repeat: no-repeat;
   border-radius: 4px 4px 0 0;
   transform-origin: bottom;
   animation: mchart-grow var(--dur-slow) var(--ease) both;
@@ -542,6 +545,9 @@ a.card:focus-visible {
   transition: opacity var(--dur-fast) var(--ease);
 }
 .mchart-bar[data-neg] {
+  /* A loss hangs from the zero line as a flat fill: a same-hue ramp for loss
+     would sit under the 3:1 floor, and a ramp that spans the bar's own length
+     is a wash, not data. */
   background: var(--chart-loss);
   border-radius: 0 0 4px 4px;
   transform-origin: top;
@@ -599,9 +605,392 @@ a.card:focus-visible {
   color: var(--text-muted);
 }
 .mchart-table tbody th { font-weight: 500; color: var(--text-body); }
-.mchart-table tr[data-muted] { color: var(--text-faint); }
+.mchart-table tr[data-muted] { color: var(--text-muted); }
 .mchart-table tfoot th,
 .mchart-table tfoot td { border-bottom: 0; font-weight: 700; color: var(--text-heading); }
+
+/* The chart card's header answers the question in words; on the desktop
+   board the note sits beside the answer instead of under the plots. */
+.chart-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  align-items: start;
+}
+.chart-top > * { min-width: 0; }
+.chart-answer {
+  font-family: var(--font-display), sans-serif;
+  font-size: 20px;
+  line-height: 24px;
+  font-weight: 600;
+  color: var(--text-heading);
+  letter-spacing: 0.01em;
+  margin-top: 2px;
+}
+.chart-live { font-size: 12px; line-height: 16px; color: var(--text2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.chart-note { font-size: 11px; line-height: 13px; color: var(--text-muted); grid-column: 1 / -1; }
+.chart-note .money { font-weight: 600; color: var(--text-body); }
+.mchart-group { display: grid; gap: 16px; }
+@media (min-width: 900px) {
+  .chart-top { grid-template-columns: minmax(0, 1fr) minmax(0, 372px) auto; }
+  .chart-note { grid-column: auto; padding-top: 2px; }
+  .mchart-group { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+}
+
+/* ---------- The dashboard board ---------- */
+/* One flat grid so the phone can stack it in priority order and the desktop
+   can pack it into one 1200 x 820 screen beside the rail. Every child sits
+   at min-width 0 — nothing here ever scrolls sideways. */
+.board {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+.board > *, .board-tiles > * { min-width: 0; }
+.board-tiles { display: contents; }
+.board-head, .lane, .ledger-card, .strip, .tile--wide, .board-chart, .recent, .doors { grid-column: 1 / -1; }
+/* Phone source order: head, lane, cash profit, ledger, unpaid, the rest of
+   the tiles, strip, chart, recent, doors. "How am I doing" before "how much
+   did I do". */
+.board-head { order: 0; }
+.lane { order: 1; }
+.board-tiles > * { order: 4; }
+.board-tiles > .tile--lead { order: 2; }
+.ledger-card { order: 2; }
+.board-tiles > .tile--second { order: 3; }
+.strip { order: 5; }
+.board-chart { order: 6; }
+.recent { order: 7; }
+.doors { order: 8; }
+/* The board is the page's one arrival; the shell's per-child rise must not
+   run a second one on top of it. */
+.page-anim > .board { animation: none; }
+
+/* Header: date eyebrow, title, year picker, the doors the sidebar also has. */
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+.board-eyebrow { font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.board-head h1 { font-size: 28px; line-height: 30px; font-weight: 700; }
+.board-tools { display: flex; align-items: center; gap: 0.5rem; }
+.board-tools .select { width: auto; min-width: 104px; }
+.board-tools .btn { display: none; }
+@media (min-width: 640px) { .board-tools .btn { display: inline-flex; } }
+
+/* Action lane: the counts that need a hand today, each a 44px door with a
+   status edge. Two columns on the phone, one row on the desktop. */
+.lane {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+.lane-door {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0.35rem 0.65rem 0.35rem 0.6rem;
+  border-radius: var(--wnt-radius-md);
+  background: var(--surface-card);
+  /* The shorthand would reset the .edge-* left edge declared above it at the
+     same specificity, so the status edge is restated here, and hover never
+     touches the left side. */
+  border: 1px solid var(--border-hairline);
+  border-left-width: var(--edge-width);
+  box-shadow: var(--shadow-card);
+  transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.lane-door.edge-ok { border-left-color: var(--status-ok-solid); }
+.lane-door.edge-wait { border-left-color: var(--status-wait-solid); }
+.lane-door.edge-stop { border-left-color: var(--status-stop-solid); }
+.lane-door.edge-idle { border-left-color: var(--status-idle-solid); }
+.lane-door:hover {
+  background: var(--surface-raised);
+  border-top-color: var(--border-default);
+  border-right-color: var(--border-default);
+  border-bottom-color: var(--border-default);
+}
+.lane-door:active { transform: scale(var(--press-scale)); }
+.lane-door:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.lane-n {
+  font-family: var(--font-display), sans-serif;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-heading);
+  flex: none;
+  min-width: 1.1ch;
+  text-align: right;
+}
+.lane-n.is-zero { color: var(--text-muted); }
+.lane-t { min-width: 0; line-height: 1.15; }
+.lane-t > b {
+  display: block;
+  font-size: 13px;
+  line-height: 15px;
+  font-weight: 600;
+  color: var(--text-heading);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lane-t > span {
+  display: block;
+  font-size: 12px;
+  line-height: 14px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lane-t .money { font-weight: 600; }
+
+/* Tiles: the year figure large, this month small, three months of bars, the
+   change in words. Nothing in a tile is a series colour except the bars. */
+.tile { display: flex; flex-direction: column; padding: 9px 11px 8px; min-width: 0; }
+.tile .stat-value { font-size: 26px; line-height: 28px; margin-top: 2px; letter-spacing: 0.01em; }
+.tile-sub { font-size: 12px; line-height: 15px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
+.tile-sub b { color: var(--text-body); font-weight: 600; }
+.tile-trend { display: flex; align-items: flex-start; gap: 8px; margin-top: 5px; min-width: 0; }
+.tile-delta { font-size: 11px; line-height: 13px; color: var(--text-muted); min-width: 0; padding-top: 1px; }
+.tile-hint { font-size: 11px; line-height: 13px; color: var(--text-muted); margin-top: 4px; min-width: 0; }
+.tile-hint .hint-long { display: inline; }
+/* The ledger toggle: a 44px target in the tile's corner that adds no height. */
+.tile-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: var(--wnt-radius-sm);
+  transition: color var(--dur-fast) var(--ease);
+}
+.tile-toggle:hover { color: var(--text-heading); }
+.tile-toggle:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.tile-toggle[aria-expanded='true'] { color: var(--gold-400); }
+
+/* The inline three-month mini chart: single series, no legend, bars at most
+   24px, the current month at full strength and the two before it dimmed. */
+.mini { display: grid; grid-template-columns: repeat(3, 18px); gap: 6px; flex: none; }
+.mini > span { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.mini-track { position: relative; height: 24px; width: 14px; }
+.mini-track::after { content: ''; position: absolute; left: -2px; right: -2px; bottom: 0; height: 1px; background: var(--border-strong); }
+.mini-track i {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--h, 0%);
+  min-height: 2px;
+  border-radius: 4px 4px 0 0;
+  z-index: 1;
+  background: linear-gradient(to bottom, var(--bar), var(--bar-base, var(--bar)));
+  background-size: 100% 24px;
+  background-position: bottom;
+  background-repeat: no-repeat;
+  transform-origin: bottom;
+  opacity: 0.55;
+  animation: mchart-grow var(--dur-slow) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 22ms + var(--t, 0) * 30ms + 220ms);
+}
+.mini-track i.now { opacity: 1; }
+.mini-l { font-size: 10px; line-height: 10px; color: var(--text-muted); }
+.mini-l.now { color: var(--text-heading); font-weight: 700; }
+
+/* Earned = in hand + still owed: the one bar that answers "why is profit so small". */
+.gap-bar { display: flex; gap: 2px; height: 8px; margin-top: 7px; min-width: 0; }
+.gap-bar i {
+  display: block;
+  height: 100%;
+  width: var(--w, 0%);
+  transform-origin: left;
+  animation: grow-x var(--dur-slow) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 320ms);
+}
+.gap-in { background: var(--chart-profit); border-radius: 4px 0 0 4px; }
+.gap-owed { background: var(--chart-loss); border-radius: 0 4px 4px 0; }
+.gap-bar i:only-child { border-radius: 4px; }
+.gap-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.8rem; font-size: 11px; line-height: 13px; color: var(--text-muted); margin-top: 5px; }
+.gap-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.gap-legend b { color: var(--text-heading); font-weight: 600; font-variant-numeric: tabular-nums; }
+.legend-sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+.sw-in { background: var(--chart-profit); }
+.sw-owed { background: var(--chart-loss); }
+.sw-now { background: var(--chart-busy); }
+.sw-ref { background: var(--chart-neutral); }
+@keyframes grow-x { from { transform: scaleX(0); } }
+
+/* This month against last month: the eighth tile on the desktop, a full-width
+   card on the phone. Two flat fills, one legend. */
+.strip { display: flex; flex-direction: column; padding: 9px 11px 8px; }
+.strip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.strip-head .stat-label { flex: 1; min-width: 0; }
+.strip-day { font-size: 11px; line-height: 14px; color: var(--text-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.strip-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 0.8rem; font-size: 11px; line-height: 13px; color: var(--text-muted); margin-top: 2px; }
+.strip-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.vs-list { display: flex; flex-direction: column; gap: 4px; margin-top: 5px; }
+.vs-lab { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 12px; line-height: 14px; color: var(--text-muted); min-width: 0; }
+.vs-lab b { color: var(--text-heading); font-weight: 600; font-variant-numeric: tabular-nums; }
+.vs-lab .vs-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vs-bars { display: grid; gap: 2px; margin-top: 2px; }
+.vs-bars i {
+  display: block;
+  height: 5px;
+  border-radius: 0 4px 4px 0;
+  width: var(--w, 0%);
+  min-width: 2px;
+  transform-origin: left;
+  animation: grow-x var(--dur-slow) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 22ms + 320ms);
+}
+.vs-bars i.now { background: var(--chart-busy); }
+.vs-bars i.ref { background: var(--chart-neutral); height: 4px; }
+.strip-first { font-size: 12px; line-height: 16px; color: var(--text-muted); margin-top: 6px; }
+
+/* The money ledger: the expanded state of the Cash profit tile. Rules and
+   type, amounts near their labels, every step adding on screen. */
+.ledger-card { padding: 12px 14px 10px; }
+.ledger-grid { display: grid; gap: 12px 32px; grid-template-columns: minmax(0, 1fr); }
+.ledger-grid > * { min-width: 0; }
+.ledger-block .label { margin-bottom: 0.2rem; }
+.lrow {
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr) auto;
+  gap: 0 0.5rem;
+  align-items: baseline;
+  padding: 0.4rem 0;
+  border-top: 1px solid var(--border-hairline);
+}
+.lrow:first-of-type { border-top: 0; }
+.lrow.sum { border-top-color: var(--border-default); }
+.lrow.total { border-top-color: var(--border-strong); }
+.lop {
+  font-family: var(--font-display), sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.llabel { font-size: 13px; line-height: 17px; color: var(--text-body); min-width: 0; }
+.llabel small { display: block; font-size: 11px; line-height: 14px; color: var(--text-muted); }
+.lamt { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; white-space: nowrap; text-align: right; }
+.lrow.sum .llabel { color: var(--text-heading); font-weight: 600; }
+.lrow.sum .lamt { font-size: 15px; font-weight: 700; }
+.lrow.total .llabel { font-size: 14px; }
+.lrow.total .lamt { font-size: 20px; font-family: var(--font-display), sans-serif; letter-spacing: -0.01em; }
+.ledger-bridge { font-size: 12px; line-height: 16px; color: var(--text-muted); margin-top: 8px; }
+.ledger-bridge b { color: var(--text-heading); font-variant-numeric: tabular-nums; font-weight: 600; }
+/* The labor / parts-margin split: two flat fills of one hue, labelled directly. */
+.split-bar {
+  display: flex;
+  gap: 2px;
+  height: 12px;
+  margin-top: 8px;
+  border-radius: var(--wnt-radius-pill);
+  overflow: hidden;
+  min-width: 0;
+}
+.split-bar i {
+  display: block;
+  height: 100%;
+  width: var(--w, 0%);
+  transform-origin: left;
+  animation: grow-x var(--dur-slow) var(--ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms + 120ms);
+}
+.split-labor { background: var(--chart-profit); }
+.split-parts { background: var(--chart-profit-base); }
+.split-labels { display: flex; justify-content: space-between; gap: 0.75rem; margin-top: 5px; font-size: 11px; line-height: 14px; color: var(--text-muted); }
+.split-labels span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.split-labels b { color: var(--text-heading); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sw-labor { background: var(--chart-profit); }
+.sw-parts { background: var(--chart-profit-base); }
+
+/* Month chart card on the board. */
+.board-chart { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+
+/* Recent jobs: stacked on the phone, three across on the desktop. */
+.recent { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+.recent-head { display: flex; align-items: center; gap: 0.75rem; grid-column: 1 / -1; }
+.recent-head .section-title { flex: 1; font-size: 11px; line-height: 14px; }
+.recent-head a { font-size: 13px; color: var(--accent2); min-height: 44px; display: inline-flex; align-items: center; }
+/* JobRow takes no class, so each row rides in a contents wrapper. */
+.recent-item { display: contents; }
+
+/* Phone-only doors to the pages the tab bar does not reach. */
+.doors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.doors .btn { padding: 0.5rem 0.4rem; font-size: 0.9rem; }
+
+/* Desktop board: four columns, everything on one screen beside the rail. */
+/* JobRow's !py-3 is an important declaration inside Tailwind's utilities layer,
+   and a layered important beats an unlayered one, so this override has to live
+   in the same layer, where its higher specificity wins. Desktop board only. */
+@layer utilities {
+  @media (min-width: 900px) {
+    .recent .card { padding-block: 6px !important; }
+  }
+}
+@media (min-width: 900px) {
+  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .board-head, .lane, .board-tiles > *, .board-tiles > .tile--lead, .board-tiles > .tile--second,
+  .ledger-card, .strip, .board-chart, .recent, .doors { order: 0; }
+  .strip, .tile--wide { grid-column: auto; }
+  .lane { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
+  .doors { display: none; }
+  .tile-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile-hint .hint-long { display: none; }
+  /* Fit levers for the 1200 x 820 screen: the strip's row labels never wrap
+     into a second line, and the chart gives up 14px it does not need. */
+  .strip .vs-lab > span:first-child { white-space: nowrap; }
+  .mchart-panel { --plot-h: 68px; }
+  .board-chart .mchart-body { margin-top: 12px; }
+  .ledger-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+  .recent { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .recent-head a { min-height: 24px; }
+  /* Three rows fit the screen; the other three are the phone's. */
+  .recent > .recent-extra { display: none; }
+  /* JobRow's own !py-3 is a Tailwind important utility; the board is the
+     one place its rows must sit tight to keep the screen unscrolled. */
+}
+/* Between the sidebar breakpoint and the board's: two columns, rail present. */
+@media (min-width: 640px) and (max-width: 899px) {
+  .board, .lane { gap: 12px; }
+}
+
+/* Board motion: one orchestrated arrival, then only data moves. Blocks arrive
+   from a near-visible state (never opacity 0); tiles stagger 30ms, bars grow
+   with a 22ms stagger, numbers count up over 600ms (JS). Off under
+   prefers-reduced-motion (the global guard zeroes every duration and delay). */
+@keyframes board-rise { from { opacity: 0.35; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.board-head, .lane-door, .tile, .strip, .ledger-card, .board-chart, .recent, .doors { animation: board-rise 0.32s var(--ease) both; }
+.lane-door { animation-delay: calc(var(--t, 0) * 30ms + 40ms); }
+.tile, .strip { animation-delay: calc(var(--t, 0) * 30ms + 90ms); }
+.ledger-card { animation-delay: 140ms; }
+.board-chart { animation-delay: 160ms; }
+.recent { animation-delay: 200ms; }
+.doors { animation-delay: 220ms; }
 
 /* ---------- App chrome (header + tab bar) ---------- */
 
@@ -661,7 +1050,7 @@ a.card:focus-visible {
   letter-spacing: 0.08em;
   color: var(--text-muted);
   padding: 0 0.75rem;
-  margin: 1.1rem 0 0.3rem;
+  margin: 0.8rem 0 0.2rem;
 }
 .side-item {
   display: flex;
@@ -1131,6 +1520,9 @@ a.card:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    /* Staggered arrivals park an element at its from-state until the delay
+       runs out; with no motion wanted, nothing may wait. */
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }

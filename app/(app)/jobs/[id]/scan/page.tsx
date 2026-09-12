@@ -627,14 +627,13 @@ export default function ScanReceiptPage({
           {notice && (
             <p className="text-sm" style={{ color: 'var(--status-stop-fg)' }}>{notice}</p>
           )}
-          <div className="text-4xl">🧾</div>
           <p style={{ color: 'var(--text2)' }}>
             Snap a photo of the receipt or pick one from your library. Lines get read
             automatically{aiConfigured === false ? ' (the reader isn’t on — you’ll type them in)' : ''},
             then you review everything before it’s saved.
           </p>
           <label className="btn btn-primary w-full cursor-pointer">
-            <span className="emoji-mobile">📷 </span>Photo or PDF
+            Photo or PDF
             <input
               type="file"
               accept="image/*,application/pdf,.pdf,.heic,.heif"
@@ -650,16 +649,14 @@ export default function ScanReceiptPage({
 
       {phase === 'working' && (
         <div className="card space-y-3 text-center">
-          <div className="animate-pulse text-4xl">🔍</div>
           <p style={{ color: 'var(--text2)' }}>{statusMsg}</p>
           {photoUrl && photoKind === 'image' ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt="Receipt" className="mx-auto max-h-72 rounded-lg" />
           ) : (
             fileName && (
-              <p className="text-3xl">
-                {photoKind === 'pdf' ? '📄' : '🧾'}{' '}
-                <span className="align-middle text-sm" style={{ color: 'var(--text3)' }}>{fileName}</span>
+              <p className="text-sm" style={{ color: 'var(--text3)' }}>
+                {photoKind === 'pdf' ? 'PDF' : 'photo'} · {fileName}
               </p>
             )
           )}
@@ -894,7 +891,7 @@ export default function ScanReceiptPage({
                               : 'var(--text3)',
                         }}
                       >
-                        <span className="emoji-mobile">🔒 </span>Customer pays the approved{' '}
+                        Customer pays the approved{' '}
                         {formatCents(slot.unit_charge_cents)}/ea · you paid{' '}
                         {cost != null ? formatCents(cost) : '—'}
                         {cost != null && ` · margin ${formatCents((slot.unit_charge_cents ?? 0) - cost)}/ea`}

@@ -438,14 +438,14 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
     if (error) alert(error.message)
-    else router.push('/billing')
+    else router.push('/jobs?tab=quotes')
   }
 
   return (
     <div className="space-y-4">
       <div className="no-print space-y-3">
         <div className="flex items-center justify-between">
-          <Link href="/billing" className="btn btn-sm">← Billing</Link>
+          <Link href="/jobs?tab=quotes" className="btn btn-sm">← Quotes</Link>
           <span className="flex items-center gap-2">
             {quote.sent_at && (
               <span
@@ -454,10 +454,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                 title="Whether the customer has opened the quote link"
               >
                 {quote.viewed_at ? (
-                  <>
-                    <span className="emoji-mobile">👁 </span>
-                    {`viewed ${new Date(quote.viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`}
-                  </>
+                  `viewed ${new Date(quote.viewed_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
                 ) : (
                   'not viewed yet'
                 )}
@@ -486,8 +483,8 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button className="btn btn-sm btn-primary" onClick={shareLink}><span className="emoji-mobile">📤 </span>Send link</button>
-          <button className="btn btn-sm" onClick={() => window.print()}><span className="emoji-mobile">🖨️ </span>Print</button>
+          <button className="btn btn-sm btn-primary" onClick={shareLink}>Send link</button>
+          <button className="btn btn-sm" onClick={() => window.print()}>Print</button>
           <button
             className="btn btn-sm"
             onClick={() => {
@@ -513,7 +510,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
               setEditing(true)
             }}
           >
-            <span className="emoji-mobile">✎ </span>Edit
+✎ Edit
           </button>
           {quote.status === 'sent' && (
             <>
@@ -525,7 +522,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                   setRecordName(customer?.name ?? '')
                 }}
               >
-                <span className="emoji-mobile">✓ </span>Record approval
+✓ Record approval
               </button>
               <button
                 className="btn btn-sm"
@@ -535,7 +532,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                   setRecordName(customer?.name ?? '')
                 }}
               >
-                <span className="emoji-mobile">✗ </span>Record decline
+✕ Record decline
               </button>
             </>
           )}
@@ -545,9 +542,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             ) : converting ? (
               'Working…'
             ) : quote.job_id ? (
-              <><span className="emoji-mobile">➕ </span>Apply to job</>
+              'Apply to job'
             ) : (
-              <><span className="emoji-mobile">🔧 </span>Convert to job</>
+              'Convert to job'
             )}
           </button>
           <button className="btn btn-sm btn-danger" onClick={softDelete}>Delete</button>
@@ -744,7 +741,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         )}
         {quote.notes && (
           <div className="card !py-2 text-sm" style={{ color: 'var(--text2)' }}>
-            <span className="emoji-mobile">🔒 </span>Private notes: {quote.notes}
+            Private notes: {quote.notes}
           </div>
         )}
       </div>

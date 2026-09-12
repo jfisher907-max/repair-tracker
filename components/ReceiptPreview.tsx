@@ -90,7 +90,7 @@ export default function ReceiptPreview({
             title={full ? 'Exit full screen' : 'Full screen'}
             onClick={() => setFull(!full)}
           >
-            {full ? '✕' : '⛶'}
+            {full ? '✕' : 'Full screen'}
           </button>
           <a
             className="btn btn-sm !px-2"
@@ -122,7 +122,6 @@ export default function ReceiptPreview({
         />
       ) : (
         <div className="flex h-full flex-col items-center justify-center gap-1 py-8 text-center">
-          <span className="text-4xl">🧾</span>
           <span className="text-xs" style={{ color: 'var(--text3)' }}>
             {fileName || 'No preview available'}
           </span>

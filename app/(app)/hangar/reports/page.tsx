@@ -157,7 +157,7 @@ export default function HangarReportsPage() {
 
       <div className="mb-4 flex flex-wrap gap-2">
         <button type="button" className="btn btn-sm btn-primary" onClick={copyText}>
-          {copied ? '✓ Copied' : '📋 Copy text'}
+          {copied ? '✓ Copied' : 'Copy text'}
         </button>
         <button
           type="button"
@@ -171,10 +171,10 @@ export default function HangarReportsPage() {
           className="btn btn-sm"
           onClick={() => downloadText(buildCSV(s, filter), `hangar-sessions-${todayStamp()}.csv`, 'text/csv')}
         >
-          📊 CSV
+          CSV
         </button>
         <button type="button" className="btn btn-sm" onClick={() => printHTML(buildReportHTML(s, u, filter))}>
-          🖨 Print / PDF
+          Print / PDF
         </button>
       </div>
 

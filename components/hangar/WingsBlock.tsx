@@ -40,7 +40,7 @@ export default function WingsBlock({
         className={`btn w-full justify-center ${open ? 'btn-primary' : 'btn-danger'}`}
         onClick={() => onToggle(!open)}
       >
-        {open ? 'Mark available' : '🚫 Mark unavailable'}
+        {open ? 'Mark available' : 'Mark unavailable'}
       </button>
       <div className="stat-tile mt-3 flex items-baseline justify-between">
         <span className="text-sm" style={{ color: 'var(--text3)' }}>

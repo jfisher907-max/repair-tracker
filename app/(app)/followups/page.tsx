@@ -182,7 +182,7 @@ export default function FollowUpsPage() {
                 </div>
                 <div className="flex flex-none items-center gap-2">
                   <button className="btn btn-sm btn-primary" onClick={() => shareReminder(r)}>
-                    <span className="emoji-mobile">💬 </span>Text the customer
+                    Text the customer
                   </button>
                   {sharedId === r.id && (
                     <span className="flash-in text-xs" style={{ color: 'var(--green)' }}>
@@ -268,7 +268,7 @@ export default function FollowUpsPage() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <button className="btn btn-sm btn-primary" onClick={() => share(r)}>
-                    <span className="emoji-mobile">💬 </span>Text the customer
+                    Text the customer
                   </button>
                   <Link href={`/jobs/${r.job_id}`} className="btn btn-sm">Job it came from →</Link>
                   {sharedId === r.id && (

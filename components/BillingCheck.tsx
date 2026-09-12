@@ -392,7 +392,7 @@ export default function BillingCheck({
           </p>
           {customer?.phone && (
             <a className="btn btn-sm" href={`tel:${customer.phone}`}>
-              <span className="emoji-mobile">📞 </span>Call {customer.phone}
+              Call {customer.phone}
             </a>
           )}
           <div className="grid gap-2 sm:grid-cols-2">

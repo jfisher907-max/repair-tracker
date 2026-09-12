@@ -10,16 +10,30 @@ export function SkeletonList({ rows = 3, height = 68 }: { rows?: number; height?
   )
 }
 
+/** The shop board's shape: head, the action lane, two rows of tiles, the chart, recent jobs. */
 export function SkeletonDashboard() {
   return (
-    <div className="space-y-5">
-      <div className="skeleton h-9 w-40" />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="skeleton h-[76px]" />
+    <div className="board" aria-busy="true" aria-label="Loading the dashboard">
+      <div className="board-head">
+        <div className="skeleton h-[46px] w-44" />
+        <div className="skeleton h-11 w-28" />
+      </div>
+      <div className="lane">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="skeleton h-11" />
         ))}
       </div>
-      <SkeletonList rows={3} />
+      <div className="board-tiles">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className={`skeleton h-[136px]${i >= 5 ? ' tile--wide' : ''}`} />
+        ))}
+      </div>
+      <div className="skeleton board-chart h-[220px]" />
+      <div className="recent">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="skeleton h-[72px]" />
+        ))}
+      </div>
     </div>
   )
 }

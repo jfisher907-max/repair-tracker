@@ -113,7 +113,7 @@ export default function BusinessDocuments() {
 
   async function open(d: BusinessDocument) {
     // Open the window synchronously — iOS discards the tap's popup permission
-    // across an await (the Expenses 📎 lesson).
+    // across an await (the Expenses receipt-button lesson).
     const win = window.open('about:blank', '_blank')
     const { data } = await supabase.storage.from('receipts').createSignedUrl(d.storage_path, 3600)
     if (data?.signedUrl && win) win.location.href = data.signedUrl
@@ -185,7 +185,7 @@ export default function BusinessDocuments() {
               </div>
               <div className="flex flex-none items-center gap-2">
                 <button className="btn btn-sm" onClick={() => open(d)}>
-                  <span className="emoji-mobile">📄 </span>Open
+                  Open
                 </button>
                 <button
                   className="btn btn-sm btn-danger"
@@ -249,7 +249,6 @@ export default function BusinessDocuments() {
             </div>
           </div>
           <label className="btn w-full cursor-pointer">
-            <span className="emoji-mobile">📎 </span>
             {file ? file.name : 'Choose PDF or photo'}
             <input
               type="file"
@@ -295,10 +294,10 @@ export default function BusinessDocuments() {
           </div>
           <div className="flex flex-none items-center gap-2">
             <a className="btn btn-sm" href="/brand/wings-n-things-logo-email.png" download>
-              <span className="emoji-mobile">⬇ </span>Email logo
+              Email logo
             </a>
             <a className="btn btn-sm" href="/brand/wings-n-things-brand.zip" download>
-              <span className="emoji-mobile">⬇ </span>All files
+              All files
             </a>
           </div>
         </div>

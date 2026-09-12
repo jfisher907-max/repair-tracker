@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { formatHours } from '@/lib/money'
+import { formatCents, formatHours } from '@/lib/money'
 
 /** One live job, reduced to what the month-by-month chart plots. */
 export interface MonthlyJob {
@@ -29,11 +29,12 @@ interface Month {
 }
 
 interface Series {
-  emoji: string
   name: string
   /** What the tallest bar is called in the panel header. */
   top: string
   color: string
+  /** The darker step of the same hue at the baseline: the data gradient's other end. */
+  base: string
   value: (m: Month) => number
   /** Header and table form: "$3,314", "6 jobs", "23 hr". */
   full: (v: number) => string
@@ -53,13 +54,8 @@ const MONTH_SHORT = MONTH_NAMES.map((m) => m.slice(0, 3))
 const round1 = (n: number) => Math.round(n * 10) / 10
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
-/** Whole dollars with a true minus sign: 331414 -> "$3,314". */
-function dollars(cents: number): string {
-  const whole = Math.round(Math.abs(cents) / 100).toLocaleString('en-US')
-  return `${cents < 0 ? '−' : ''}$${whole}`
-}
-
-/** 331414 -> "$3.3k", 78500 -> "$785". */
+/** 331414 -> "$3.3k", 78500 -> "$785". Axis ticks and the tallest-bar cap only:
+ *  abbreviation is accepted on the plot, never in a row or a reading. */
 function compactDollars(cents: number): string {
   const d = Math.abs(cents) / 100
   let body: string
@@ -74,21 +70,21 @@ function compactDollars(cents: number): string {
 
 const SERIES: Series[] = [
   {
-    emoji: '📈',
     name: 'Profit',
     top: 'best',
     color: 'var(--chart-profit)',
+    base: 'var(--chart-profit-base)',
     value: (m) => m.profit,
-    full: dollars,
+    full: formatCents,
     compact: compactDollars,
     integer: true,
     dots: true,
   },
   {
-    emoji: '🔧',
     name: 'Jobs',
     top: 'busiest',
     color: 'var(--chart-busy)',
+    base: 'var(--chart-busy-base)',
     value: (m) => m.jobs,
     full: (v) => plural(v, 'job'),
     compact: (v) => String(v),
@@ -96,10 +92,10 @@ const SERIES: Series[] = [
     dots: false,
   },
   {
-    emoji: '⏱️',
     name: 'Labor hours',
     top: 'busiest',
     color: 'var(--chart-busy)',
+    base: 'var(--chart-busy-base)',
     value: (m) => m.hours,
     full: (v) => formatHours(round1(v)),
     compact: (v) => String(round1(v)),
@@ -190,7 +186,7 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
     const label = year === 'all' ? `${MONTH_NAMES[i]}, all years` : `${MONTH_NAMES[i]} ${year}`
     if (m.state === 'future') return `${label}: not here yet`
     if (m.state === 'before') return `${label}: before you started logging jobs here`
-    return `${label}: ${dollars(m.profit)} profit · ${plural(m.jobs, 'job')} · ${formatHours(round1(m.hours))} of labor`
+    return `${label}: ${formatCents(m.profit)} profit · ${plural(m.jobs, 'job')} · ${formatHours(round1(m.hours))} of labor`
   }
 
   function onKey(e: KeyboardEvent<HTMLDivElement>) {
@@ -214,17 +210,49 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
       ? 'Every year added together — each bar is every January, every February…'
       : 'Tap a month to line it up in all three.'
 
+  // The answer in words: the month that earned the most, and the busiest one
+  // (most labor hours, ties broken by jobs). Only open months compete.
+  const open = months.map((m, i) => ({ m, i })).filter(({ m }) => m.state === 'open' && m.jobs > 0)
+  let answer: string | null = null
+  let answerSub: string | null = null
+  if (open.length > 0) {
+    const best = open.reduce((a, b) => (b.m.profit > a.m.profit ? b : a))
+    const busiest = open.reduce((a, b) =>
+      b.m.hours > a.m.hours || (b.m.hours === a.m.hours && b.m.jobs > a.m.jobs) ? b : a,
+    )
+    const line = (m: Month) =>
+      `${formatCents(m.profit)} earned · ${plural(m.jobs, 'job')} · ${formatHours(round1(m.hours))}`
+    if (best.i === busiest.i) {
+      answer = `Best and busiest month: ${MONTH_NAMES[best.i]}`
+      answerSub = line(best.m)
+    } else {
+      answer = `Best month: ${MONTH_NAMES[best.i]} · Busiest: ${MONTH_NAMES[busiest.i]}`
+      answerSub = `${MONTH_SHORT[best.i]} ${line(best.m)} · ${MONTH_SHORT[busiest.i]} ${line(busiest.m)}`
+    }
+  }
+
   return (
-    <section className="card space-y-3" aria-labelledby="mchart-title">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
+    <section className="card board-chart" aria-labelledby="mchart-title">
+      <div className="chart-top">
+        <div>
           <h2 id="mchart-title" className="label !mb-0">
             Month by month · {year === 'all' ? 'all years' : year}
           </h2>
-          <p className="mt-0.5 text-xs" style={{ color: 'var(--text2)' }} aria-live="polite">
-            {active !== null ? describe(active) : idle}
+          {answer && <p className="chart-answer">{answer}</p>}
+          <p className="chart-live" aria-live="polite">
+            {active !== null ? describe(active) : answerSub ? `${answerSub}. ${idle}` : idle}
           </p>
         </div>
+        <p className="chart-note">
+          Profit here is what each month&apos;s work earned, paid or not, before overhead
+          {totals.jobs > 0 && (
+            <>
+              {' '}— <span className="money">{formatCents(totals.profit)}</span> for{' '}
+              {year === 'all' ? 'all years' : year}
+            </>
+          )}
+          . The Cash profit tile counts money when it reaches you.
+        </p>
         <button
           type="button"
           className="btn btn-sm"
@@ -244,7 +272,7 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
       ) : (
         <div
           key={String(year)}
-          className="mchart-group grid gap-5 xl:grid-cols-3"
+          className="mchart-group"
           role="group"
           aria-label="Profit, jobs, and labor hours by month. Left and right arrow keys step through the months."
           tabIndex={0}
@@ -263,11 +291,6 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
         </div>
       )}
 
-      <p className="text-xs" style={{ color: 'var(--text3)' }}>
-        Profit here is what each month&apos;s work earned — labor plus parts margin on the jobs
-        dated that month, paid or not, before overhead. The Cash profit tile counts money when it
-        actually reaches you.
-      </p>
       {anyUncosted && (
         <p className="flex items-start gap-1.5 text-xs" style={{ color: 'var(--text3)' }}>
           <i className="mchart-dot mt-[5px] shrink-0" aria-hidden="true" />
@@ -324,15 +347,9 @@ function Panel({
   }
 
   return (
-    <div className="mchart-panel" style={{ '--bar': series.color } as ChartStyle}>
+    <div className="mchart-panel" style={{ '--bar': series.color, '--bar-base': series.base } as ChartStyle}>
       <div className="mchart-head">
-        <span className="mchart-name">
-          {/* Emoji are the phone icon set; desktop is text-led, same as the tiles. */}
-          <span className="emoji-mobile" aria-hidden="true">
-            {series.emoji}{' '}
-          </span>
-          {series.name}
-        </span>
+        <span className="mchart-name">{series.name}</span>
         <span className="mchart-read">{reading}</span>
       </div>
       <div className="mchart-body">
@@ -428,7 +445,7 @@ function MonthTable({
               <>
                 <td>{m.jobs}</td>
                 <td>{formatHours(round1(m.hours))}</td>
-                <td className={m.profit < 0 ? 'money-owed' : undefined}>{dollars(m.profit)}</td>
+                <td className={m.profit < 0 ? 'money-owed' : undefined}>{formatCents(m.profit)}</td>
               </>
             ) : (
               <td colSpan={3}>{m.state === 'future' ? 'not yet' : 'before the app'}</td>
@@ -441,7 +458,7 @@ function MonthTable({
           <th scope="row">Total</th>
           <td>{totals.jobs}</td>
           <td>{formatHours(round1(totals.hours))}</td>
-          <td className={totals.profit < 0 ? 'money-owed' : undefined}>{dollars(totals.profit)}</td>
+          <td className={totals.profit < 0 ? 'money-owed' : undefined}>{formatCents(totals.profit)}</td>
         </tr>
       </tfoot>
     </table>

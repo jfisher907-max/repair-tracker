@@ -788,7 +788,7 @@ export default function QuoteForm({
         </div>
 
         <label className="btn btn-sm w-full cursor-pointer">
-          {importing ? 'Reading…' : <><span className="emoji-mobile">📄 </span>Read an O’Reilly quote (screenshot, photo or PDF)</>}
+          {importing ? 'Reading…' : 'Read an O’Reilly quote (screenshot, photo or PDF)'}
           <input
             type="file"
             accept="image/*,application/pdf,.pdf,.heic,.heif"
@@ -828,7 +828,7 @@ export default function QuoteForm({
                   setLines(lines.length === 1 && isBlank(lines[0]) ? [newLine] : [...lines, newLine])
                 }}
               >
-                <span className="emoji-mobile">💡 </span>{s.description.length > 42 ? `${s.description.slice(0, 42)}…` : s.description}
+                {s.description.length > 42 ? `${s.description.slice(0, 42)}…` : s.description}
                 {s.estimate_cents != null && ` · ${formatCents(s.estimate_cents)}`}
               </button>
             ))}
@@ -901,7 +901,6 @@ export default function QuoteForm({
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs" style={{ color: 'var(--text3)' }}>
                     <span className="min-w-0">
-                      <span className="emoji-mobile">🔒 </span>
                       {p?.basis ? `Suggested${p.cents != null ? ` ${formatCents(p.cents)}` : ''}: ${p.basis}` : 'Only you see these'}
                       {costCents != null && priceCents != null && ` · margin ${formatCents(priceCents - costCents)}/ea`}
                     </span>
@@ -958,7 +957,7 @@ export default function QuoteForm({
         </div>
         {showCost && margin.costedLines > 0 && (
           <p className="text-xs" style={{ color: margin.afterTaxCents < 0 ? 'var(--status-stop-fg)' : 'var(--text3)' }}>
-            <span className="emoji-mobile">🔒 </span>Parts margin {formatCents(margin.cents)}
+            Parts margin {formatCents(margin.cents)}
             {taxRateBp > 0 && <> · about {formatCents(margin.afterTaxCents)} after O’Reilly’s counter tax</>}
             {margin.uncosted > 0 && <> · cost unknown on {margin.uncosted} line{margin.uncosted === 1 ? '' : 's'}</>}
           </p>

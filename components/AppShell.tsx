@@ -3,8 +3,8 @@
 import Link from 'next/link'
 import WingMark from '@/components/WingMark'
 import { BRAND_NAME } from '@/lib/brand'
-import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { Suspense, useSyncExternalStore } from 'react'
 
 const tabs = [
   { href: '/dashboard', label: 'Home', icon: '🏠' },
@@ -16,7 +16,7 @@ const tabs = [
 ]
 
 // The desktop sidebar is text-led: no icons. The phone tab bar (below) keeps
-// its emoji, which is where they earn their place.
+// its emoji — the one place in the app they are allowed (owner rule 2026-09-12).
 const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
   {
     label: 'Overview',
@@ -26,10 +26,14 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
     ],
   },
   {
+    // Quotes live with the work they describe, not with the money: a quote is
+    // a job that has not started yet.
     label: 'Work',
     items: [
       { href: '/jobs', label: 'Jobs' },
       { href: '/jobs/new', label: 'New Job' },
+      { href: '/jobs?tab=quotes', label: 'Quotes' },
+      { href: '/quotes/new', label: 'New Quote' },
       { href: '/requests', label: 'Requests' },
       { href: '/followups', label: 'Follow-ups' },
     ],
@@ -37,8 +41,7 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
   {
     label: 'Money',
     items: [
-      { href: '/billing', label: 'Quotes & Invoices' },
-      { href: '/quotes/new', label: 'New Quote' },
+      { href: '/billing', label: 'Billing' },
       { href: '/expenses', label: 'Expenses' },
     ],
   },
@@ -55,60 +58,86 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
   },
 ]
 
+/**
+ * Which nav item a route lights up. `tab` is the ?tab= of the current URL
+ * (null when the caller cannot read it) — it only matters on /jobs, where
+ * ?tab=quotes lights "Quotes" instead of "Jobs".
+ *
+ * Quote pages count as Jobs work (the phone tab bar has no Quotes tab), and
+ * invoice pages count as Billing.
+ */
+function isActive(href: string, pathname: string, tab: string | null) {
+  const onQuotesTab = pathname === '/jobs' && tab === 'quotes'
+  const onQuotePage = pathname.startsWith('/quotes') && pathname !== '/quotes/new'
+  if (href === '/dashboard') return pathname === '/dashboard'
+  if (href === '/jobs/new') return pathname === '/jobs/new'
+  if (href === '/quotes/new') return pathname === '/quotes/new'
+  if (href === '/hangar') return pathname === '/hangar'
+  if (href === '/jobs?tab=quotes') return onQuotesTab || onQuotePage
+  if (href === '/jobs') {
+    // The sidebar (tab known) hands quote routes to its own "Quotes" item; the
+    // phone tab bar (tab unknown) has no such item, so Jobs takes them.
+    if (tab !== null && (onQuotesTab || onQuotePage)) return false
+    return (pathname.startsWith('/jobs') && pathname !== '/jobs/new') || onQuotePage
+  }
+  if (href === '/billing') return pathname.startsWith('/billing') || pathname.startsWith('/invoices')
+  return pathname.startsWith(href)
+}
+
+/** The sidebar links. Split out so the search-param read sits under its own
+ *  Suspense boundary instead of bailing the whole shell out of prerendering. */
+function SideNavLinks({ pathname, tab }: { pathname: string; tab: string | null }) {
+  return (
+    <>
+      {sideNav.map((group) => (
+        <div key={group.label}>
+          <div className="side-label">{group.label}</div>
+          {group.items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`side-item ${isActive(item.href, pathname, tab) ? 'active' : ''}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      ))}
+    </>
+  )
+}
+
+function SideNavWithParams({ pathname }: { pathname: string }) {
+  const params = useSearchParams()
+  return <SideNavLinks pathname={pathname} tab={params.get('tab') ?? ''} />
+}
+
+function subscribeOnline(onChange: () => void) {
+  window.addEventListener('online', onChange)
+  window.addEventListener('offline', onChange)
+  return () => {
+    window.removeEventListener('online', onChange)
+    window.removeEventListener('offline', onChange)
+  }
+}
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const [online, setOnline] = useState(true)
-
-  useEffect(() => {
-    setOnline(navigator.onLine)
-    const up = () => setOnline(true)
-    const down = () => setOnline(false)
-    window.addEventListener('online', up)
-    window.addEventListener('offline', down)
-    return () => {
-      window.removeEventListener('online', up)
-      window.removeEventListener('offline', down)
-    }
-  }, [])
-
-  function isActive(href: string) {
-    if (href === '/dashboard') return pathname === '/dashboard'
-    if (href === '/jobs/new') return pathname === '/jobs/new'
-    if (href === '/quotes/new') return pathname === '/quotes/new'
-    if (href === '/hangar') return pathname === '/hangar'
-    if (href === '/jobs') return pathname.startsWith('/jobs') && pathname !== '/jobs/new'
-    if (href === '/billing') {
-      return (
-        pathname.startsWith('/billing') ||
-        (pathname.startsWith('/quotes') && pathname !== '/quotes/new') ||
-        pathname.startsWith('/invoices')
-      )
-    }
-    return pathname.startsWith(href)
-  }
+  // The server render has no navigator, so it assumes online; the client
+  // reads the real value on hydration.
+  const online = useSyncExternalStore(subscribeOnline, () => navigator.onLine, () => true)
 
   return (
     <div className="app-frame min-h-dvh pb-24 sm:grid sm:grid-cols-[232px_1fr] sm:pb-0">
       {/* Desktop sidebar — the app reads like a real back office on a PC */}
-      <aside className="sidebar sticky top-0 hidden h-dvh flex-col px-3 py-4 sm:flex">
+      <aside className="sidebar sticky top-0 hidden h-dvh flex-col overflow-y-auto px-3 py-4 sm:flex">
         <Link href="/dashboard" className="display flex items-center gap-2 px-2 text-xl font-semibold">
           <WingMark size={22} /> {BRAND_NAME}
         </Link>
         <nav className="mt-2 flex-1">
-          {sideNav.map((group) => (
-            <div key={group.label}>
-              <div className="side-label">{group.label}</div>
-              {group.items.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`side-item ${isActive(item.href) ? 'active' : ''}`}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </div>
-          ))}
+          <Suspense fallback={<SideNavLinks pathname={pathname} tab={null} />}>
+            <SideNavWithParams pathname={pathname} />
+          </Suspense>
         </nav>
         <Link
           href="/settings"
@@ -128,27 +157,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Phone header (desktop brand lives in the sidebar) */}
+        {/* Phone header (desktop brand lives in the sidebar). Text links, not
+            icons: the tab bar below is the only place emoji are allowed. */}
         <header className="appbar sticky top-0 z-40 flex items-center justify-between px-4 pb-3 sm:hidden">
           <Link href="/dashboard" className="display flex items-center gap-2 text-xl font-semibold">
             <WingMark size={22} /> {BRAND_NAME}
           </Link>
-          <div className="flex items-center">
+          <div className="flex items-center gap-1">
             <Link
               href="/hangar"
-              className="-m-1 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl transition-opacity"
-              aria-label="Hangar"
+              className="flex min-h-[44px] items-center px-2 text-sm font-semibold transition-opacity"
               style={{ opacity: pathname.startsWith('/hangar') ? 1 : 0.6 }}
             >
-              ✈️
+              Hangar
             </Link>
             <Link
               href="/settings"
-              className="-m-1 flex min-h-[44px] min-w-[44px] items-center justify-center text-2xl transition-opacity"
-              aria-label="Settings"
+              className="-mr-2 flex min-h-[44px] items-center px-2 text-sm font-semibold transition-opacity"
               style={{ opacity: pathname.startsWith('/settings') ? 1 : 0.6 }}
             >
-              ⚙️
+              Settings
             </Link>
           </div>
         </header>
@@ -162,7 +190,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Phone bottom tab bar */}
       <nav className="tabbar fixed inset-x-0 bottom-0 z-40 flex sm:hidden">
         {tabs.map((t) => {
-          const active = isActive(t.href)
+          const active = isActive(t.href, pathname, null)
           return (
             <Link
               key={t.href}

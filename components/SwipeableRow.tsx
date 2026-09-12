@@ -125,7 +125,6 @@ export default function SwipeableRow({
         aria-label={deleteLabel}
         tabIndex={open ? 0 : -1}
       >
-        <span className="text-lg leading-none">🗑</span>
         {busy ? 'Deleting…' : deleteLabel}
       </button>
       <div
