@@ -30,10 +30,10 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
     // a job that has not started yet.
     label: 'Work',
     items: [
+      // "New Job" and "New Quote" live INSIDE the Jobs and Quotes views (owner
+      // rule 2026-09-12), so the rail lists the places, not the actions.
       { href: '/jobs', label: 'Jobs' },
-      { href: '/jobs/new', label: 'New Job' },
       { href: '/jobs?tab=quotes', label: 'Quotes' },
-      { href: '/quotes/new', label: 'New Quote' },
       { href: '/requests', label: 'Requests' },
       { href: '/followups', label: 'Follow-ups' },
     ],
@@ -68,17 +68,19 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
  */
 function isActive(href: string, pathname: string, tab: string | null) {
   const onQuotesTab = pathname === '/jobs' && tab === 'quotes'
-  const onQuotePage = pathname.startsWith('/quotes') && pathname !== '/quotes/new'
+  // Every quote route, the new-quote form included, is "Quotes" work.
+  const onQuotePage = pathname.startsWith('/quotes')
   if (href === '/dashboard') return pathname === '/dashboard'
   if (href === '/jobs/new') return pathname === '/jobs/new'
-  if (href === '/quotes/new') return pathname === '/quotes/new'
   if (href === '/hangar') return pathname === '/hangar'
   if (href === '/jobs?tab=quotes') return onQuotesTab || onQuotePage
   if (href === '/jobs') {
     // The sidebar (tab known) hands quote routes to its own "Quotes" item; the
-    // phone tab bar (tab unknown) has no such item, so Jobs takes them.
+    // phone tab bar (tab unknown) has no such item, so Jobs takes them. The
+    // phone bar has its own New Job tab, so /jobs/new lights that one there.
     if (tab !== null && (onQuotesTab || onQuotePage)) return false
-    return (pathname.startsWith('/jobs') && pathname !== '/jobs/new') || onQuotePage
+    if (tab === null && pathname === '/jobs/new') return false
+    return pathname.startsWith('/jobs') || onQuotePage
   }
   if (href === '/billing') return pathname.startsWith('/billing') || pathname.startsWith('/invoices')
   return pathname.startsWith(href)

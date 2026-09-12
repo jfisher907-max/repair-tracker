@@ -1,6 +1,7 @@
 'use client'
 
-import { use, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
 import QuoteForm, { type AddOnJobContext, type QuoteSuggestion } from '@/components/QuoteForm'
 import { supabase } from '@/lib/supabase'
 import { isLive, listForVehicle } from '@/lib/recommendations'
@@ -12,12 +13,18 @@ import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types
  * from that job, and approval will apply lines to it rather than create a
  * new job.
  */
-export default function NewQuotePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ job?: string }>
-}) {
-  const { job: jobId } = use(searchParams)
+export default function NewQuotePage() {
+  // Static route: the searchParams prop is the empty prerender-time value, so
+  // ?job= has to be read from the live URL (same fix as /jobs?tab=quotes).
+  return (
+    <Suspense fallback={null}>
+      <NewQuoteInner />
+    </Suspense>
+  )
+}
+
+function NewQuoteInner() {
+  const jobId = useSearchParams().get('job') ?? undefined
   const [addOnJob, setAddOnJob] = useState<AddOnJobContext | null>(null)
   const [suggestions, setSuggestions] = useState<QuoteSuggestion[]>([])
   const [failed, setFailed] = useState(false)

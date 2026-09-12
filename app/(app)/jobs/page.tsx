@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import JobRow from '@/components/JobRow'
 import { SkeletonList } from '@/components/Skeleton'
 import SwipeableRow from '@/components/SwipeableRow'
@@ -19,16 +20,28 @@ interface QuoteRow extends Quote {
 
 const QUOTE_STATUSES: QuoteStatus[] = ['draft', 'sent', 'approved', 'declined', 'expired']
 
-export default function JobsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ tab?: string; status?: string }>
-}) {
+/**
+ * The page is prerendered as static, so the `searchParams` prop a client page
+ * receives is the empty prerender-time value — reading it with use() showed the
+ * Jobs tab on /jobs?tab=quotes even on a hard load. useSearchParams reads the
+ * live URL; it needs a Suspense boundary so the static shell can still be built.
+ */
+export default function JobsPage() {
+  return (
+    <Suspense fallback={<SkeletonList rows={4} />}>
+      <JobsInner />
+    </Suspense>
+  )
+}
+
+function JobsInner() {
   // Quotes live here, beside the jobs they turn into: ?tab=quotes is the
   // quotes list (the sidebar's "Quotes" item and every "← Quotes" link).
   // ?status=unpaid is the dashboard's "Owed to you" door: it seeds the
   // payment filter so the link keeps its promise.
-  const { tab: tabParam, status: statusParam } = use(searchParams)
+  const params = useSearchParams()
+  const tabParam = params.get('tab')
+  const statusParam = params.get('status')
   const tab: 'jobs' | 'quotes' = tabParam === 'quotes' ? 'quotes' : 'jobs'
 
   const [items, setItems] = useState<JobWithContext[] | null>(null)
