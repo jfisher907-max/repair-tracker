@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { fetchJobsWithContext, type JobWithContext } from './data'
 import { collectedForJob, unpaidBalanceCents } from './calc'
+import type { Job } from './types'
 
 /**
  * The shop's money, in one place. The dashboard and the Billing page read
@@ -56,11 +57,39 @@ import { collectedForJob, unpaidBalanceCents } from './calc'
  *   date, like its cash). Before 0041 the fallback sat outside the proration;
  *   that was harmless only because no pre-ledger job carried tax. J001 now
  *   carries included tax, and leaving it out would break the first identity.
+ * - JOB STAGE (the owner's ask, 2026-09-12, migration 0043): a job is
+ *   scheduled (booked, not started), in_progress (on the lift) or done (work
+ *   complete, ready to bill). Before 0043 "unpaid" also meant "not started",
+ *   so three booked jobs read as owed, earned and "to invoice". Now:
+ *     · only DONE jobs are WORK: count, hours, charged, labor/parts figures,
+ *       earned, unpaid, owedJobs, uninvoicedJobs, oldestOwed, taxBilled, the
+ *       months' jobs/hours/billed/earned/unpaid/unpaidJobs, and jobsToInvoice
+ *       all skip a scheduled or in_progress job entirely;
+ *     · CASH STAYS CASH: a payment on any job (a deposit on a scheduled job)
+ *       counts in collected on its payment date, and parts bought for any job
+ *       count in partsSpend on their purchase date. They are real money that
+ *       moved; the books do not pretend otherwise;
+ *     · the pipeline is exposed as `booked` (jobs, hours, cents, next) over
+ *       the scheduled + in_progress jobs in scope, and the two cash pieces on
+ *       them as depositsOnBooked (payments in scope on non-done jobs) and
+ *       partsSpendOnBooked (parts outflows in scope for non-done jobs), so the
+ *       ledger can still add on screen and name them;
+ *     · the second identity becomes
+ *         earned − unpaid − partsSpendOnBooked + depositsOnBooked = cashProfit
+ *       (nothing crossing a year line). With no booked work it is the old one;
+ *     · a row whose stage is MISSING (read before 0043 is applied, or a fixture
+ *       row without the field) counts as done — the DB default, and exactly
+ *       the pre-0043 figures. A row whose stage_changed_at is null is simply a
+ *       row that never moved; it says nothing about the stage;
+ *     · booked.next is the soonest booked date on or after today; when every
+ *       booked job's date has passed, the EARLIEST of them — the one that has
+ *       waited longest for its car — ties broken by job_number.
  */
 export interface FinanceRows {
   jobs: JobWithContext[]
   payments: { amount_cents: number; date: string; job_id: string; invoice_id: string | null }[]
-  partOutflows: { date: string; cents: number }[]
+  /** One row per part line and per receipt's counter tax; job_id ties it to the job it was bought for (0043). */
+  partOutflows: { date: string; cents: number; job_id: string }[]
   invoices: {
     id: string
     job_id: string
@@ -83,21 +112,22 @@ export type MonthState = 'open' | 'future' | 'before'
 export interface MonthFigures {
   /** 0 = January, as Date.getMonth() has it. */
   index: number
+  /** Done jobs dated this month. */
   jobs: number
   hours: number
-  /** total_charged on the jobs dated this month, before sales tax — net of any tax included in an untaxed total. */
+  /** total_charged on the done jobs dated this month, before sales tax — net of any tax included in an untaxed total. */
   billed: number
-  /** Labor + parts margin on the jobs dated this month, paid or not, net of included tax. */
+  /** Labor + parts margin on the done jobs dated this month, paid or not, net of included tax. */
   earned: number
-  /** Payments landing this month (a pre-ledger job's cash sits on its job date). */
+  /** Payments landing this month, on any job (a pre-ledger job's cash sits on its job date). */
   collected: number
-  /** Parts and counter tax bought this month. */
+  /** Parts and counter tax bought this month, for any job. */
   partsSpend: number
   /** collected − partsSpend − the sales tax inside this month's payments; the twelve sum to the year. */
   cashProfit: number
-  /** Still owed on the jobs dated this month, before sales tax (net of the included tax on the unpaid share). */
+  /** Still owed on the done jobs dated this month, before sales tax (net of the included tax on the unpaid share). */
   unpaid: number
-  /** How many of this month's jobs are not paid. */
+  /** How many of this month's done jobs are not paid. */
   unpaidJobs: number
   state: MonthState
 }
@@ -113,30 +143,53 @@ export interface OldestOwed {
   date: string
 }
 
+/** The soonest booked job, for the dashboard's Scheduled door. */
+export interface BookedNext {
+  jobId: string
+  jobNumber: string
+  /** The booked date, YYYY-MM-DD (job.date). */
+  date: string
+  title: string
+  customer: string
+  stage: 'scheduled' | 'in_progress'
+}
+
+/** The pipeline: scheduled + in_progress jobs in scope. Not work yet, not in the books. */
+export interface Booked {
+  jobs: number
+  hours: number
+  /** Labor + approved parts charge (job_totals.total_charged_cents), gross. */
+  cents: number
+  /** Soonest booked date on or after today; else the earliest (longest waiting). Null when nothing is booked. */
+  next: BookedNext | null
+}
+
 export interface Finances {
+  /** Done jobs in scope. */
   count: number
   hours: number
-  /** Billed to customers, before sales tax: total_charged net of the tax included in untaxed totals. */
+  /** Billed to customers on done jobs, before sales tax: total_charged net of the tax included in untaxed totals. */
   charged: number
+  /** Parts and counter tax bought in scope, for ANY job (partsSpendOnBooked is the part for jobs not done). */
   partsSpend: number
-  /** Payments received, sales tax included. */
+  /** Payments received in scope on ANY job, sales tax included (depositsOnBooked is the part on jobs not done). */
   collected: number
   /** All sales tax inside the payments: charged on a tax line + included in an untaxed total. */
   taxCollected: number
   /** The part of taxCollected that had no tax line — 5% taken out of what those customers paid. */
   taxIncludedCollected: number
-  /** Sales tax on the governing invoices of this year's jobs, collected or not (charged + included). */
+  /** Sales tax on the governing invoices of this year's done jobs, collected or not (charged + included). */
   taxBilled: number
   /** The included part of taxBilled. */
   taxIncludedBilled: number
-  /** Governing invoices of this year's jobs that carry included tax (went out with no tax line). */
+  /** Governing invoices of this year's done jobs that carry included tax (went out with no tax line). */
   taxIncludedInvoices: number
   /** collected − partsSpend − taxCollected: the cash side, before overhead. */
   cashProfit: number
   /**
-   * Still owed on this year's jobs, BEFORE sales tax: the balance net of the
-   * included tax on the share not yet paid, so charged − unpaid is what the
-   * work has brought in. A taxed invoice's tax line was never in here either.
+   * Still owed on this year's done jobs, BEFORE sales tax: the balance net of
+   * the included tax on the share not yet paid, so charged − unpaid is what
+   * the work has brought in. A taxed invoice's tax line was never in here either.
    * The customer's own balance is gross (oldestOwed.cents, the job page).
    */
   unpaid: number
@@ -144,15 +197,21 @@ export interface Finances {
   partsCharged: number
   partsCostOnJobs: number
   partsMarkup: number
-  /** What the work earned, paid or not: labor sold plus parts margin, net of included tax. */
+  /** What the done work earned, paid or not: labor sold plus parts margin, net of included tax. */
   earned: number
   overhead: number
-  /** Jobs not paid (unpaid or partial). */
+  /** Done jobs not paid (unpaid or partial). */
   owedJobs: number
   /** Of those, the ones with no live invoice at all. */
   uninvoicedJobs: number
-  /** The oldest unpaid job by job date, or null when nothing is owed. */
+  /** The oldest unpaid done job by job date, or null when nothing is owed. */
   oldestOwed: OldestOwed | null
+  /** Scheduled + in_progress jobs in scope: the pipeline, not the books. */
+  booked: Booked
+  /** Payments in scope on jobs not done: cash held ahead of the work. Inside `collected`. */
+  depositsOnBooked: number
+  /** Parts outflows in scope for jobs not done: cash out ahead of the work. Inside `partsSpend`. */
+  partsSpendOnBooked: number
   months: MonthFigures[]
 }
 
@@ -167,6 +226,14 @@ export function monthLabel(index: number, long = false): string {
   return long ? name : name.slice(0, 3)
 }
 
+/**
+ * Not done = scheduled or in progress. A missing stage (a row read before
+ * 0043 is applied) is done — the DB default, and the pre-0043 arithmetic.
+ */
+export function isBookedJob(job: Pick<Job, 'stage'>): boolean {
+  return job.stage === 'scheduled' || job.stage === 'in_progress'
+}
+
 /** The current page's fetches, unchanged in meaning: live jobs, live invoices. */
 export async function loadFinanceRows(): Promise<FinanceRows> {
   const [jobs, paymentsRes, linesRes, receiptsRes, invoicesRes, expensesRes] = await Promise.all([
@@ -177,7 +244,7 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
     supabase
       .from('part_lines')
       .select('job_id, line_total_cents, purchase_date, awaiting_cost, job:jobs(date, deleted_at)'),
-    supabase.from('receipts').select('tax_cents, purchase_date, job:jobs(date, deleted_at)'),
+    supabase.from('receipts').select('job_id, tax_cents, purchase_date, job:jobs(date, deleted_at)'),
     supabase
       .from('invoices')
       .select('id, job_id, tax_cents, included_tax_cents, total_cents, status, due_date, created_at')
@@ -227,6 +294,7 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
     }[]) ?? []
   const taxRows =
     (receiptsRes.data as unknown as {
+      job_id: string
       tax_cents: number
       purchase_date: string | null
       job: { date: string; deleted_at: string | null } | null
@@ -234,10 +302,10 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
   const partOutflows = [
     ...lineRows
       .filter((r) => r.job && !r.job.deleted_at)
-      .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents })),
+      .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.line_total_cents, job_id: r.job_id })),
     ...taxRows
       .filter((r) => r.job && !r.job.deleted_at && r.tax_cents > 0)
-      .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.tax_cents })),
+      .map((r) => ({ date: r.purchase_date ?? r.job!.date, cents: r.tax_cents, job_id: r.job_id })),
   ]
   const uncostedJobIds = new Set(
     lineRows.filter((r) => r.awaiting_cost && r.job && !r.job.deleted_at).map((r) => r.job_id),
@@ -255,6 +323,9 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
 
 const yearOf = (iso: string) => Number(iso.slice(0, 4))
 const monthOf = (iso: string) => Number(iso.slice(5, 7)) - 1
+/** The local calendar date of `d` as YYYY-MM-DD, comparable to job.date. */
+const localDateOf = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 /**
  * Every figure the dashboard shows, for one year or for all time.
@@ -292,6 +363,7 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
   let owedJobs = 0
   let uninvoicedJobs = 0
   let oldestOwed: OldestOwed | null = null
+  let doneCount = 0
   // The loader already drops void invoices, but the arithmetic must not
   // depend on that: a void revision would otherwise count as "invoiced" and,
   // being the largest, become the governing invoice for the tax proration.
@@ -323,13 +395,35 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
   }
   const includedTaxOf = (jobId: string) => govByJob.get(jobId)?.included_tax_cents ?? 0
 
+  // The pipeline (0043): scheduled + in_progress jobs in scope. Their money
+  // is not in the books yet — it is booked, and shown as that.
+  const today = localDateOf(now)
+  const booked: Booked = { jobs: 0, hours: 0, cents: 0, next: null }
+  // Chosen in two tiers: any job dated today or later beats every job whose
+  // date has passed; within a tier the earliest date wins, then job_number.
+  let nextUpcoming: JobWithContext | null = null
+  let nextPast: JobWithContext | null = null
+  const earlier = (a: JobWithContext, b: JobWithContext) =>
+    a.job.date < b.job.date || (a.job.date === b.job.date && a.job.job_number < b.job.job_number)
+
   for (const it of scoped) {
     const m = months[monthOf(it.job.date)]
     const h = Number(it.job.labor_hours)
+    const t = it.totals
+    if (isBookedJob(it.job)) {
+      booked.jobs += 1
+      booked.hours += h
+      booked.cents += t?.total_charged_cents ?? 0
+      if (it.job.date >= today) {
+        if (!nextUpcoming || earlier(it, nextUpcoming)) nextUpcoming = it
+      } else if (!nextPast || earlier(it, nextPast)) nextPast = it
+      // Not work: nothing below counts it.
+      continue
+    }
+    doneCount += 1
     hours += h
     m.jobs += 1
     m.hours += h
-    const t = it.totals
     if (it.job.payment_status !== 'paid') {
       owedJobs += 1
       m.unpaidJobs += 1
@@ -377,16 +471,33 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
       }
     }
   }
+  const nextIt = nextUpcoming ?? nextPast
+  if (nextIt) {
+    booked.next = {
+      jobId: nextIt.job.id,
+      jobNumber: nextIt.job.job_number,
+      date: nextIt.job.date,
+      title: nextIt.job.title,
+      customer: nextIt.customer?.name ?? 'Unknown customer',
+      stage: nextIt.job.stage === 'in_progress' ? 'in_progress' : 'scheduled',
+    }
+  }
   const partsMarkup = partsCharged - partsCostOnJobs
-  // Every job's included tax is taken back out of earned; the year's total
-  // is the same subtraction the months made one job at a time.
+  // Every done job's included tax is taken back out of earned; the year's
+  // total is the same subtraction the months made one job at a time.
   let includedOnJobs = 0
-  for (const it of scoped) if (it.totals) includedOnJobs += includedTaxOf(it.job.id)
+  for (const it of scoped) if (it.totals && !isBookedJob(it.job)) includedOnJobs += includedTaxOf(it.job.id)
+
+  // The jobs not done, wherever they are dated: a deposit paid this year on
+  // next year's booked job is still this year's cash, so the set is not scoped.
+  const bookedJobIds = new Set(rows.jobs.filter((it) => isBookedJob(it.job)).map((it) => it.job.id))
 
   // Cash, not accrual. BOTH sides are cash-dated or the number is nonsense:
-  // payments by PAYMENT date, parts by PURCHASE date.
+  // payments by PAYMENT date, parts by PURCHASE date. Any job's cash counts —
+  // a deposit on a scheduled job moved on the day it moved.
   const jobsWithLedger = new Set(rows.payments.map((p) => p.job_id))
   let collected = 0
+  let depositsOnBooked = 0
   // The cash the tax proration below sees: every counted payment, so that the
   // tax inside a pre-ledger job's cached amount is taken out like any other.
   const cashIn: { amount_cents: number; date: string; job_id: string }[] = []
@@ -394,6 +505,7 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     if (!inYear(p.date)) continue
     collected += p.amount_cents
     months[monthOf(p.date)].collected += p.amount_cents
+    if (bookedJobIds.has(p.job_id)) depositsOnBooked += p.amount_cents
     cashIn.push(p)
   }
   for (const it of scoped) {
@@ -403,13 +515,16 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     if (cached === 0) continue
     collected += cached
     months[monthOf(it.job.date)].collected += cached
+    if (bookedJobIds.has(it.job.id)) depositsOnBooked += cached
     cashIn.push({ amount_cents: cached, date: it.job.date, job_id: it.job.id })
   }
   let partsSpend = 0
+  let partsSpendOnBooked = 0
   for (const o of rows.partOutflows) {
     if (!inYear(o.date)) continue
     partsSpend += o.cents
     months[monthOf(o.date)].partsSpend += o.cents
+    if (bookedJobIds.has(o.job_id)) partsSpendOnBooked += o.cents
   }
 
   // Sales tax arrives inside those payments but is the state's money, so it
@@ -448,12 +563,15 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     taxIncludedCollected += includedSoFar
   }
 
-  // What the invoices of this year's jobs carry in tax, paid or not: the part
-  // above taxCollected is owed to the state the day those customers pay.
+  // What the invoices of this year's done jobs carry in tax, paid or not: the
+  // part above taxCollected is owed to the state the day those customers pay.
+  // A job not done is not in charged, so its invoice (there should be none;
+  // the invoice action is gated on done) is not in here either.
   let taxBilled = 0
   let taxIncludedBilled = 0
   let taxIncludedInvoices = 0
   for (const it of scoped) {
+    if (isBookedJob(it.job)) continue
     const inv = govByJob.get(it.job.id)
     if (!inv) continue
     if (inv.tax_cents > 0) taxBilled += inv.tax_cents
@@ -484,7 +602,7 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
   for (const m of months) m.cashProfit = m.collected - m.partsSpend - taxByMonth[m.index]
 
   return {
-    count: scoped.length,
+    count: doneCount,
     hours,
     charged,
     partsSpend,
@@ -505,6 +623,9 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     owedJobs,
     uninvoicedJobs,
     oldestOwed,
+    booked,
+    depositsOnBooked,
+    partsSpendOnBooked,
     months,
   }
 }
@@ -518,13 +639,14 @@ export function financeYears(rows: FinanceRows): number[] {
 }
 
 /**
- * Work done but never billed: jobs not paid that have no live invoice, oldest
- * first. The dashboard's Billing door counts them and the Billing page lists
- * them, from this one definition. Not year-scoped: it is a worklist.
+ * Work done but never billed: DONE jobs not paid that have no live invoice,
+ * oldest first. A scheduled or in-progress job is not work yet and never
+ * appears here. The dashboard's Billing door counts them and the Billing page
+ * lists them, from this one definition. Not year-scoped: it is a worklist.
  */
 export function jobsToInvoice(rows: FinanceRows): JobWithContext[] {
   const invoiced = new Set(rows.invoices.filter((i) => i.status !== 'void').map((i) => i.job_id))
   return rows.jobs
-    .filter((it) => it.job.payment_status !== 'paid' && !invoiced.has(it.job.id))
+    .filter((it) => !isBookedJob(it.job) && it.job.payment_status !== 'paid' && !invoiced.has(it.job.id))
     .sort((a, b) => (a.job.date < b.job.date ? -1 : a.job.date > b.job.date ? 1 : 0))
 }

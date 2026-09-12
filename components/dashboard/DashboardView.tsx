@@ -6,7 +6,7 @@ import JobRow from '@/components/JobRow'
 import MonthlyChart, { type MonthlyJob } from '@/components/MonthlyChart'
 import type { BusinessDocument } from '@/components/BusinessDocuments'
 import type { CoreOut } from '@/lib/cores'
-import { computeFinances, financeYears, type FinanceRows, type MonthFigures } from '@/lib/finances'
+import { computeFinances, financeYears, isBookedJob, type FinanceRows, type MonthFigures } from '@/lib/finances'
 import ActionLane, { type BillingCounts } from './ActionLane'
 import EarnedBar from './EarnedBar'
 import MoneyLedger from './MoneyLedger'
@@ -100,15 +100,18 @@ export default function DashboardView({
   // The chart buckets by JOB date, so profit, job count and hours for a month
   // all come from the same jobs and the three panels line up. It does its own
   // year filtering (it needs all years to know when tracking started), so it
-  // gets every job, not the scoped list.
+  // gets every DONE job, not the scoped list: a scheduled or in-progress job
+  // is not work yet (0043), the same rule the tiles read from Finances.
   const chartJobs = useMemo<MonthlyJob[]>(
     () =>
-      rows.jobs.map((it) => ({
-        date: it.job.date,
-        hours: Number(it.job.labor_hours),
-        profitCents: it.totals?.profit_cents ?? 0,
-        uncosted: rows.uncostedJobIds.has(it.job.id),
-      })),
+      rows.jobs
+        .filter((it) => !isBookedJob(it.job))
+        .map((it) => ({
+          date: it.job.date,
+          hours: Number(it.job.labor_hours),
+          profitCents: it.totals?.profit_cents ?? 0,
+          uncosted: rows.uncostedJobIds.has(it.job.id),
+        })),
     [rows],
   )
 
@@ -127,15 +130,29 @@ export default function DashboardView({
   // "The rest is the unpaid jobs" is only true when earned − cash profit is
   // exactly what is owed; cash or parts crossing the year line breaks that,
   // and the ledger below names the timing gap, so the tile must not deny it.
-  const bridgeGap = f.earned - f.unpaid - f.cashProfit
+  // Scheduled work (0043) is the other piece: parts bought for it are cash
+  // out before any work is earned, and deposits held on it are cash in — the
+  // identity is earned − owed − parts for scheduled work + deposits held =
+  // cash profit, and the scheduled pieces are named only when they are there.
+  const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked - f.cashProfit
+  // The pieces that WIDEN the gap between earned and cash (owed, parts out
+  // ahead of the work, timing) read "plus"; deposits held NARROW it — cash
+  // in ahead of the work — so they carry their own sign, "less".
+  const plusParts = [
+    f.owedJobs > 0 ? plural(f.owedJobs, 'unpaid job') : '',
+    f.partsSpendOnBooked > 0 ? `${money(f.partsSpendOnBooked)} of parts bought for scheduled work` : '',
+    bridgeGap !== 0 ? 'timing across the year line' : '',
+  ].filter(Boolean)
+  const lessDeposits =
+    f.depositsOnBooked > 0 ? `less ${money(f.depositsOnBooked)} held as deposits on scheduled work` : ''
   const restWords =
-    f.owedJobs > 0
-      ? bridgeGap === 0
-        ? `; the rest is the ${plural(f.owedJobs, 'unpaid job')}`
-        : `; ${plural(f.owedJobs, 'unpaid job')} plus timing across the year line`
-      : bridgeGap !== 0
-        ? '; the rest is timing across the year line'
+    plusParts.length === 0
+      ? lessDeposits
+        ? `; ${money(f.depositsOnBooked)} of it is deposits held on scheduled work`
         : ''
+      : plusParts.length === 1 && f.owedJobs > 0 && !lessDeposits
+        ? `; the rest is the ${plusParts[0]}`
+        : `; the rest is ${plusParts.join(', plus ')}${lessDeposits ? `, ${lessDeposits}` : ''}`
   const cashHint =
     f.taxCollected > 0
       ? `collected − parts − ${money(f.taxCollected)} sales tax${restWords}`
@@ -184,7 +201,7 @@ export default function DashboardView({
           series="busy"
           t={0}
           trend={liveScope ? { scope: liveScope, pick: (m) => m.jobs } : undefined}
-          hint={`jobs dated ${yearWords}, paid or not`}
+          hint={`jobs done, dated ${yearWords}, paid or not`}
         />
         <TrendTile
           label="Labor hours"
@@ -202,7 +219,7 @@ export default function DashboardView({
           series="neutral"
           t={2}
           trend={liveScope ? { scope: liveScope, pick: (m) => m.billed } : undefined}
-          hint="what the work came to, before tax"
+          hint="what the done work came to, before tax"
         />
         <TrendTile
           label="Collected"

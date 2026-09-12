@@ -9,6 +9,11 @@ import { money, plural } from './format'
  * the work earned it. Every figure comes from Finances and every step adds on
  * screen: a row that is a sum IS the sum of the rows above it.
  *
+ * Work is DONE jobs only (0043). Booked work is the dashboard's Scheduled
+ * door's job, not the ledger's: the ledger keeps to money that exists. The
+ * two places booked work touches real money — a deposit paid ahead, parts
+ * bought ahead — are named here so the chain and the bridge still add.
+ *
  * Shared with the Billing page, so the two can never tell a different story.
  */
 export default function MoneyLedger({
@@ -35,12 +40,17 @@ export default function MoneyLedger({
 
   // Billed and owed follow the JOB's date; payments follow the day they landed.
   // Across a year boundary the two drift, and the drift is shown as its own
-  // line rather than hidden in a total that no longer adds.
-  const collectedOnWork = f.collected - f.taxCollected
+  // line rather than hidden in a total that no longer adds. A deposit held on
+  // work not started is cash that settles nothing billed yet, so it sits on
+  // its own line after "collected on the work" and is not timing.
+  const collectedOnWork = f.collected - f.taxCollected - f.depositsOnBooked
   const timing = collectedOnWork - (f.charged - f.unpaid)
   // Earned − owed equals cash profit only when the parts on this scope's jobs
-  // are the parts bought in this scope — true inside a year, not across one.
-  const bridgeGap = f.earned - f.unpaid - f.cashProfit
+  // are the parts bought in this scope — true inside a year, not across one —
+  // once the cash that belongs to booked work (parts bought ahead, deposits
+  // held) is named. Written from the same figures the rows above use.
+  const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked - f.cashProfit
+  const hasBookedCash = f.partsSpendOnBooked > 0 || f.depositsOnBooked > 0
   // Sales tax the state is owed comes in two ways: charged on a tax line, or
   // hidden inside a total that went out with no tax line (the owner's rule:
   // 5% of what those customers paid is the state's). Both add to the same
@@ -56,6 +66,15 @@ export default function MoneyLedger({
   const partsShare = f.earned > 0 ? Math.max(0, Math.min(1 - laborShare, f.partsMarkup / f.earned)) : 0
   const pctWords = (x: number) => `${Math.round(x * 100)}%`
 
+  const partsCap = [
+    'your cost, counted when bought',
+    f.owedJobs > 0 ? `includes the parts on the ${plural(f.owedJobs, 'unpaid job')}` : '',
+    f.partsSpendOnBooked > 0 ? `and ${money(f.partsSpendOnBooked)} bought for scheduled work` : '',
+  ]
+    .filter(Boolean)
+    .join('; ')
+    .replace('; and ', ' and ')
+
   const body = (
     <div className="ledger-grid">
       <div className="ledger-block" aria-label="How the money moves from billed to cash profit">
@@ -63,7 +82,7 @@ export default function MoneyLedger({
         <Row
           op=""
           label="Billed to customers, before sales tax"
-          cap={`${plural(f.count, 'job')} dated ${scopeWords}, paid or not${
+          cap={`${plural(f.count, 'job')} done and dated ${scopeWords}, paid or not${
             f.taxIncludedBilled > 0
               ? `; net of the ${money(f.taxIncludedBilled)} sales tax inside ${plural(f.taxIncludedInvoices, 'untaxed total')}`
               : ''
@@ -90,6 +109,14 @@ export default function MoneyLedger({
           />
         )}
         <Row op="=" label="Collected on the work, before tax" amount={collectedOnWork} sum />
+        {f.depositsOnBooked > 0 && (
+          <Row
+            op="+"
+            label="Deposits held on scheduled work"
+            cap="paid ahead on jobs not started; it is theirs until the work is done"
+            amount={f.depositsOnBooked}
+          />
+        )}
         <Row op="+" label="Sales tax the customers paid on top" cap="charged on a tax line; rides along inside the payments" amount={taxChargedCollected} />
         {f.taxIncludedCollected > 0 && (
           <Row
@@ -100,12 +127,7 @@ export default function MoneyLedger({
           />
         )}
         <Row op="=" label="Payments received" cap="what actually landed, by payment date" amount={f.collected} sum tone="in" />
-        <Row
-          op="−"
-          label="Parts and counter tax you paid"
-          cap={`your cost, counted when bought${f.owedJobs > 0 ? `; includes the parts on the ${plural(f.owedJobs, 'unpaid job')}` : ''}`}
-          amount={-f.partsSpend}
-        />
+        <Row op="−" label="Parts and counter tax you paid" cap={partsCap} amount={-f.partsSpend} />
         <Row
           op="−"
           label="Sales tax held for the state"
@@ -120,14 +142,35 @@ export default function MoneyLedger({
           </>
         )}
         <p className="ledger-bridge">
-          {bridgeGap === 0 ? (
+          {/* Every piece below is a Finances figure; the sentence is the bridge
+              identity written out, naming the booked-work pieces only when
+              they are not zero, so it is true by construction. */}
+          Earned <b>{money(f.earned)}</b> less the <b>{money(f.unpaid)}</b> still owed
+          {f.partsSpendOnBooked > 0 && (
             <>
-              Earned <b>{money(f.earned)}</b> less the <b>{money(f.unpaid)}</b> still owed is <b>{money(f.cashProfit)}</b>: the two big figures agree to the cent.
-              {f.owedJobs > 0 && ' The parts on the unpaid jobs are already bought.'}
+              , less the <b>{money(f.partsSpendOnBooked)}</b> of parts bought for scheduled work
             </>
+          )}
+          {f.depositsOnBooked > 0 && (
+            <>
+              , plus the <b>{money(f.depositsOnBooked)}</b> held as deposits on scheduled work
+            </>
+          )}
+          {bridgeGap === 0 ? (
+            hasBookedCash ? (
+              <>
+                {' '}is <b>{money(f.cashProfit)}</b>, the cash profit: it adds to the cent.
+                {f.owedJobs > 0 && ' The parts on the unpaid jobs are already bought.'}
+              </>
+            ) : (
+              <>
+                {' '}is <b>{money(f.cashProfit)}</b>: the two big figures agree to the cent.
+                {f.owedJobs > 0 && ' The parts on the unpaid jobs are already bought.'}
+              </>
+            )
           ) : (
             <>
-              Earned <b>{money(f.earned)}</b> less the <b>{money(f.unpaid)}</b> still owed is <b>{money(f.earned - f.unpaid)}</b>; cash profit is <b>{money(f.cashProfit)}</b>. The <b>{money(Math.abs(bridgeGap))}</b> between them is timing — parts bought, or payments landing, in a different year from their job.
+              {' '}is <b>{money(f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked)}</b>; cash profit is <b>{money(f.cashProfit)}</b>. The <b>{money(Math.abs(bridgeGap))}</b> between them is timing — parts bought, or payments landing, in a different year from their job.
             </>
           )}
         </p>
@@ -135,7 +178,7 @@ export default function MoneyLedger({
 
       <div className="ledger-block" aria-label="Where the work earned its money">
         <span className="label">Where it was earned</span>
-        <Row op="" label="Labor billed" cap={`${(Math.round(f.hours * 10) / 10).toFixed(1)} hr sold on ${plural(f.count, 'job')}`} amount={f.laborCharged} />
+        <Row op="" label="Labor billed" cap={`${(Math.round(f.hours * 10) / 10).toFixed(1)} hr sold on ${plural(f.count, 'job')} done`} amount={f.laborCharged} />
         <Row op="" label="Parts billed" amount={f.partsCharged} />
         <Row op="−" label="What the parts cost you" cap="counter tax included" amount={-f.partsCostOnJobs} />
         <Row op="=" label="Parts margin" amount={f.partsMarkup} sum />
@@ -162,7 +205,7 @@ export default function MoneyLedger({
           </>
         )}
         {/* Overhead is taken off once, after cash profit in the first block. */}
-        <Row op="=" label="Earned on the work" cap="labor plus parts margin, paid or not, before overhead" amount={f.earned} sum total tone={f.earned >= 0 ? 'in' : 'owed'} />
+        <Row op="=" label="Earned on the work" cap="labor plus parts margin on the jobs done, paid or not, before overhead" amount={f.earned} sum total tone={f.earned >= 0 ? 'in' : 'owed'} />
       </div>
 
       {/* The state's money, shown as what it is: a figure you owe, not a

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { centsToInput, parseMoney } from '@/lib/money'
-import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
+import { vehicleLabel, type Customer, type Job, type JobStage, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 import { syncJobPayment } from '@/lib/payments'
 import { listTemplates, type JobTemplate, type JobTemplateLine } from '@/lib/templates'
@@ -17,6 +17,13 @@ function todayLocal(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
+
+/** The three stages (0043), in the order the work moves through them. */
+const STAGES: { value: JobStage; label: string; hint: string }[] = [
+  { value: 'scheduled', label: 'Scheduled', hint: 'booked, not started — the date is the drop-off day' },
+  { value: 'in_progress', label: 'In progress', hint: 'on the lift' },
+  { value: 'done', label: 'Done', hint: 'work complete, ready to bill' },
+]
 
 /**
  * New/edit job form. Critical requirement: a brand-new customer's first job is
@@ -48,6 +55,9 @@ export default function JobForm({ job }: { job?: Job }) {
   const [workPerformed, setWorkPerformed] = useState(job?.work_performed ?? '')
   const [notes, setNotes] = useState(job?.notes ?? '')
   const [promisedDate, setPromisedDate] = useState(job?.promised_date ?? '')
+  // A job typed in by hand is a walk-in being worked now; a quote converts
+  // to a scheduled job on the quote page. Editing shows what it is today.
+  const [stage, setStage] = useState<JobStage>(job?.stage ?? 'in_progress')
   const [templates, setTemplates] = useState<JobTemplate[]>([])
   const [templateLines, setTemplateLines] = useState<JobTemplateLine[]>([])
   const [templateName, setTemplateName] = useState<string | null>(null)
@@ -176,6 +186,10 @@ export default function JobForm({ job }: { job?: Job }) {
         }
       }
 
+      // Every insert names its stage (the DB default 'done' is for the rows
+      // that predate 0043, never for the app); stage_changed_at moves only
+      // when the stage does.
+      const stageMoved = !editing || stage !== job.stage
       const payload = {
         vehicle_id: targetVehicleId,
         date,
@@ -188,6 +202,8 @@ export default function JobForm({ job }: { job?: Job }) {
         promised_date: promisedDate || null,
         warranty_months: warrantyMonthsNum,
         warranty_miles: warrantyMilesNum,
+        stage,
+        ...(stageMoved ? { stage_changed_at: new Date().toISOString() } : {}),
       }
 
       if (editing) {
@@ -398,8 +414,29 @@ export default function JobForm({ job }: { job?: Job }) {
 
       {/* Job details */}
       <div className="card grid gap-3 sm:grid-cols-2">
+        {/* Stage: where the job is in the shop. Three 44px segments. */}
+        <div className="sm:col-span-2">
+          <span className="label" id="job-stage-label">Stage</span>
+          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }} role="group" aria-labelledby="job-stage-label">
+            {STAGES.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                className="btn btn-sm !min-h-[44px]"
+                aria-pressed={stage === s.value}
+                style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
+                onClick={() => setStage(s.value)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs" style={{ color: 'var(--text3)' }}>
+            {STAGES.find((s) => s.value === stage)?.hint}. Only done jobs count as work in the books.
+          </p>
+        </div>
         <div>
-          <label className="label">Date *</label>
+          <label className="label">{stage === 'scheduled' ? 'Booked for *' : 'Date *'}</label>
           <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </div>
         <div>

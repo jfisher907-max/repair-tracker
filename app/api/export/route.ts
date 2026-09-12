@@ -31,8 +31,8 @@ const TABLES: Record<string, string[]> = {
   jobs: [
     'id', 'job_number', 'vehicle_id', 'date', 'odometer_miles', 'title', 'work_performed',
     'labor_hours', 'labor_rate_cents', 'parts_charged_override_cents', 'payment_status',
-    'amount_paid_cents', 'warranty_months', 'warranty_miles', 'promised_date',
-    'notes', 'created_at', 'updated_at', 'deleted_at',
+    'amount_paid_cents', 'stage', 'stage_changed_at', 'warranty_months', 'warranty_miles',
+    'promised_date', 'notes', 'created_at', 'updated_at', 'deleted_at',
   ],
   part_lines: [
     'id', 'job_id', 'receipt_id', 'purchase_date', 'store', 'part_number', 'description', 'qty',

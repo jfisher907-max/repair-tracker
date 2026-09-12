@@ -8,6 +8,7 @@ import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
 import { unpaidBalanceCents } from '@/lib/calc'
+import { isBookedJob } from '@/lib/finances'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 
@@ -47,13 +48,20 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
 
   if (!customer) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
+  // A scheduled or in-progress job (0043) is booked, not owed: its total is
+  // shown as booked, not inside "owes", so this line agrees with the
+  // dashboard, Billing and Reports about what the customer actually owes.
   const lifetime = jobs.reduce(
     (acc, j) => {
+      if (isBookedJob(j.job)) {
+        acc.booked += j.totals?.total_charged_cents ?? 0
+        return acc
+      }
       acc.charged += j.totals?.total_charged_cents ?? 0
       acc.unpaid += j.totals ? unpaidBalanceCents(j.job, j.totals.total_charged_cents) : 0
       return acc
     },
-    { charged: 0, unpaid: 0 },
+    { charged: 0, unpaid: 0, booked: 0 },
   )
 
   async function saveEdit() {
@@ -148,6 +156,9 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
             {jobs.length} jobs · lifetime <b className="money">{formatCents(lifetime.charged)}</b>
             {lifetime.unpaid > 0 && (
               <> · owes <b className="money" style={{ color: 'var(--red)' }}>{formatCents(lifetime.unpaid)}</b></>
+            )}
+            {lifetime.booked > 0 && (
+              <> · booked <b className="money">{formatCents(lifetime.booked)}</b></>
             )}
           </span>
           <Link href={`/report?customer=${id}`} className="btn btn-sm btn-primary">

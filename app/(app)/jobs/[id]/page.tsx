@@ -33,6 +33,7 @@ import {
   type Customer,
   type Invoice,
   type Job,
+  type JobStage,
   type PartLine,
   type Payment,
   type PaymentMethod,
@@ -59,6 +60,13 @@ interface LineDraft {
 const emptyDraft: LineDraft = {
   purchase_date: '', store: '', part_number: '', description: '', qty: '1', unit_cost: '', unit_charge: '',
 }
+
+/** The three stages (0043), in the order the work moves through them. */
+const STAGES: { value: JobStage; label: string }[] = [
+  { value: 'scheduled', label: 'Scheduled' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'done', label: 'Done' },
+]
 
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -121,6 +129,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [editingOverride, setEditingOverride] = useState(false)
   const [overrideInput, setOverrideInput] = useState('')
   const [linkedQuotes, setLinkedQuotes] = useState<(Quote & { total_cents: number | null })[]>([])
+  /** The stage control is writing. */
+  const [stageBusy, setStageBusy] = useState(false)
 
   const load = useCallback(async () => {
     const { data: j, error: jErr } = await supabase
@@ -285,6 +295,33 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       }
     }
     await load()
+  }
+
+  /** Where the job is in the shop (0043). A missing stage on a row read
+   *  before the migration counts as done, the same as the books. */
+  const stage: JobStage = job.stage ?? 'done'
+  const notDone = stage !== 'done'
+
+  /** Move the job to a stage and stamp when it moved. Leaving `done` is
+   *  refused while a live invoice exists: the invoice is the record that the
+   *  work was done, and moving the job back under it would pull the job out
+   *  of billed/earned while its payments (and the tax inside them) stayed in
+   *  cash — the ledger would then show a "timing" gap that never happened.
+   *  Void the invoice first; then the job can go back on the lift. */
+  async function setStage(next: JobStage) {
+    if (stageBusy || next === stage) return
+    if (stage === 'done' && next !== 'done') {
+      const live = invoices.find((i) => i.status !== 'void')
+      if (live) {
+        alert(
+          `${job!.job_number} has invoice ${live.invoice_number} (${live.status}) — the record that the work was done. Void that invoice first if the job really is going back on the lift.`,
+        )
+        return
+      }
+    }
+    setStageBusy(true)
+    await updateJob({ stage: next, stage_changed_at: new Date().toISOString() })
+    setStageBusy(false)
   }
 
   /** Half-hour steps: the unit a shop actually books time in. */
@@ -632,6 +669,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
     setInvoicing(true)
     try {
+      // An invoice bills DONE work (0043). On a scheduled or in-progress job
+      // the button already reads "Mark done, then invoice", so the tap that
+      // asks for the invoice marks the job done first — never silently. It
+      // stays done even if a check below holds the invoice: the work is
+      // finished either way, and the books should say so.
+      if (notDone) {
+        const { error: stageErr } = await supabase
+          .from('jobs')
+          .update({ stage: 'done', stage_changed_at: new Date().toISOString() })
+          .eq('id', id)
+        if (stageErr) throw stageErr
+        await load()
+      }
       // Fresh reads: the checks below may have just changed conditions or
       // prices, and this can run from a panel holding an older render.
       const [{ data: settings }, { data: freshLines }, freshAuth] = await Promise.all([
@@ -740,7 +790,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               >
                 PO {job.job_number}
               </button>
-              <span className={`chip chip-${job.payment_status}`}>{job.payment_status}</span>
+              {/* Not done = not owed: the chip says where the job is, not
+                  "unpaid". Done jobs carry the payment status. */}
+              {stage === 'scheduled' ? (
+                <span className="chip chip-booked">scheduled</span>
+              ) : stage === 'in_progress' ? (
+                <span className="chip chip-open">in progress</span>
+              ) : (
+                <span className={`chip chip-${job.payment_status}`}>{job.payment_status}</span>
+              )}
               {job.promised_date && job.payment_status !== 'paid' && (
                 <span
                   className="chip"
@@ -777,12 +835,43 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   {vehicleLabel(vehicle)}
                 </Link>
               )}
-              {' · '}{job.date}
+              {' · '}{stage === 'scheduled' ? `booked ${formatDate(job.date)}` : formatDate(job.date)}
               {job.odometer_miles != null && ` · ${formatMiles(job.odometer_miles)} mi`}
             </div>
           </div>
           <Link href={`/jobs/${id}/edit`} className="btn btn-sm">Edit</Link>
         </div>
+
+        {/* Stage (0043): scheduled = booked, not started · in progress = on
+            the lift · done = ready to bill. Three 44px segments; a tap moves
+            the job and stamps when. Only done jobs count as work in the books. */}
+        <div role="group" aria-label="Job stage" className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+          {STAGES.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              className="btn btn-sm !min-h-[44px]"
+              aria-pressed={stage === s.value}
+              disabled={stageBusy}
+              style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
+              onClick={() => setStage(s.value)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+        {notDone && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            {stage === 'scheduled'
+              ? 'Booked, not started — waiting for the car. Not in the books until it is done.'
+              : 'On the lift. Not in the books until it is done.'}
+            {/* A timestamptz, so it is formatted in LOCAL time — slicing the
+                ISO string would print tomorrow's date after ~4 pm in Juneau. */}
+            {job.stage_changed_at &&
+              ` Moved ${new Date(job.stage_changed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.`}
+          </p>
+        )}
+
         <div className="flex flex-wrap gap-2">
           <Link href={`/jobs/${id}/scan`} className="btn btn-sm btn-primary">Scan receipt</Link>
           <button
@@ -802,13 +891,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             + Add part manually
           </button>
           <button className="btn btn-sm" disabled={invoicing || !customer} onClick={createInvoice}>
-            {invoicing ? (
-              'Creating…'
-            ) : (
-              <>
-                {openInvoice ? `Open ${openInvoice.invoice_number}` : 'Create invoice'}
-              </>
-            )}
+            {invoicing
+              ? 'Creating…'
+              : openInvoice
+                ? `Open ${openInvoice.invoice_number}`
+                : notDone
+                  ? 'Mark done, then invoice'
+                  : 'Create invoice'}
           </button>
           {job.payment_status !== 'paid' && balanceDue > 0 && (
             <button

@@ -710,6 +710,7 @@ a.card:focus-visible {
 .lane-door.edge-ok { border-left-color: var(--status-ok-solid); }
 .lane-door.edge-wait { border-left-color: var(--status-wait-solid); }
 .lane-door.edge-stop { border-left-color: var(--status-stop-solid); }
+.lane-door.edge-info { border-left-color: var(--status-info-solid); }
 .lane-door.edge-idle { border-left-color: var(--status-idle-solid); }
 .lane-door:hover {
   background: var(--surface-raised);
@@ -958,6 +959,10 @@ a.card:focus-visible {
   .ledger-card, .strip, .board-chart, .recent, .doors { order: 0; }
   .strip, .tile--wide { grid-column: auto; }
   .lane { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
+  /* Five or six doors on the 920px lane leave ~125px of text per door; a
+     title carrying money ("Scheduled $1,038.09", "Billing $2,075.03 owed")
+     shrinks a point rather than losing its figure to the ellipsis. */
+  .lane:has(> :nth-child(5)) .lane-t > b { font-size: 12px; }
   .doors { display: none; }
   .tile-hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tile-hint .hint-long { display: none; }

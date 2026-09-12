@@ -126,7 +126,8 @@ export default function BillingPage() {
             To invoice ({toInvoice.length})
           </h2>
           <p className="text-sm" style={{ color: 'var(--text2)' }}>
-            Finished jobs with no invoice yet. Open one and tap Create invoice.
+            Jobs marked done with no invoice yet. Open one and tap Create invoice. Scheduled and
+            in-progress work is not billed yet, so it is not here.
           </p>
           <div className="space-y-2">
             {toInvoice.map((it) => (

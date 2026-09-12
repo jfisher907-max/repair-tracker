@@ -1,4 +1,10 @@
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
+/**
+ * Where a job is in the shop (migration 0043). scheduled = approved and
+ * booked, not started (job.date is the booked date); in_progress = on the
+ * lift; done = work complete, ready to bill. Money statuses apply to done jobs.
+ */
+export type JobStage = 'scheduled' | 'in_progress' | 'done'
 export type ExtractionStatus = 'pending' | 'extracted' | 'manual' | 'failed'
 
 export interface Customer {
@@ -45,6 +51,10 @@ export interface Job {
   parts_charged_override_cents: number | null
   payment_status: PaymentStatus
   amount_paid_cents: number | null
+  /** scheduled | in_progress | done (0043). DB default 'done'; every app INSERT passes it explicitly. */
+  stage: JobStage
+  /** When stage last changed; null on rows that predate 0043 (they are done). */
+  stage_changed_at: string | null
   /** Shop warranty on this job's parts and labor. Null = none given. */
   warranty_months: number | null
   warranty_miles: number | null

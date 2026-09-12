@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
 import { BRAND_NAME } from '@/lib/brand'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
+import { isBookedJob } from '@/lib/finances'
 import { unpaidBalanceCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
@@ -86,8 +87,13 @@ export default function ReportsPage() {
     const inYear = (iso: string) => Number(iso.slice(0, 4)) === year
     const monthOf = (iso: string) => Number(iso.slice(5, 7)) - 1
 
+    // Accrual counts DONE jobs only (0043): a scheduled or in-progress job has
+    // billed nothing yet. The cash view below is by payment and purchase date
+    // on any job, exactly as before — a deposit on a booked job is cash in.
+    const doneJobs = jobs.filter((j) => !isBookedJob(j.job))
+
     const months = MONTHS.map(() => ({ revenue: 0, parts: 0, overhead: 0, collected: 0, partsPaid: 0 }))
-    for (const j of jobs.filter((j) => inYear(j.job.date))) {
+    for (const j of doneJobs.filter((j) => inYear(j.job.date))) {
       const m = months[monthOf(j.job.date)]
       // Revenue is the job's charge NET of the sales tax hidden inside an
       // untaxed invoice's total (0041): that 5% was never the shop's money.
@@ -144,11 +150,12 @@ export default function ReportsPage() {
       .filter((i) => i.status !== 'void' && inYear(i.issue_date))
       .reduce((s, i) => s + i.tax_cents + (i.included_tax_cents ?? 0), 0)
 
-    // Receivables as of today (not year-scoped): who owes what, and for how long.
+    // Receivables as of today (not year-scoped): who owes what, and for how
+    // long. Done jobs only — nothing is owed on work not finished.
     const now = new Date()
     const aging = { b30: 0, b60: 0, b90: 0, b90p: 0 }
     const owed: { name: string; job: string; balance: number; days: number }[] = []
-    for (const j of jobs) {
+    for (const j of doneJobs) {
       if (j.job.payment_status === 'paid' || !j.totals) continue
       const balance = unpaidBalanceCents(j.job, j.totals.total_charged_cents)
       if (balance <= 0) continue
@@ -162,7 +169,7 @@ export default function ReportsPage() {
     owed.sort((a, b) => b.days - a.days)
 
     const byCustomer = new Map<string, number>()
-    for (const j of jobs.filter((j) => inYear(j.job.date))) {
+    for (const j of doneJobs.filter((j) => inYear(j.job.date))) {
       const name = j.customer?.name ?? '—'
       byCustomer.set(name, (byCustomer.get(name) ?? 0) + (j.totals?.total_charged_cents ?? 0))
     }
@@ -321,7 +328,7 @@ export default function ReportsPage() {
             )}
             <p className="report-meta mt-1">
               {basis === 'accrual'
-                ? `Billed = customer charges on jobs dated in ${year} (labor + parts at your prices), less any sales tax inside an invoice that went out with no tax line. Collected = payments recorded in the ledger. Net = billed − parts cost − overhead.`
+                ? `Billed = customer charges on jobs marked done and dated in ${year} (labor + parts at your prices), less any sales tax inside an invoice that went out with no tax line; scheduled and in-progress jobs are not billed yet. Collected = payments recorded in the ledger, on any job. Net = billed − parts cost − overhead.`
                 : `Cash basis: money in = payments received in ${year}; parts paid by purchase date; net cash = in − parts − overhead. This is the view that matches the bank account (Schedule C cash filers report this).`}
             </p>
           </section>

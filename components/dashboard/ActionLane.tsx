@@ -7,7 +7,7 @@ import { coreState, watchCore, RETURN_WINDOW_DAYS, type CoreOut } from '@/lib/co
 import type { Finances } from '@/lib/finances'
 import { money, shortDate } from './format'
 
-type Edge = 'ok' | 'wait' | 'stop' | 'idle'
+type Edge = 'ok' | 'wait' | 'stop' | 'info' | 'idle'
 
 interface Door {
   href: string
@@ -110,7 +110,45 @@ export default function ActionLane({
     )
   const billingCount = f.uninvoicedJobs + billing.unpaidInvoices
 
+  // The pipeline (0043): approved work that is booked or on the lift, and
+  // not in the books yet. The count is the jobs; the title carries the booked
+  // money in the neutral colour — it is neither owed nor earned. The sub
+  // names the next car in: the soonest booked date on or after today. When
+  // every booked day has passed, Finances hands back the one that has waited
+  // longest, and a past date is never called "next" — it is "waiting", the
+  // jobs list's "drop-off day has passed".
+  const next = f.booked.next
+  const p = (n: number) => String(n).padStart(2, '0')
+  const today = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+  const scheduledSub: ReactNode = !next ? (
+    'nothing booked'
+  ) : next.stage === 'in_progress' ? (
+    <>
+      <span className="wnt-id">{next.jobNumber}</span> · in progress
+    </>
+  ) : (
+    <>
+      {next.date < today ? 'waiting: ' : 'next: '}
+      <span className="wnt-id">{next.jobNumber}</span> · {shortDate(next.date)}
+    </>
+  )
+
   const doors: Door[] = [
+    {
+      href: '/jobs?status=scheduled',
+      n: f.booked.jobs,
+      label: 'Scheduled',
+      title:
+        f.booked.cents > 0 ? (
+          <>
+            Scheduled <span className="money">{money(f.booked.cents)}</span>
+          </>
+        ) : (
+          'Scheduled'
+        ),
+      sub: scheduledSub,
+      edge: f.booked.jobs > 0 ? 'info' : 'idle',
+    },
     {
       href: '/billing',
       n: billingCount,

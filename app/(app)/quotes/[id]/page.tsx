@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { computeQuoteTotals, statusChipClass, depositForRule, depositRuleLabel, DEPOSIT_KINDS } from '@/lib/billing'
 import { syncJobPayment } from '@/lib/payments'
 import { formatCents } from '@/lib/money'
+import { todayLocalIso } from '@/lib/date'
 import {
   vehicleLabel,
   type Customer,
@@ -53,6 +54,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const [custVehicles, setCustVehicles] = useState<Vehicle[]>([])
   const [attachId, setAttachId] = useState('')
   const [attachBusy, setAttachBusy] = useState(false)
+  /** Converting: the job is booked (0043), so the panel asks for the drop-off day. */
+  const [booking, setBooking] = useState(false)
+  const [bookedDate, setBookedDate] = useState('')
 
   const load = useCallback(async () => {
     const [{ data: q }, { data: l }, { data: s }, { data: a }] = await Promise.all([
@@ -345,6 +349,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       // wipe the approval. The vehicle isn't part of the frozen pricing, so
       // attach it in place instead — no reset. (Opens the picker below.)
       setAttaching(true)
+      setBookedDate(todayLocalIso())
       const { data } = await supabase
         .from('vehicles')
         .select('*')
@@ -359,27 +364,35 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       else await applyToJob()
       return
     }
-    // Convert has no status gate in the database — the Stripe deposit webhook
-    // converts headless — so the warning lives here. The approved-total check
-    // counts only APPROVED quotes, so a job made from an unapproved one reads
-    // as over until the customer's OK is on file.
-    const notApproved =
-      quote!.status !== 'approved'
-        ? `\n\nThis quote is ${quote!.status.toUpperCase()} — the customer hasn't approved it. Record their OK on the quote first (Record approval), or the job will show as over what was approved.`
-        : ''
-    if (
-      !confirm(
-        `Create a job from ${quote!.quote_number}? The approved lines land on the job at the prices the customer approved, and each receipt fills in what you paid.${notApproved}`,
-      )
-    )
-      return
+    // The job a quote turns into is SCHEDULED (0043): approved, booked, not
+    // started. The panel below asks which day the car comes in; that day
+    // becomes the job's date. Defaults to today; blank keeps the shop's date.
+    setBookedDate(todayLocalIso())
+    setBooking(true)
+  }
+
+  /**
+   * Convert the quote to a job, booked for `bookedDate` (YYYY-MM-DD, or
+   * blank for today). The RPC is one transaction — the job, its lines, the
+   * declined-line follow-ups and the link-back land together, so a failed or
+   * repeated tap can never leave a twin job behind. The RPC inserts the job
+   * as SCHEDULED itself (0043 — the same body the deposit webhook calls, so
+   * the two paths cannot disagree); only the booked day is written after,
+   * and only when the owner picked one.
+   */
+  async function runConvert() {
     setConverting(true)
     try {
-      // One transaction: the job, its lines, the declined-line follow-ups,
-      // and the link-back all land together — a failed or repeated tap can
-      // never leave a twin job behind (the old client-side flow could).
       const { data: jobId, error } = await supabase.rpc('convert_quote_to_job', { p_quote_id: id })
       if (error) throw error
+      if (bookedDate) {
+        const { error: dateErr } = await supabase.from('jobs').update({ date: bookedDate }).eq('id', jobId)
+        if (dateErr) {
+          alert(
+            `The job was created but its booked date could not be set: ${dateErr.message}. Set the date on the job page.`,
+          )
+        }
+      }
       router.push(`/jobs/${jobId}`)
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))
@@ -395,14 +408,40 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     try {
       const { error } = await supabase.from('quotes').update({ vehicle_id: attachId }).eq('id', id)
       if (error) throw error
-      const { data: jobId, error: cErr } = await supabase.rpc('convert_quote_to_job', { p_quote_id: id })
-      if (cErr) throw cErr
-      router.push(`/jobs/${jobId}`)
+      await runConvert()
     } catch (e) {
       alert(e instanceof Error ? e.message : String(e))
+    } finally {
       setAttachBusy(false)
     }
   }
+
+  /** The drop-off day input, shared by the convert and attach panels. */
+  const bookedDateField = (
+    <div>
+      <label className="label" htmlFor="booked-date">Booked for (drop-off day)</label>
+      <input
+        id="booked-date"
+        className="input"
+        type="date"
+        value={bookedDate}
+        onChange={(e) => setBookedDate(e.target.value)}
+      />
+      <p className="mt-1 text-xs" style={{ color: 'var(--text3)' }}>
+        The job starts as scheduled — not in the books until you mark it done. Leave today if
+        the car is already here.
+      </p>
+    </div>
+  )
+
+  // Convert has no status gate in the database — the Stripe deposit webhook
+  // converts headless — so the warning lives here. The approved-total check
+  // counts only APPROVED quotes, so a job made from an unapproved one reads
+  // as over until the customer's OK is on file.
+  const notApprovedNote =
+    quote.status !== 'approved'
+      ? `This quote is ${quote.status.toUpperCase()} — the customer hasn't approved it. Record their OK on the quote first (Record approval), or the job will show as over what was approved.`
+      : null
 
   /** Set or change the deposit term without disturbing the approval record. */
   async function saveDeposit() {
@@ -583,6 +622,27 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
         )}
+        {booking && (
+          <div className="card space-y-2">
+            <span className="label !mb-0">Create a job from {quote.quote_number}</span>
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              The approved lines land on the job at the prices the customer approved, and each
+              receipt fills in what you paid.
+            </p>
+            {notApprovedNote && (
+              <p className="text-sm" style={{ color: 'var(--status-wait-fg)' }}>{notApprovedNote}</p>
+            )}
+            {bookedDateField}
+            <div className="flex gap-2">
+              <button className="btn btn-primary btn-sm" disabled={converting} onClick={runConvert}>
+                {converting ? 'Creating job…' : 'Create job'}
+              </button>
+              <button className="btn btn-sm" disabled={converting} onClick={() => setBooking(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         {attaching && (
           <div className="card space-y-2">
             <span className="label !mb-0">Which vehicle is this job for?</span>
@@ -604,6 +664,10 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                     </option>
                   ))}
                 </select>
+                {notApprovedNote && (
+                  <p className="text-sm" style={{ color: 'var(--status-wait-fg)' }}>{notApprovedNote}</p>
+                )}
+                {bookedDateField}
                 <div className="flex gap-2">
                   <button
                     className="btn btn-primary btn-sm"
