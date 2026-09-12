@@ -178,17 +178,6 @@ export default function MoneyLedger({
           sum
           total
         />
-        {taxChargedCollected > 0 && (
-          <Row op="" label="of which, charged on invoices" cap="a tax line the customer saw and paid on top" amount={taxChargedCollected} />
-        )}
-        {f.taxIncludedCollected > 0 && (
-          <Row
-            op=""
-            label="of which, included in untaxed totals"
-            cap="invoices with no tax line; the 5% comes out of what was paid, not on top"
-            amount={f.taxIncludedCollected}
-          />
-        )}
         {taxNotYetCollected > 0 && (
           <Row
             op=""
