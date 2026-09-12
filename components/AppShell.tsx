@@ -20,10 +20,7 @@ const tabs = [
 const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
   {
     label: 'Overview',
-    items: [
-      { href: '/dashboard', label: 'Dashboard' },
-      { href: '/reports', label: 'Reports' },
-    ],
+    items: [{ href: '/dashboard', label: 'Dashboard' }],
   },
   {
     // Quotes live with the work they describe, not with the money: a quote is
@@ -38,9 +35,12 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
     ],
   },
   {
+    // Reports is the P&L, cash, sales tax and receivables: money, not overview
+    // (owner, 2026-09-12).
     label: 'Money',
     items: [
       { href: '/billing', label: 'Billing' },
+      { href: '/reports', label: 'Reports' },
       { href: '/expenses', label: 'Expenses' },
     ],
   },

@@ -294,7 +294,7 @@ code,kbd,samp{font-family:var(--font-mono);font-size:var(--text-data-size)}
 - **No icon set** in the app beyond the phone tab bar (owner rule 2026-09-12,
   above): the canvas's emoji pairings for nav and metric corners are retired;
   a labelled tile or button needs no picture. The sidebar inventory is
-  Overview: Dashboard, Reports · Work: Jobs & Quotes (one door; the page's own bar switches lists), Requests, Follow-ups · Money: Billing, Expenses · People: Customers ·
+  Overview: Dashboard · Work: Jobs & Quotes (one door; the page's own bar switches lists), Requests, Follow-ups · Money: Billing, Reports, Expenses · People: Customers ·
   Hangar: Board, History, Reports.
 - **Cards**: hairline border + 14px radius + inset top-light + soft drop;
   emphasis = colored 1px outline (mint/ember tiles) or gold glow (the one
