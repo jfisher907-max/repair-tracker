@@ -138,7 +138,7 @@ function JobsInner() {
           switching to promise. */}
       <nav className="flex gap-2" aria-label="Jobs or quotes">
         <Link
-          href="/jobs"
+          href="/jobs?tab=jobs"
           aria-current={tab === 'jobs' ? 'page' : undefined}
           className="btn btn-sm flex-1"
           style={segStyle(tab === 'jobs')}
