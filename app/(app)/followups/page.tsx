@@ -8,7 +8,8 @@ import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { ageInDays, statusColors, type Recommendation } from '@/lib/recommendations'
 import { todayLocalIso } from '@/lib/date'
-import { listCoresOut, markCoreReturned, type CoreOut } from '@/lib/cores'
+import { listCores, type CoreOut } from '@/lib/cores'
+import CoreDeposits from '@/components/CoreDeposits'
 import { listDueSoon, type ReminderDue } from '@/lib/reminders'
 import { formatMiles } from '@/lib/money'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
@@ -29,6 +30,7 @@ export default function FollowUpsPage() {
   const [filter, setFilter] = useState<Filter>('open')
   const [sharedId, setSharedId] = useState<string | null>(null)
   const [cores, setCores] = useState<CoreOut[]>([])
+  const [coresError, setCoresError] = useState<string | null>(null)
   const [dueReminders, setDueReminders] = useState<ReminderDue[]>([])
 
   const load = useCallback(async () => {
@@ -55,9 +57,12 @@ export default function FollowUpsPage() {
     }
     setRows((data as Row[]) ?? [])
     try {
-      setCores(await listCoresOut())
-    } catch {
-      // Cores are a side panel — a failed load must not take the page down.
+      setCores(await listCores())
+      setCoresError(null)
+    } catch (e) {
+      // A failed load must not take the page down — but silently showing no
+      // card reads as "no cores out", which is worse than saying it failed.
+      setCoresError(e instanceof Error ? e.message : String(e))
     }
     try {
       setDueReminders(await listDueSoon(30))
@@ -70,15 +75,6 @@ export default function FollowUpsPage() {
     load()
   }, [load])
 
-  async function coreReturned(c: CoreOut) {
-    try {
-      await markCoreReturned(c.id, true)
-    } catch (e) {
-      alert(`Couldn't mark the core returned: ${e instanceof Error ? e.message : e}`)
-      return
-    }
-    await load()
-  }
 
   const shown = useMemo(() => {
     const all = rows ?? []
@@ -149,45 +145,15 @@ export default function FollowUpsPage() {
         )}
       </div>
 
-      {cores.length > 0 && (
-        <div className="card space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="label !mb-0">Cores to return</span>
-            <span className="money text-sm font-bold" style={{ color: 'var(--orange)' }}>
-              {formatCents(cores.reduce((s, c) => s + c.line_total_cents, 0))} out
-            </span>
-          </div>
-          {cores.map((c) => {
-            // Supplier return windows run from the PURCHASE date; created_at is
-            // just when the receipt got entered, which can be weeks later.
-            const days = ageInDays({
-              created_at: c.purchase_date ? `${c.purchase_date}T12:00:00` : c.created_at,
-            })
-            return (
-              <div key={c.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                <div className="min-w-0">
-                  <span className="font-semibold">{c.description}</span>{' '}
-                  <span style={{ color: 'var(--text3)' }}>
-                    {[c.store, c.job?.job_number, days > 0 ? `${days}d ago` : 'today']
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
-                </div>
-                <div className="flex flex-none items-center gap-2">
-                  <span className="money">{formatCents(c.line_total_cents)}</span>
-                  <button className="btn btn-sm" onClick={() => coreReturned(c)}>
-                    ↩ Returned
-                  </button>
-                </div>
-              </div>
-            )
-          })}
-          <p className="text-xs" style={{ color: 'var(--text3)' }}>
-            Deposits you&apos;ve paid on old units still in the shop. Mark each one returned when
-            it goes back — this is your money until it does.
-          </p>
+      {coresError && (
+        <div className="card !py-3 text-sm" style={{ borderLeft: '3px solid var(--status-stop-solid)' }}>
+          <span style={{ color: 'var(--status-stop-fg)' }}>
+            Couldn&apos;t load your core deposits ({coresError}). Reload before trusting this page —
+            cores may be out that aren&apos;t shown here.
+          </span>
         </div>
       )}
+      <CoreDeposits cores={cores} onChanged={load} />
 
       {dueReminders.length > 0 && (
         <div className="card space-y-2">

@@ -282,6 +282,23 @@ export async function buildBillingPlan(
       continue
     }
 
+    // A core the store DENIED and the owner deliberately billed. It still
+    // cannot stand above the approved total without the customer's OK, but the
+    // plan has to SAY what it is taking off instead of filing a deliberate
+    // decision under "not on the approved quote". (Checked by the stamp alone:
+    // importing lib/cores here would make an import cycle through
+    // invoice-refresh, and only a core ever carries core_denied_at.)
+    if (l.core_denied_at) {
+      steps.push({
+        op: 'cost_only',
+        line_id: l.id,
+        label: `${l.description}: denied core — comes off the bill unless the customer OK'd it`,
+        from_cents: billedNow(l),
+        to_cents: 0,
+      })
+      continue
+    }
+
     // An approved part the receipt never filled: no cost, no receipt, but a
     // real approved charge. It IS the work the customer agreed to — zeroing it
     // billed them LESS than they approved, and nothing ever corrected upward.

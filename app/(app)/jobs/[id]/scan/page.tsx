@@ -110,7 +110,7 @@ async function loadScanContext(jobId: string): Promise<ScanContext> {
 
 /** A row with no approved part to fill: shop cost on a quoted (or invoiced)
  *  job, where billing it would go past what the customer OK'd; a normal
- *  charge on a walk-in job, as before. */
+ *  charge on a job with no estimate behind it, as before. */
 function defaultTarget(ctx: Pick<ScanContext, 'locked' | 'quoted'>): string {
   return ctx.locked || ctx.quoted ? COST_ONLY : BILLED
 }
@@ -575,7 +575,7 @@ export default function ScanReceiptPage({
       }
       if (r.target === COST_ONLY) return { ...base, kind: 'cost_only' }
       if (r.target === BILLED)
-        // A walk-in part is priced off the matrix as it lands — this is where
+        // An unquoted part is priced off the matrix as it lands — this is where
         // margin is won or lost on work nobody quoted.
         return { ...base, kind: 'billed', unit_charge_cents: markedUpCharge(cost, markup, r.description) }
       return { ...base, kind: 'fill', target_line_id: r.target }

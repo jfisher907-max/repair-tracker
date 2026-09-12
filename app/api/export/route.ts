@@ -37,7 +37,8 @@ const TABLES: Record<string, string[]> = {
   part_lines: [
     'id', 'job_id', 'receipt_id', 'purchase_date', 'store', 'part_number', 'description', 'qty',
     'unit_cost_cents', 'line_total_cents', 'unit_charge_cents', 'line_charge_total_cents',
-    'core_returned_at', 'quote_line_id', 'awaiting_cost', 'on_invoice', 'substituted_from',
+    'core_returned_at', 'core_credited_at', 'core_denied_at', 'core_deposit_cents',
+    'quote_line_id', 'awaiting_cost', 'on_invoice', 'substituted_from',
     'receipt_description', 'is_adjustment', 'condition', 'notes', 'created_at', 'updated_at',
   ],
   receipts: [

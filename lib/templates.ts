@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { isCoreDeposit } from './cores'
 import type { Job, PartLine } from './types'
 
 /**
@@ -45,8 +46,13 @@ export async function saveJobAsTemplate(
     // the negative "Adjustment to approved estimate" line, which belongs to one
     // job's estimate and would otherwise discount every job made from this
     // template for ever.
+    // A core deposit is never part of the repeatable shape of a job either: a
+    // denied core legitimately sits on the bill, and copying it would charge a
+    // deposit that was never paid on every job made from this template.
     lines: lines
-      .filter((l) => l.on_invoice !== false && !l.is_adjustment)
+      .filter(
+        (l) => l.on_invoice !== false && !l.is_adjustment && !isCoreDeposit(l) && !l.core_denied_at,
+      )
       .map((l) => ({
         description: l.description,
         qty: Number(l.qty),

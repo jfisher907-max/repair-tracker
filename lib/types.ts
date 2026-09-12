@@ -73,6 +73,12 @@ export interface PartLine {
   line_charge_total_cents: number
   /** For core-charge lines: when the old unit went back. Null on a core line = still in the shop. */
   core_returned_at: string | null
+  /** When the supplier's credit was confirmed (0038). Handed back but null = unverified. */
+  core_credited_at: string | null
+  /** When the supplier REFUSED the core (0037). Set = the deposit is gone for good. */
+  core_denied_at: string | null
+  /** The original deposit (0040). unit_cost_cents is the LIVE cost and goes to 0 once credited. */
+  core_deposit_cents: number | null
   /** The approved quote line this part carries onto the job (migration 0030). */
   quote_line_id: string | null
   /** An approved or template part with no real cost yet. Cleared by any cost write. */

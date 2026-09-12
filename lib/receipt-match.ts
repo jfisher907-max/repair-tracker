@@ -190,7 +190,10 @@ export function planPlacements(
   // A core deposit is the shop's money back when the old part goes in, so it
   // never defaults onto a customer's bill — which is what the screen's own
   // footer already told the owner it did. Freight and fees still default onto
-  // a walk-in bill at face value: those are real costs of that job.
+  // an unquoted job's bill at face value: those are real costs of that job.
+  // ("Walk-in" in this app means ONE thing — the price oreillyauto.com shows a
+  // normal customer, which quotes are priced against. It never means a kind of
+  // job; a job either has an approved estimate behind it or it doesn't.)
   const fallbackFor = (kind: RowKind) =>
     opts.locked || opts.quoted || kind === 'core' ? COST_ONLY : BILLED
   // null = decide once every split has claimed what it needs.

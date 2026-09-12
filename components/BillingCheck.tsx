@@ -6,57 +6,14 @@ import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { isPassThrough } from '@/lib/markup'
 import {
-  buildAuthorizationTrail,
   buildBillingPlan,
   isOverApproval,
   type JobAuthorization,
   type PlanStep,
 } from '@/lib/authorization'
-import { buildInvoiceSnapshot } from '@/lib/billing'
-import { syncJobPayment } from '@/lib/payments'
+import { refreshDraftInvoice } from '@/lib/invoice-refresh'
 import { CONDITION_CHOICES, suggestCondition, type ConditionChoice } from '@/lib/conditions'
-import type { Customer, Invoice, Job, PartLine } from '@/lib/types'
-
-/**
- * Bring a draft invoice back in step with the job it came from.
- *
- * apply_billing_plan runs in SQL and cannot re-freeze an invoice snapshot
- * (buildInvoiceSnapshot is TypeScript). Left behind, the draft kept the
- * pre-correction total — and because what's owed is the LARGEST live invoice,
- * the customer's statement went on showing the un-approved figure and the job
- * could never reach "paid". Returns the invoice number it updated, if any.
- */
-async function refreshDraftInvoice(jobId: string): Promise<string | null> {
-  const { data: drafts, error } = await supabase
-    .from('invoices')
-    .select('*')
-    .eq('job_id', jobId)
-    .eq('status', 'draft')
-    .order('created_at', { ascending: false })
-  if (error) throw error
-  const draft = ((drafts ?? []) as Invoice[])[0]
-  if (!draft) return null
-  const [{ data: job }, { data: partLines }] = await Promise.all([
-    supabase.from('jobs').select('*').eq('id', jobId).single(),
-    supabase.from('part_lines').select('*').eq('job_id', jobId).order('created_at'),
-  ])
-  if (!job) throw new Error('The job behind the draft invoice is gone.')
-  // The invoice owns its tax rate once created — same rule as "Update from job".
-  const snapshot = buildInvoiceSnapshot(job as Job, (partLines as PartLine[]) ?? [], draft.tax_rate_bp ?? 0)
-  const { error: upErr } = await supabase
-    .from('invoices')
-    .update({
-      job_title: (job as Job).title,
-      work_performed: (job as Job).work_performed,
-      authorizations: await buildAuthorizationTrail(jobId),
-      ...snapshot,
-    })
-    .eq('id', draft.id)
-  if (upErr) throw upErr
-  // The owed target moved, so the cached payment status has to be redone.
-  await syncJobPayment(jobId)
-  return draft.invoice_number
-}
+import type { Customer, PartLine } from '@/lib/types'
 
 /**
  * Which panel is open. 'over' = an invoice was held because the job is past
@@ -209,8 +166,9 @@ export default function BillingCheck({
     // the old total on the customer's statement — so the draft follows now.
     let draftNote = ''
     try {
-      const number = await refreshDraftInvoice(jobId)
-      if (number) draftNote = ` ${number} was updated to match.`
+      const { invoiceNumber, blocked } = await refreshDraftInvoice(jobId)
+      if (invoiceNumber) draftNote = ` ${invoiceNumber} was updated to match.`
+      if (blocked) setWarn(blocked)
     } catch (e) {
       setWarn(
         `The job is billed at the approved amount, but its draft invoice still shows the old total — open the invoice and tap “Update from job”. (${e instanceof Error ? e.message : String(e)})`,

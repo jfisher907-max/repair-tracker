@@ -87,6 +87,12 @@ export default function Dashboard() {
     // Parts spend is cash out the door, so it counts the sales tax paid at the
     // counter as well as the parts themselves (receipts.tax_cents). That tax
     // is a cost and never a customer charge — see migration 0027.
+    //
+    // ONE KNOWN SIMPLIFICATION: confirming a core credit zeroes that line's cost
+    // in place rather than recording a dated refund, so the deposit stops
+    // counting as spend on the day it was PAID, not the day it came back. Within
+    // a year it nets out; a core bought in December and credited in January
+    // moves that money out of the earlier year. Cores here run $30-$45.
     Promise.all([
       supabase
         .from('part_lines')

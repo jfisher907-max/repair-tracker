@@ -10,6 +10,13 @@ import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate, todayLocalIso } from '@/lib/date'
 import { saveJobAsTemplate } from '@/lib/templates'
+import {
+  coreDepositTotalCents,
+  coreState,
+  isCoreDeposit,
+  isCoreDescription,
+  setCoreOutcome,
+} from '@/lib/cores'
 import JobPhotos from '@/components/JobPhotos'
 import RecommendationList from '@/components/RecommendationList'
 import BillingCheck, { type BillingSheet } from '@/components/BillingCheck'
@@ -312,12 +319,23 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     // A part added by hand to a quoted job goes past what the customer
     // approved, so it's shop cost unless Jake ticks "bill the customer".
     // Editing keeps a line where it is; "Bill it" / "Off the bill" move it.
+    // A core deposit NEVER starts on the customer's bill, on any job. Typed by
+    // hand with the charge box blank it used to land on the invoice at cost
+    // (the generated column bills coalesce(charge, cost)), while the cores
+    // worklist went on calling it money the shop was owed — so the store's
+    // refund and the customer both paid it. It reaches a bill only by being
+    // denied, through the core writer.
+    // By WORDING, not by the cost box: deciding from the cost made a core stop
+    // being a core while the box was empty, and it inserted straight onto the
+    // customer's bill at whatever cost was filled in afterwards.
+    const draftIsCore = isCoreDescription(draft.description.trim())
+    const newCore = !editing && draftIsCore
     // A sent or paid invoice freezes the bill: the scan screen and "Bill it"
     // both refuse to move money past it, and adding a part by hand was the one
     // way left to push what's owed past an invoice the customer already has.
     const offBill = editing
       ? editing.on_invoice === false
-      : lockedByInvoice || (quotedJob && !billNewPart)
+      : lockedByInvoice || newCore || (quotedJob && !billNewPart)
     const typedCharge = draft.unit_charge.trim() !== '' ? parseMoney(draft.unit_charge) : undefined
     const payload = {
       job_id: id,
@@ -327,6 +345,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       description: draft.description.trim(),
       qty: draft.qty ? Number(draft.qty) : 1,
       unit_cost_cents: parseMoney(draft.unit_cost) ?? 0,
+      // The worklist needs the deposit amount to survive the cost going to 0
+      // when the store credits it back — and correcting a core's cost has to
+      // move the deposit with it, or the next screen quotes the old figure.
+      // Guarded on > 0 so editing an already-credited core (cost 0) can't wipe
+      // the deposit it is still displaying.
+      ...(draftIsCore && (parseMoney(draft.unit_cost) ?? 0) > 0
+        ? { core_deposit_cents: parseMoney(draft.unit_cost) ?? 0 }
+        : {}),
       on_invoice: !offBill,
       // Off the bill a line charges exactly 0 (the database refuses anything
       // else). On a NEW billed line a blank charge means "price it for me" and
@@ -426,7 +452,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setCostBusy(true)
     // $0 means it genuinely cost nothing (customer-supplied, a warranty swap):
     // say so, rather than leave it waiting forever.
-    const patch = cents === 0 ? { awaiting_cost: false } : { unit_cost_cents: cents }
+    // A core's recorded deposit has to follow its cost, or the worklist goes on
+    // quoting the very figure this correction replaced.
+    const patch =
+      cents === 0
+        ? { awaiting_cost: false }
+        : { unit_cost_cents: cents, ...(isCoreDeposit(l) ? { core_deposit_cents: cents } : {}) }
     const { error } = await supabase.from('part_lines').update(patch).eq('id', l.id)
     setCostBusy(false)
     if (error) {
@@ -453,6 +484,59 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       alert(
         'This job’s invoice is already sent or paid, so the bill is frozen. Void and reissue the invoice to change what the customer pays.',
       )
+      return
+    }
+    // A core's money belongs to the core lifecycle, not to this toggle: it is
+    // 0 to the customer unless the store DENIED it, and it stops being a cost
+    // once credited. Routing it through the one core writer keeps the bill, the
+    // stamps and the worklist from ever disagreeing.
+    if (isCoreDeposit(l)) {
+      const deposit = coreDepositTotalCents(l)
+      if (on && l.core_credited_at) {
+        alert(
+          `That core was already credited back by ${l.store ?? 'the store'}, so the deposit is not yours to recover — billing the customer for it would charge them a refund you already have. Undo the credit on the Follow-ups list first if that was wrong.`,
+        )
+        return
+      }
+      const ask = on
+        ? `Bill the ${formatCents(deposit)} core to the customer? Only do that if the store DENIED the old unit — it goes on at cost.`
+        : `Take the ${formatCents(deposit)} core off the bill? It goes back to being your deposit.`
+      if (!confirm(ask)) return
+      setBusyLineId(l.id)
+      try {
+        const state = coreState(l)
+        const r = await setCoreOutcome(
+          l,
+          on
+            ? 'denied_billed'
+            : // Taking a DENIED core off the bill means "I'll eat it", not
+              // "it might still come back" — erasing the denial would put a
+              // refused core back on the chase-the-credit list for ever.
+              state === 'denied'
+              ? 'denied_absorbed'
+              : state === 'credited'
+                ? 'credited'
+                : state === 'awaiting_credit'
+                  ? 'awaiting_credit'
+                  : 'out',
+        )
+        if (r.overApproval) {
+          alert(
+            'That puts the job over what the customer approved — record their OK before invoicing it.',
+          )
+        } else if (r.approvalUnknown) {
+          alert(
+            'The core was billed, but the approved-estimate check couldn’t be read just now. Reload and check this job before you invoice it.',
+          )
+        }
+        if (r.draftBlocked) alert(r.draftBlocked)
+      } catch (e) {
+        setLineMsg(e instanceof Error ? e.message : String(e))
+        setBusyLineId(null)
+        return
+      }
+      setBusyLineId(null)
+      await load()
       return
     }
     // The toggle can't remember a price: off the bill a line must charge
@@ -1207,9 +1291,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 const editingLine = editingLineId
                   ? (lines.find((l) => l.id === editingLineId) ?? null)
                   : null
+                // Same rule as saveLine, or the form would promise one thing
+                // and the save would do another.
+                const newCore = !editingLine && isCoreDescription(draft.description.trim())
                 const offBill = editingLine
                   ? editingLine.on_invoice === false
-                  : lockedByInvoice || (quotedJob && !billNewPart)
+                  : lockedByInvoice || newCore || (quotedJob && !billNewPart)
                 return (
                   <div className="col-span-2 space-y-1">
                     {!editingLine && quotedJob && !lockedByInvoice && (
@@ -1226,9 +1313,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                       <p className="text-xs" style={{ color: 'var(--text3)' }}>
                         {editingLine
                           ? 'Off the bill — your cost only. “Bill it to the customer” on the part changes that.'
-                          : lockedByInvoice
-                            ? 'The invoice for this job is already out, so a part added now goes on your books as cost. To bill it, void that invoice and reissue.'
-                            : 'Not on what the customer approved, so it goes on your books as shop cost. Tick the box only if they’ve OK’d it.'}
+                          : newCore
+                            ? 'A core deposit is your money, never the customer’s charge. It stops counting as a cost once the store credits it back, and only goes on a bill if they deny it — track that on Follow-ups.'
+                            : lockedByInvoice
+                              ? 'The invoice for this job is already out, so a part added now goes on your books as cost. To bill it, void that invoice and reissue.'
+                              : 'Not on what the customer approved, so it goes on your books as shop cost. Tick the box only if they’ve OK’d it.'}
                       </p>
                     ) : (
                       <>
@@ -1242,7 +1331,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                                 ? 'Blank = keep the approved price'
                                 : 'Blank = same as cost'
                               : markup.enabled
-                                ? 'Blank = your markup matrix (tax, freight, cores at cost)'
+                                ? 'Blank = your markup matrix (tax and freight at cost)'
                                 : 'Blank = same as cost'
                           }
                           value={draft.unit_charge}
