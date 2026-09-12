@@ -654,7 +654,7 @@ a.card:focus-visible {
    the tiles, strip, chart, recent, doors. "How am I doing" before "how much
    did I do". */
 .board-head { order: 0; }
-.lane { order: 1; }
+.lane, .cal { order: 1; }
 .board-tiles > * { order: 4; }
 .board-tiles > .tile--lead { order: 2; }
 .ledger-card { order: 2; }
@@ -950,12 +950,12 @@ a.card:focus-visible {
    in the same layer, where its higher specificity wins. Desktop board only. */
 @layer utilities {
   @media (min-width: 900px) {
-    .recent .card { padding-block: 6px !important; }
+    .recent .card, .cal-list .card { padding-block: 6px !important; }
   }
 }
 @media (min-width: 900px) {
   .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-  .board-head, .lane, .board-tiles > *, .board-tiles > .tile--lead, .board-tiles > .tile--second,
+  .board-head, .lane, .cal, .board-tiles > *, .board-tiles > .tile--lead, .board-tiles > .tile--second,
   .ledger-card, .strip, .board-chart, .recent, .doors { order: 0; }
   .strip, .tile--wide { grid-column: auto; }
   .lane { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; }
@@ -989,13 +989,130 @@ a.card:focus-visible {
    with a 22ms stagger, numbers count up over 600ms (JS). Off under
    prefers-reduced-motion (the global guard zeroes every duration and delay). */
 @keyframes board-rise { from { opacity: 0.35; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.board-head, .lane-door, .tile, .strip, .ledger-card, .board-chart, .recent, .doors { animation: board-rise 0.32s var(--ease) both; }
+.board-head, .lane-door, .cal, .tile, .strip, .ledger-card, .board-chart, .recent, .doors { animation: board-rise 0.32s var(--ease) both; }
 .lane-door { animation-delay: calc(var(--t, 0) * 30ms + 40ms); }
+.cal { animation-delay: 80ms; }
 .tile, .strip { animation-delay: calc(var(--t, 0) * 30ms + 90ms); }
 .ledger-card { animation-delay: 140ms; }
 .board-chart { animation-delay: 160ms; }
 .recent { animation-delay: 200ms; }
 .doors { animation-delay: 220ms; }
+
+/* ---------- Drop-off calendar (owner's ask, 2026-09-12) ---------- */
+/* A month of booked drop-offs, full width right under the lane on both
+   layouts (phone order 1 = the lane's; source order puts it after). Every
+   column is minmax(0, 1fr) and every chip truncates, so at 375px nothing
+   scrolls sideways. Cells are sunken surfaces with a hairline; the selected
+   day takes the selected surface; today is a 1px gold line inside the cell.
+   No motion of its own beyond the control transitions. */
+.cal { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+.cal-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 8px; min-width: 0; }
+/* The card's micro-label: 11px / 600 / .08em, the system's only uppercase. */
+.cal-label {
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cal-nav { display: flex; gap: 6px; flex: none; }
+.cal-btn { min-height: 44px; min-width: 44px; padding: 0.25rem 0.7rem; }
+.cal-grid { display: grid; gap: 2px; min-width: 0; }
+.cal-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; min-width: 0; }
+.cal-row > * { min-width: 0; }
+.cal-dow {
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2px 0 4px;
+}
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  padding: 3px 3px 4px;
+  border-radius: 6px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-hairline);
+  cursor: pointer;
+  user-select: none;
+  transition: var(--transition-control);
+}
+.cal-day:hover { background: var(--surface-raised); border-color: var(--border-default); }
+.cal-day:active { transform: scale(var(--press-scale)); }
+.cal-day:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.cal-day.is-selected { background: var(--surface-selected); border-color: var(--gold-line); }
+.cal-day.is-today { box-shadow: inset 0 0 0 1px var(--gold-500); }
+.cal-day.is-today:focus-visible { box-shadow: inset 0 0 0 1px var(--gold-500), var(--focus-ring); }
+/* Days outside the month are muted, never hidden: a booking on the 1st of
+   next month still shows where the week puts it. */
+.cal-day.is-outside { background: transparent; border-color: transparent; }
+.cal-day.is-outside:hover { border-color: var(--border-hairline); }
+.cal-day.is-outside.is-selected { background: var(--surface-selected); border-color: var(--gold-line); }
+.cal-num-row { display: flex; align-items: center; justify-content: space-between; gap: 2px; min-width: 0; }
+.cal-num { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text-body); font-variant-numeric: tabular-nums; }
+.is-outside .cal-num { color: var(--text-muted); font-weight: 500; }
+.is-today .cal-num { color: var(--gold-400); }
+/* The promised pick-up on a done, unpaid job: a 6px ember dot, secondary. */
+.cal-promised { width: 6px; height: 6px; border-radius: 50%; background: var(--status-stop-solid); flex: none; }
+/* Desktop chips (named) and the phone's compact row (a number, or dots and a
+   count) are both rendered; the layout picks one. */
+.cal-chips { display: none; flex-direction: column; gap: 2px; min-width: 0; }
+.cal-compact { display: flex; align-items: center; gap: 3px; min-width: 0; }
+/* .chip's size (11px) on a status-edged tint; text stays the body colour,
+   the id stays gold mono. Sky = scheduled, gold = in progress. */
+.cal-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 2px;
+  border-left: var(--edge-width) solid var(--status-idle-solid);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--text-body);
+}
+.cal-chip > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-chip .wnt-id { font-size: 10px; }
+.cal-chip-scheduled { background: var(--status-info-bg); border-left-color: var(--status-info-solid); }
+.cal-chip-in_progress { background: var(--status-wait-bg); border-left-color: var(--status-wait-solid); }
+.cal-more { font-size: 11px; line-height: 16px; color: var(--text-muted); }
+.cal-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.cal-dot-scheduled { background: var(--status-info-solid); }
+.cal-dot-in_progress { background: var(--status-wait-solid); }
+.cal-count { font-size: 11px; line-height: 16px; font-weight: 600; color: var(--text-body); font-variant-numeric: tabular-nums; }
+/* Beneath the grid: the selected day, or the next two weeks. */
+.cal-list { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); min-width: 0; margin-top: 4px; }
+.cal-list > * { min-width: 0; }
+.cal-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.cal-list-head .cal-label { flex: 1; }
+.cal-sub { font-size: 12px; line-height: 16px; color: var(--text-muted); }
+.cal-empty { font-size: 13px; line-height: 18px; color: var(--text-muted); }
+.cal-empty .wnt-id { font-size: 12px; }
+.cal-waiting { font-size: 12px; line-height: 18px; color: var(--text-muted); }
+.cal-waiting-item { white-space: nowrap; }
+.cal-waiting .wnt-id { font-size: 12px; text-decoration: underline; text-underline-offset: 2px; }
+@media (min-width: 900px) {
+  .cal-day { min-height: 60px; padding: 4px 5px 5px; }
+  .cal-chip { padding: 0 5px 0 4px; }
+  .cal-chips { display: flex; }
+  .cal-compact { display: none; }
+  .cal-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .cal-list-head, .cal-sub, .cal-empty, .cal-waiting { grid-column: 1 / -1; }
+}
 
 /* ---------- Core worklist (follow-ups) ---------- */
 /* Cores are grouped under the job they belong to. The job row is the door

@@ -131,6 +131,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [linkedQuotes, setLinkedQuotes] = useState<(Quote & { total_cents: number | null })[]>([])
   /** The stage control is writing. */
   const [stageBusy, setStageBusy] = useState(false)
+  /** The "Booked for" date while it is being changed; null = show job.date. */
+  const [bookedDraft, setBookedDraft] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const { data: j, error: jErr } = await supabase
@@ -322,6 +324,19 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setStageBusy(true)
     await updateJob({ stage: next, stage_changed_at: new Date().toISOString() })
     setStageBusy(false)
+  }
+
+  /** The booked drop-off day IS the job's date (0043); saving it moves the
+   *  job on the calendar and in every list. A date input reports '' while a
+   *  field is half typed, so only a complete date is written; leaving the
+   *  field (onBlur) drops the draft so a cleared input snaps back to job.date. */
+  async function saveBooked(value: string) {
+    setBookedDraft(value)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value === job!.date) return
+    setStageBusy(true)
+    await updateJob({ date: value })
+    setStageBusy(false)
+    setBookedDraft(null)
   }
 
   /** Half-hour steps: the unit a shop actually books time in. */
@@ -845,20 +860,51 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         {/* Stage (0043): scheduled = booked, not started · in progress = on
             the lift · done = ready to bill. Three 44px segments; a tap moves
             the job and stamps when. Only done jobs count as work in the books. */}
-        <div role="group" aria-label="Job stage" className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-          {STAGES.map((s) => (
-            <button
-              key={s.value}
-              type="button"
-              className="btn btn-sm !min-h-[44px]"
-              aria-pressed={stage === s.value}
-              disabled={stageBusy}
-              style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
-              onClick={() => setStage(s.value)}
-            >
-              {s.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-start gap-2">
+          <div
+            role="group"
+            aria-label="Job stage"
+            className="grid min-w-0 flex-1 gap-2"
+            style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', flexBasis: 260 }}
+          >
+            {STAGES.map((s) => (
+              <button
+                key={s.value}
+                type="button"
+                className="btn btn-sm !min-h-[44px]"
+                aria-pressed={stage === s.value}
+                disabled={stageBusy}
+                style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
+                onClick={() => setStage(s.value)}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+          {/* Booked for: the drop-off day, which is job.date. Saves on change
+              through updateJob, the same path the stage buttons take. Only
+              while the job is not done — a done job's date is the work's date. */}
+          {notDone && (
+            <div className="min-w-0" style={{ flex: '1 1 200px' }}>
+              <label className="label" htmlFor="job-booked">
+                Booked for
+              </label>
+              <input
+                id="job-booked"
+                className="input"
+                type="date"
+                value={bookedDraft ?? job.date}
+                disabled={stageBusy}
+                aria-describedby="job-booked-help"
+                style={{ minHeight: 44, fontSize: 16 }}
+                onChange={(e) => saveBooked(e.target.value)}
+                onBlur={() => setBookedDraft(null)}
+              />
+              <p id="job-booked-help" className="text-xs" style={{ color: 'var(--text3)', marginTop: 4 }}>
+                the day the car is dropped off; it is the job&apos;s date
+              </p>
+            </div>
+          )}
         </div>
         {notDone && (
           <p className="text-xs" style={{ color: 'var(--text3)' }}>

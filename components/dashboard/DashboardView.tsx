@@ -11,6 +11,7 @@ import ActionLane, { type BillingCounts } from './ActionLane'
 import EarnedBar from './EarnedBar'
 import MoneyLedger from './MoneyLedger'
 import MonthVsStrip from './MonthVsStrip'
+import ScheduleCalendar from './ScheduleCalendar'
 import TrendTile, { type TrendScope } from './TrendTile'
 import { ageWords, daysSince, money, plural, shortDate } from './format'
 
@@ -192,6 +193,12 @@ export default function DashboardView({
       </div>
 
       <ActionLane f={f} cores={cores} docAlerts={docAlerts} newRequests={newRequests} billing={billing} now={now} />
+
+      {/* The drop-off calendar (owner, 2026-09-12) sits right under the lane
+          on both layouts; on the desktop board it is a full-width row, so the
+          board scrolls — accepted. It reads every job, not the year's: a
+          booking is about a day, not a year of books. */}
+      <ScheduleCalendar jobs={rows.jobs} now={now} />
 
       <section className="board-tiles" aria-label={`${yearWords} so far`} key={String(year)}>
         <TrendTile
