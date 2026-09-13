@@ -275,14 +275,17 @@ export default function DocView({ doc }: { doc: DocData }) {
                and this sentence states it).
 
                The wording is the owner's (2026-09-13), raised to a more formal
-               register. What it must NOT become is a bare "prices are subject
-               to change": that would put a claim on a customer document that
-               Alaska does not allow and the app does not do. Room for prices to
-               move comes from the expiry date printed in the meta row above,
-               not from disclaiming the ceiling. */
+               register. Two things it must not become. Not a bare "prices are
+               subject to change": that would put a claim on a customer document
+               that Alaska does not allow and the app does not do, and room for
+               prices to move comes from the expiry in the meta row above, not
+               from disclaiming the ceiling. And no promise that the bill may
+               come in LOWER — the owner will happily bill under the estimate
+               when he can, but he does not want the customer arriving expecting
+               it. The ceiling is stated; the floor is not. */
             <p>
               This is a written estimate, valid until the date shown above. The final price will
-              not exceed it without your authorization, and may be less.
+              not exceed it without your authorization.
             </p>
           ) : (
             <>
