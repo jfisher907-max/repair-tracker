@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react'
 import JobRow from '@/components/JobRow'
 import type { JobWithContext } from '@/lib/data'
 import { isBookedJob, monthLabel } from '@/lib/finances'
@@ -66,7 +66,44 @@ interface Cell {
  * with an ember dot: the pick-up the customer was told about. Tapping a day
  * lists it below; with nothing selected the list is the next two weeks.
  */
+// Whether the calendar is open sticks per device (owner, 2026-09-12: "have the
+// calendar collapsable"). Same shape as the ledger's switch: the browser's
+// storage is the external system, read through useSyncExternalStore so the
+// server renders it closed and the client picks up the saved choice. With no
+// saved choice it opens on the phone and stays closed on a desk, where the
+// one-screen board is worth more than a grid that is one tap away.
+const CAL_KEY = 'dash-cal-open'
+let calMemory: boolean | null = null
+const calListeners = new Set<() => void>()
+function readCalOpen(): boolean {
+  if (calMemory !== null) return calMemory
+  try {
+    const saved = localStorage.getItem(CAL_KEY)
+    if (saved === '1') return true
+    if (saved === '0') return false
+  } catch {}
+  try {
+    return !window.matchMedia('(min-width: 900px)').matches
+  } catch {
+    return true
+  }
+}
+function subscribeCal(listener: () => void) {
+  calListeners.add(listener)
+  return () => {
+    calListeners.delete(listener)
+  }
+}
+function setCalOpen(open: boolean) {
+  calMemory = open
+  try {
+    localStorage.setItem(CAL_KEY, open ? '1' : '0')
+  } catch {}
+  for (const l of calListeners) l()
+}
+
 export default function ScheduleCalendar({ jobs, now }: { jobs: JobWithContext[]; now: Date }) {
+  const open = useSyncExternalStore(subscribeCal, readCalOpen, () => false)
   const today = toIso(now)
   const [view, setView] = useState({ year: now.getFullYear(), month: now.getMonth() })
   const [selected, setSelected] = useState<string | null>(null)
@@ -209,12 +246,36 @@ export default function ScheduleCalendar({ jobs, now }: { jobs: JobWithContext[]
   const dayBooked = selected ? (bookedByDate.get(selected) ?? []) : []
   const dayPromised = selected ? (promisedByDate.get(selected) ?? []) : []
 
+  // What the closed header still says: the count, and the next car or the wait.
+  const summary =
+    bookedAll.length === 0
+      ? 'nothing booked'
+      : `${plural(bookedAll.length, 'car')} booked` +
+        (comingUp.length > 0
+          ? ` · next ${comingUp[0].job.job_number} ${shortDate(comingUp[0].job.date)}`
+          : waiting.length > 0
+            ? ` · ${waiting.length} waiting from earlier`
+            : afterHorizon
+              ? ` · next ${afterHorizon.job.job_number} ${shortDate(afterHorizon.job.date)}`
+              : '')
+
   return (
-    <section className="card cal" aria-labelledby="cal-title">
+    <section className={`card cal${open ? '' : ' is-collapsed'}`} aria-labelledby="cal-title">
       <div className="cal-head">
         <h2 id="cal-title" className="cal-label">
           Drop-offs · {monthName}
         </h2>
+        {!open && <span className="cal-summary">{summary}</span>}
+        <button
+          type="button"
+          className="btn btn-sm cal-btn cal-toggle"
+          aria-expanded={open}
+          aria-controls="cal-body"
+          onClick={() => setCalOpen(!open)}
+        >
+          {open ? 'Hide' : 'Show'}
+        </button>
+        {open && (
         <div className="cal-nav">
           <button
             type="button"
@@ -236,8 +297,10 @@ export default function ScheduleCalendar({ jobs, now }: { jobs: JobWithContext[]
             ›
           </button>
         </div>
+        )}
       </div>
 
+      <div id="cal-body" hidden={!open}>
       <div role="grid" aria-label={`Drop-offs, ${monthName}. Weeks start on Sunday.`} className="cal-grid" onKeyDown={onGridKeyDown}>
         <div role="row" className="cal-row">
           {DOW.map((d, i) => (
@@ -384,6 +447,7 @@ export default function ScheduleCalendar({ jobs, now }: { jobs: JobWithContext[]
             ))}
           </p>
         )}
+      </div>
       </div>
     </section>
   )

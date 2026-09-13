@@ -950,11 +950,11 @@ a.card:focus-visible {
    in the same layer, where its higher specificity wins. Desktop board only. */
 @layer utilities {
   @media (min-width: 900px) {
-    .recent .card, .cal-list .card { padding-block: 6px !important; }
+    .recent .card, .cal-list .card { padding-block: 4px !important; }
   }
 }
 @media (min-width: 900px) {
-  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .board-head, .lane, .cal, .board-tiles > *, .board-tiles > .tile--lead, .board-tiles > .tile--second,
   .ledger-card, .strip, .board-chart, .recent, .doors { order: 0; }
   .strip, .tile--wide { grid-column: auto; }
@@ -969,11 +969,12 @@ a.card:focus-visible {
   /* Fit levers for the 1200 x 820 screen: the strip's row labels never wrap
      into a second line, and the chart gives up 14px it does not need. */
   .strip .vs-lab > span:first-child { white-space: nowrap; }
-  .mchart-panel { --plot-h: 68px; }
-  .board-chart .mchart-body { margin-top: 12px; }
+  .mchart-panel { --plot-h: 56px; }
+  /* 16px keeps the tallest bar's cap (12px, sitting 3px above the bar) clear of the panel head. */
+  .board-chart .mchart-body { margin-top: 16px; }
   .ledger-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
   .recent { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-  .recent-head a { min-height: 24px; }
+  .recent-head a { min-height: 20px; }
   /* Three rows fit the screen; the other three are the phone's. */
   .recent > .recent-extra { display: none; }
   /* JobRow's own !py-3 is a Tailwind important utility; the board is the
@@ -1022,6 +1023,15 @@ a.card:focus-visible {
   white-space: nowrap;
 }
 .cal-nav { display: flex; gap: 6px; flex: none; }
+.cal-summary { flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 16px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-toggle { flex: none; }
+/* Closed on a desk it is one slim line under the lane, not a card: the
+   one-screen board is the point of closing it. */
+@media (min-width: 900px) {
+  .cal.is-collapsed { padding: 0 4px; background: transparent; border-color: transparent; box-shadow: none; }
+  .cal.is-collapsed .cal-head { min-height: 28px; }
+  .cal.is-collapsed .cal-toggle { min-height: 28px; padding-top: 0; padding-bottom: 0; }
+}
 .cal-btn { min-height: 44px; min-width: 44px; padding: 0.25rem 0.7rem; }
 .cal-grid { display: grid; gap: 2px; min-width: 0; }
 .cal-row { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; min-width: 0; }
