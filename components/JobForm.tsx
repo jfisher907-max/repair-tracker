@@ -58,6 +58,11 @@ export default function JobForm({ job }: { job?: Job }) {
   // A job typed in by hand is a walk-in being worked now; a quote converts
   // to a scheduled job on the quote page. Editing shows what it is today.
   const [stage, setStage] = useState<JobStage>(job?.stage ?? 'in_progress')
+  // The same rule the job page's stage control enforces: money collected pins
+  // a job at done. payment_status mirrors the payments ledger (it is kept in
+  // step by refresh_job_payment_cache), so it is the honest test here, where
+  // the ledger itself is not loaded.
+  const stageLocked = Boolean(job) && job!.payment_status !== 'unpaid'
   const [templates, setTemplates] = useState<JobTemplate[]>([])
   const [templateLines, setTemplateLines] = useState<JobTemplateLine[]>([])
   const [templateName, setTemplateName] = useState<string | null>(null)
@@ -424,6 +429,7 @@ export default function JobForm({ job }: { job?: Job }) {
                 type="button"
                 className="btn btn-sm !min-h-[44px]"
                 aria-pressed={stage === s.value}
+                disabled={stageLocked && s.value !== stage}
                 style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
                 onClick={() => setStage(s.value)}
               >
@@ -433,6 +439,7 @@ export default function JobForm({ job }: { job?: Job }) {
           </div>
           <p className="mt-1 text-xs" style={{ color: 'var(--text3)' }}>
             {STAGES.find((s) => s.value === stage)?.hint}. Only done jobs count as work in the books.
+            {stageLocked && ' Money has been collected on this job, so the stage is fixed.'}
           </p>
         </div>
         <div>

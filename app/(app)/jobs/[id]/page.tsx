@@ -252,6 +252,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     .reduce((s, i) => Math.max(s, i.total_cents), 0)
   const owedTarget = Math.max(totals.total_charged_cents, invoicedTotal)
   const balanceDue = Math.max(0, owedTarget - paidFromLedger - legacyPaid)
+  /** Money actually collected on this job. It, and nothing else, pins the
+   *  stage at done (owner, 2026-09-12). */
+  const collectedCents = paidFromLedger + legacyPaid
   // Payments recorded here default onto the job's open invoice so it settles.
   const openInvoice = invoices.find((i) => i.status === 'draft' || i.status === 'sent')
   /** The job came from a quote: anything not on it goes past what the
@@ -303,6 +306,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  before the migration counts as done, the same as the books. */
   const stage: JobStage = job.stage ?? 'done'
   const notDone = stage !== 'done'
+  /** Collected money pins a done job; paperwork alone never does. */
+  const stageLocked = !notDone && collectedCents > 0
 
   /** Move the job to a stage and stamp when it moved. Leaving `done` is
    *  refused while a live invoice exists: the invoice is the record that the
@@ -312,14 +317,20 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  Void the invoice first; then the job can go back on the lift. */
   async function setStage(next: JobStage) {
     if (stageBusy || next === stage) return
-    if (stage === 'done' && next !== 'done') {
-      const live = invoices.find((i) => i.status !== 'void')
-      if (live) {
-        alert(
-          `${job!.job_number} has invoice ${live.invoice_number} (${live.status}) — the record that the work was done. Void that invoice first if the job really is going back on the lift.`,
-        )
-        return
-      }
+    // THE LOCK IS MONEY, NOT PAPERWORK (owner, 2026-09-12): "Once an invoice is
+    // finalized on a job, it shouldn't be moveable. Up until the money is
+    // collected, we should be able to move jobs to whatever state we want."
+    //
+    // So a draft, or an invoice sent and not yet paid, no longer blocks a stage
+    // change: nothing has moved, and the books are untouched by it. A payment
+    // does block it. Its money — and the sales tax prorated inside it — stays
+    // in cash, while a job leaving 'done' drops out of billed and earned, so
+    // the ledger's two identities break by exactly that tax.
+    if (stage === 'done' && next !== 'done' && collectedCents > 0) {
+      alert(
+        `${job!.job_number} has ${formatCents(collectedCents)} collected against it, so it stays done. Take the payment off first if the work really is going back on the lift.`,
+      )
+      return
     }
     setStageBusy(true)
     await updateJob({ stage: next, stage_changed_at: new Date().toISOString() })
@@ -873,7 +884,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 type="button"
                 className="btn btn-sm !min-h-[44px]"
                 aria-pressed={stage === s.value}
-                disabled={stageBusy}
+                disabled={stageBusy || (stageLocked && s.value !== stage)}
                 style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
                 onClick={() => setStage(s.value)}
               >
@@ -906,6 +917,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </div>
           )}
         </div>
+        {/* Why the control is fixed, where the control is. A draft or a sent
+            invoice does not pin a job; collected money does. */}
+        {stageLocked && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            {formatCents(collectedCents)} collected, so this job stays done. Take the payment off to move it.
+          </p>
+        )}
         {notDone && (
           <p className="text-xs" style={{ color: 'var(--text3)' }}>
             {stage === 'scheduled'
