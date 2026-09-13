@@ -110,7 +110,7 @@ export default function TrendTile({
       )
     }
     trendRow = (
-      <div className="tile-trend">
+      <>
         <div className="mini" aria-hidden="true">
           {span.map((m, i) => {
             const v = m.state === 'open' ? pick(m) : 0
@@ -131,35 +131,44 @@ export default function TrendTile({
           })}
         </div>
         <div className="tile-delta">{changeWords(kind, scope, pick)}</div>
-      </div>
+      </>
     )
   }
 
+  // Two parts, every tile the same (owner, 2026-09-12: "synchronization and
+  // similar layouts for similar information"): the words on the card, the
+  // graph on a sunken band across the bottom with its own hairline. The band
+  // holds whatever this tile's graph is: the three-month bars and the change
+  // in words, or the earned split for Cash profit.
   return (
     <div className={classes} style={style}>
-      <div className="stat-label">{label}</div>
-      {expandable && (
-        <button
-          type="button"
-          className="tile-toggle"
-          onClick={expandable.onToggle}
-          aria-expanded={expandable.open}
-          aria-controls={expandable.controls}
+      <div className="tile-words">
+        <div className="stat-label">{label}</div>
+        {expandable && (
+          <button
+            type="button"
+            className="tile-toggle"
+            onClick={expandable.onToggle}
+            aria-expanded={expandable.open}
+            aria-controls={expandable.controls}
+          >
+            {expandable.name}
+            <span aria-hidden="true">{expandable.open ? '▴' : '▾'}</span>
+          </button>
+        )}
+        <div
+          ref={valueRef}
+          className={`stat-value${kind === 'money' ? ' money' : ''}${valueTone ? ` money-${valueTone}` : ''}`}
         >
-          {expandable.name}
-          <span aria-hidden="true">{expandable.open ? '▴' : '▾'}</span>
-        </button>
-      )}
-      <div
-        ref={valueRef}
-        className={`stat-value${kind === 'money' ? ' money' : ''}${valueTone ? ` money-${valueTone}` : ''}`}
-      >
-        {valueText}
+          {valueText}
+        </div>
+        {subLine !== undefined && subLine !== null && <div className="tile-sub">{subLine}</div>}
+        <div className="tile-hint">{hint}</div>
       </div>
-      {subLine !== undefined && subLine !== null && <div className="tile-sub">{subLine}</div>}
-      {trendRow}
-      {children}
-      <div className="tile-hint">{hint}</div>
+      <div className="tile-band">
+        {trendRow}
+        {children}
+      </div>
     </div>
   )
 }

@@ -756,13 +756,23 @@ a.card:focus-visible {
 
 /* Tiles: the year figure large, this month small, three months of bars, the
    change in words. Nothing in a tile is a series colour except the bars. */
-.tile { display: flex; flex-direction: column; padding: 9px 11px 8px; min-width: 0; }
+.tile { display: flex; flex-direction: column; padding: 9px 11px 0; min-width: 0; }
+.tile-words { display: flex; flex-direction: column; min-width: 0; padding-bottom: 8px; }
+/* The graph's own ground: a sunken band across the bottom of every tile, behind
+   its own hairline, so the words above never share a column with the bars. */
+.tile-band {
+  margin: auto -11px 0;
+  padding: 7px 11px 7px;
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border-hairline);
+  border-radius: 0 0 13px 13px;
+  min-width: 0;
+}
 .tile .stat-value { font-size: 26px; line-height: 28px; margin-top: 2px; letter-spacing: 0.01em; }
 .tile-sub { font-size: 12px; line-height: 15px; color: var(--text-muted); font-variant-numeric: tabular-nums; margin-top: 1px; }
 .tile-sub b { color: var(--text-body); font-weight: 600; }
-.tile-trend { display: flex; align-items: flex-start; gap: 8px; margin-top: 5px; min-width: 0; }
-.tile-delta { font-size: 11px; line-height: 13px; color: var(--text-muted); min-width: 0; padding-top: 1px; }
-.tile-hint { font-size: 11px; line-height: 13px; color: var(--text-muted); margin-top: 4px; min-width: 0; }
+.tile-delta { font-size: 11px; line-height: 13px; color: var(--text-muted); min-width: 0; margin-top: 5px; }
+.tile-hint { font-size: 11px; line-height: 13px; color: var(--text-muted); margin-top: 3px; min-width: 0; }
 .tile-hint .hint-long { display: inline; }
 /* The ledger toggle: a 44px target in the tile's corner that adds no height. */
 .tile-toggle {
@@ -794,9 +804,10 @@ a.card:focus-visible {
 
 /* The inline three-month mini chart: single series, no legend, bars at most
    24px, the current month at full strength and the two before it dimmed. */
-.mini { display: grid; grid-template-columns: repeat(3, 18px); gap: 6px; flex: none; }
+/* Three bars spread across the band, each on its own baseline, the month beneath. */
+.mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; justify-items: center; }
 .mini > span { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.mini-track { position: relative; height: 24px; width: 14px; }
+.mini-track { position: relative; height: 22px; width: 20px; }
 .mini-track::after { content: ''; position: absolute; left: -2px; right: -2px; bottom: 0; height: 1px; background: var(--border-strong); }
 .mini-track i {
   position: absolute;
@@ -808,7 +819,7 @@ a.card:focus-visible {
   border-radius: 4px 4px 0 0;
   z-index: 1;
   background: linear-gradient(to bottom, var(--bar), var(--bar-base, var(--bar)));
-  background-size: 100% 24px;
+  background-size: 100% 22px;
   background-position: bottom;
   background-repeat: no-repeat;
   transform-origin: bottom;
@@ -821,7 +832,7 @@ a.card:focus-visible {
 .mini-l.now { color: var(--text-heading); font-weight: 700; }
 
 /* Earned = in hand + still owed: the one bar that answers "why is profit so small". */
-.gap-bar { display: flex; gap: 2px; height: 8px; margin-top: 7px; min-width: 0; }
+.gap-bar { display: flex; gap: 2px; height: 8px; margin-top: 2px; min-width: 0; }
 .gap-bar i {
   display: block;
   height: 100%;
@@ -845,13 +856,13 @@ a.card:focus-visible {
 
 /* This month against last month: the eighth tile on the desktop, a full-width
    card on the phone. Two flat fills, one legend. */
-.strip { display: flex; flex-direction: column; padding: 9px 11px 8px; }
+.strip { display: flex; flex-direction: column; padding: 9px 11px 0; }
 .strip-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
 .strip-head .stat-label { flex: 1; min-width: 0; }
 .strip-day { font-size: 11px; line-height: 14px; color: var(--text-body); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .strip-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 0.8rem; font-size: 11px; line-height: 13px; color: var(--text-muted); margin-top: 2px; }
 .strip-legend span { display: inline-flex; align-items: center; gap: 5px; }
-.vs-list { display: flex; flex-direction: column; gap: 4px; margin-top: 5px; }
+.vs-list { display: flex; flex-direction: column; gap: 4px; }
 .vs-lab { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; font-size: 12px; line-height: 14px; color: var(--text-muted); min-width: 0; }
 .vs-lab b { color: var(--text-heading); font-weight: 600; font-variant-numeric: tabular-nums; }
 .vs-lab .vs-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
@@ -950,11 +961,18 @@ a.card:focus-visible {
    in the same layer, where its higher specificity wins. Desktop board only. */
 @layer utilities {
   @media (min-width: 900px) {
-    .recent .card, .cal-list .card { padding-block: 4px !important; }
+    .recent .card, .cal-list .card { padding-block: 3px !important; }
   }
 }
 @media (min-width: 900px) {
-  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  /* Option B bands cost each tile row about 18px; the desk pays for it here so the
+     board still fits one 820px screen with the calendar closed. */
+  .tile-band { padding: 5px 11px 5px; }
+  .tile-words { padding-bottom: 6px; }
+  .mini-track { height: 20px; }
+  .mini-track i { background-size: 100% 20px; }
+  .tile-delta { margin-top: 4px; }
   .board-head, .lane, .cal, .board-tiles > *, .board-tiles > .tile--lead, .board-tiles > .tile--second,
   .ledger-card, .strip, .board-chart, .recent, .doors { order: 0; }
   .strip, .tile--wide { grid-column: auto; }
@@ -969,7 +987,7 @@ a.card:focus-visible {
   /* Fit levers for the 1200 x 820 screen: the strip's row labels never wrap
      into a second line, and the chart gives up 14px it does not need. */
   .strip .vs-lab > span:first-child { white-space: nowrap; }
-  .mchart-panel { --plot-h: 56px; }
+  .mchart-panel { --plot-h: 50px; }
   /* 16px keeps the tallest bar's cap (12px, sitting 3px above the bar) clear of the panel head. */
   .board-chart .mchart-body { margin-top: 16px; }
   .ledger-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
@@ -1029,8 +1047,8 @@ a.card:focus-visible {
    one-screen board is the point of closing it. */
 @media (min-width: 900px) {
   .cal.is-collapsed { padding: 0 4px; background: transparent; border-color: transparent; box-shadow: none; }
-  .cal.is-collapsed .cal-head { min-height: 28px; }
-  .cal.is-collapsed .cal-toggle { min-height: 28px; padding-top: 0; padding-bottom: 0; }
+  .cal.is-collapsed .cal-head { min-height: 26px; }
+  .cal.is-collapsed .cal-toggle { min-height: 26px; padding-top: 0; padding-bottom: 0; }
 }
 .cal-btn { min-height: 44px; min-width: 44px; padding: 0.25rem 0.7rem; }
 .cal-grid { display: grid; gap: 2px; min-width: 0; }

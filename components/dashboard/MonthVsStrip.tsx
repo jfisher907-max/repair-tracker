@@ -42,14 +42,14 @@ export default function MonthVsStrip({
       aria-label={hasPrev ? `This month against ${prevName}` : 'This month'}
       style={{ '--t': t } as CSSProperties}
     >
-      <div className="strip-head">
-        <span className="stat-label">{hasPrev ? `This month vs ${prevName}` : 'This month'}</span>
-        <span className="strip-day">
-          day {day} of {days}
-        </span>
-      </div>
-      {hasPrev ? (
-        <>
+      <div className="tile-words">
+        <div className="strip-head">
+          <span className="stat-label">{hasPrev ? `This month vs ${prevName}` : 'This month'}</span>
+          <span className="strip-day">
+            day {day} of {days}
+          </span>
+        </div>
+        {hasPrev && (
           <div className="strip-legend">
             <span>
               <i className="legend-sw sw-now" />
@@ -60,6 +60,10 @@ export default function MonthVsStrip({
               {prevName}
             </span>
           </div>
+        )}
+      </div>
+      {hasPrev ? (
+        <div className="tile-band">
           <div className="vs-list">
             {rows.map((r, i) => {
               const a = r.pick(current)
@@ -82,9 +86,9 @@ export default function MonthVsStrip({
               )
             })}
           </div>
-        </>
+        </div>
       ) : (
-        <>
+        <div className="tile-band">
           <div className="vs-list">
             {rows.map((r) => (
               <div key={r.label} className="vs-lab">
@@ -96,7 +100,7 @@ export default function MonthVsStrip({
             ))}
           </div>
           <p className="strip-first">first month on the app</p>
-        </>
+        </div>
       )}
     </section>
   )
