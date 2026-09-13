@@ -30,6 +30,38 @@ function nowLocalInput(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** "8:41 PM on Sat, Sep 12", from a local input string. Takes the value rather
+ *  than reading the clock, so it is safe to call while rendering. */
+function whenWords(localInput: string): string {
+  const d = new Date(localInput)
+  if (Number.isNaN(d.getTime())) return 'now'
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  return `${time} on ${day}`
+}
+
+/** How far ahead of now an OK may be recorded. The database allows five
+ *  minutes for clock skew (0032); the form stops well inside that, so the
+ *  owner gets a sentence instead of a constraint name. */
+const OK_FUTURE_GRACE_MS = 2 * 60 * 1000
+
+/**
+ * A database constraint is the last line of defence, not a message. These are
+ * the ones this form can reach; anything else is passed through rather than
+ * guessed at.
+ */
+function plainDbError(message: string): string {
+  if (message.includes('job_authorizations_not_in_future'))
+    return `That time hasn’t happened yet — it is ${whenWords(nowLocalInput())} now. Record when they actually said yes.`
+  if (message.includes('job_authorizations_never_lowers'))
+    return 'An OK can’t lower the approved total — bill less instead.'
+  if (message.includes('job_authorizations_phone_needs_number'))
+    return 'For a phone OK, Alaska law wants the number you called on record.'
+  if (message.includes('job_authorizations_description_check'))
+    return 'What did they OK? Put it in words — it prints on the invoice.'
+  return message
+}
+
 /**
  * The job page's billing guard (Alaska Automobile Repair Act):
  *   - a banner whenever the job adds up to more than the customer approved;
@@ -83,6 +115,8 @@ export default function BillingCheck({
   const [okMethod, setOkMethod] = useState<OkMethod>('phone')
   const [okPhone, setOkPhone] = useState('')
   const [okWhen, setOkWhen] = useState('')
+  /** The clock when the sheet opened. Captured so nothing reads it during render. */
+  const [okNow, setOkNow] = useState('')
   const [okTotal, setOkTotal] = useState('')
   const [okWhat, setOkWhat] = useState('')
 
@@ -137,7 +171,9 @@ export default function BillingCheck({
     setOkName(customer?.name ?? '')
     setOkMethod('phone')
     setOkPhone(customer?.phone ?? '')
-    setOkWhen(nowLocalInput())
+    const openedAt = nowLocalInput()
+    setOkWhen(openedAt)
+    setOkNow(openedAt)
     setOkTotal(auth ? centsToInput(auth.current_cents) : '')
     setOkWhat('')
     setSheet('ok')
@@ -196,6 +232,12 @@ export default function BillingCheck({
     if (total == null) return setMsg('Type the new total before tax, like 2075.03.')
     const when = new Date(okWhen)
     if (Number.isNaN(when.getTime())) return setMsg('When did they OK it?')
+    // An OK cannot have happened yet. The database refuses it (0032); catching
+    // it here means a sentence the owner can act on instead of a constraint.
+    if (when.getTime() > Date.now() + OK_FUTURE_GRACE_MS)
+      return setMsg(
+        `That time hasn’t happened yet — it is ${whenWords(nowLocalInput())} now. Record when they actually said yes; it prints on the invoice as given.`,
+      )
     setBusy(true)
     setMsg(null)
     const { error } = await supabase.rpc('record_job_ok', {
@@ -209,7 +251,7 @@ export default function BillingCheck({
     })
     setBusy(false)
     if (error) {
-      setMsg(error.message)
+      setMsg(plainDbError(error.message))
       return
     }
     setSheet(null)
@@ -232,7 +274,7 @@ export default function BillingCheck({
     setBusy(false)
     const failed = results.find((r) => r.error)
     if (failed?.error) {
-      setMsg(failed.error.message)
+      setMsg(plainDbError(failed.error.message))
       return
     }
     setSheet(null)
@@ -243,6 +285,12 @@ export default function BillingCheck({
   const lateNote =
     sheet === 'ok' && latestPurchase && okWhen && okWhen.slice(0, 10) > latestPurchase
       ? `This OK is after the parts were bought (${formatDate(latestPurchase)}). Alaska wants the call before the extra work — record the real time you got it; it prints as given.`
+      : null
+  // Said as it is typed, not after the save fails. Both sides are local
+  // "YYYY-MM-DDTHH:mm" strings, so a plain comparison is the right one.
+  const futureNote =
+    sheet === 'ok' && okWhen && okNow && okWhen > okNow
+      ? `That is in the future — it is ${whenWords(okNow)} now. An OK is recorded at the moment they said yes.`
       : null
 
   const showBanner = over && auth && (sheet === null || sheet === 'over')
@@ -432,11 +480,31 @@ export default function BillingCheck({
               </div>
             )}
             <div>
-              <label className="label">When they OK’d it</label>
+              <div className="flex items-baseline justify-between gap-2">
+                <label className="label" htmlFor="ok-when">
+                  When they OK’d it
+                </label>
+                <button
+                  type="button"
+                  className="text-xs"
+                  style={{ color: 'var(--accent2)' }}
+                  onClick={() => {
+                    // Re-reading the clock keeps the field's max, and the
+                    // future warning, in step with a sheet left open a while.
+                    const n = nowLocalInput()
+                    setOkWhen(n)
+                    setOkNow(n)
+                  }}
+                >
+                  Now
+                </button>
+              </div>
               <input
+                id="ok-when"
                 className="input"
                 type="datetime-local"
                 value={okWhen}
+                max={okNow || undefined}
                 onChange={(e) => setOkWhen(e.target.value)}
               />
             </div>
@@ -459,6 +527,7 @@ export default function BillingCheck({
               />
             </div>
           </div>
+          {futureNote && <p className="text-xs" style={{ color: 'var(--status-stop-fg)' }}>{futureNote}</p>}
           {lateNote && <p className="text-xs" style={{ color: 'var(--status-wait-fg)' }}>{lateNote}</p>}
           {msg && <p className="text-sm" style={{ color: 'var(--status-stop-fg)' }}>{msg}</p>}
           <div className="flex gap-2">
