@@ -269,11 +269,20 @@ export default function DocView({ doc }: { doc: DocData }) {
 
         <footer className="doc-foot">
           {isQuote ? (
-            // Mirrors the posted notice AS 45.45.150 requires: the estimate is
-            // a ceiling — never exceeded without the customer's OK.
+            /* Mirrors the posted notice AS 45.45.150 requires: the estimate is
+               a ceiling, never exceeded without the customer's OK (AS 45.45.140
+               and .170 — Alaska has no percentage grace, so the app enforces it
+               and this sentence states it).
+
+               The wording is the owner's (2026-09-13), raised to a more formal
+               register. What it must NOT become is a bare "prices are subject
+               to change": that would put a claim on a customer document that
+               Alaska does not allow and the app does not do. Room for prices to
+               move comes from the expiry date printed in the meta row above,
+               not from disclaiming the ceiling. */
             <p>
-              This is an estimate. The final price won&apos;t go over it without your OK, and it
-              may come in lower.
+              This is a written estimate, valid until the date shown above. The final price will
+              not exceed it without your authorization, and may be less.
             </p>
           ) : (
             <>
