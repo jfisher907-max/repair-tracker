@@ -572,9 +572,16 @@ a.card:focus-visible {
   margin-left: 34px;
   margin-top: 6px;
 }
-.mchart-x span { text-align: center; font-size: 10px; line-height: 12px; color: var(--text-muted); }
-.mchart-x span[data-muted] { color: var(--text-faint); }
-.mchart-x span[data-active] { color: var(--text-heading); font-weight: 700; }
+/* DIRECT CHILD ONLY. The month label now wraps its own inner spans (three
+   letters / one letter); a colour set on those by a descendant selector would
+   BEAT the state colour inherited from the grid item, and a "future" month
+   would read exactly like a real one. */
+.mchart-x > span { text-align: center; font-size: 10px; line-height: 12px; color: var(--text-muted); }
+.mchart-x > span[data-muted] { color: var(--text-faint); }
+.mchart-x > span[data-active] { color: var(--text-heading); font-weight: 700; }
+/* Two forms of the month label, exactly one shown: three letters by default,
+   the single letter only at the 4-across desktop breakpoint below. */
+.mchart-x .mchart-m1 { display: none; }
 .mchart-dot {
   display: block;
   width: 4px;
@@ -604,6 +611,12 @@ a.card:focus-visible {
   letter-spacing: 0.06em;
   color: var(--text-muted);
 }
+/* Five columns at 375px leave the table about 8px of slack, and money can
+   never line-break — a five-figure total would take that slack and a six-figure
+   one would scroll the page sideways. So the one header with a spare word
+   drops it below the desktop breakpoint; the footnote already says what the
+   parts figure counts. Same one-of-two-shown pattern as the month axis. */
+.mchart-table .mchart-th-long { display: none; }
 .mchart-table tbody th { font-weight: 500; color: var(--text-body); }
 .mchart-table tr[data-muted] { color: var(--text-muted); }
 .mchart-table tfoot th,
@@ -634,7 +647,27 @@ a.card:focus-visible {
 @media (min-width: 900px) {
   .chart-top { grid-template-columns: minmax(0, 1fr) minmax(0, 372px) auto; }
   .chart-note { grid-column: auto; padding-top: 2px; }
-  .mchart-group { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  /* Two across between 900 and 1100: MEASURED at a 1000px window, four across
+     gives a 154px panel whose reading wraps on two of the four panels, and a
+     wrapped reading pushes only that panel's plot down 16px — the four axes
+     stop lining up, which is the entire point of small multiples. */
+  .mchart-group { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  /* Room for the full header again. */
+  .mchart-table .mchart-th-long { display: inline; }
+  .mchart-table .mchart-th-short { display: none; }
+}
+
+/* Four across only where four fit. At 1100px a panel is 183px and every
+   reading stays on one line (measured: 208px and one line at 1200px). */
+@media (min-width: 1100px) {
+  .mchart-group { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  /* A month column is then about 15px, where "Sep" and "Oct" collide: the
+     axis swaps to single letters here, and only here. */
+  .mchart-x .mchart-m3 { display: none; }
+  .mchart-x .mchart-m1 { display: inline; }
+  /* The reading shares a narrower head with the series name; 11px keeps it on
+     one line without abbreviating the money in it. */
+  .mchart-read { font-size: 11px; }
 }
 
 /* ---------- The dashboard board ---------- */
@@ -754,11 +787,28 @@ a.card:focus-visible {
 }
 .lane-t .money { font-weight: 600; }
 
-/* Tiles: the year figure large, this month small, three months of bars, the
-   change in words. Nothing in a tile is a series colour except the bars. */
-.tile { display: flex; flex-direction: column; padding: 9px 11px 0; min-width: 0; }
-.tile-words { display: flex; flex-direction: column; min-width: 0; padding-bottom: 8px; }
-/* The graph's own ground: a sunken band across the bottom of every tile, behind
+/* Tiles: the year figure large, this month small, the change in words, the
+   caption. One clean column, identical on all six number tiles.
+
+   THE RULE (owner, 2026-09-12): A GRAPH LIVES IN THE BAND; A TILE WITH NO
+   GRAPH HAS NO BAND. The six number tiles lost their three-month mini-bars,
+   so they lost the band with them and .tile closes with its own bottom
+   padding. Exactly two cards still carry a band, because exactly two still
+   carry a picture: Cash profit (the earned split) and This month vs <month>
+   (the paired bars). Never bring the band back to hold words. */
+.tile { display: flex; flex-direction: column; padding: 9px 11px; min-width: 0; }
+.tile:has(> .tile-band) { padding-bottom: 0; }
+.tile-words { display: flex; flex-direction: column; min-width: 0; }
+/* A bandless tile is the SHORTEST card on the board, and the desktop grid row
+   stretches it to whatever the tallest card in its row is (row 2 is as tall as
+   the strip, ~35px more). That height must not pool as dead air under the
+   caption: the words box takes it and the caption rides the card's bottom
+   edge, so the gap opens between the change-in-words line and the caption. */
+.tile:not(:has(> .tile-band)) .tile-words { flex: 1; }
+.tile:not(:has(> .tile-band)) .tile-hint { margin-top: auto; padding-top: 3px; }
+/* Only the words sitting ON a band need clearance from its hairline. */
+.tile-words:has(+ .tile-band) { padding-bottom: 8px; }
+/* The graph's own ground: a sunken band flush to the bottom of the card, behind
    its own hairline, so the words above never share a column with the bars. */
 .tile-band {
   margin: auto -11px 0;
@@ -802,34 +852,9 @@ a.card:focus-visible {
 .tile-toggle:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .tile-toggle[aria-expanded='true'] { color: var(--gold-400); }
 
-/* The inline three-month mini chart: single series, no legend, bars at most
-   24px, the current month at full strength and the two before it dimmed. */
-/* Three bars spread across the band, each on its own baseline, the month beneath. */
-.mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; justify-items: center; }
-.mini > span { display: flex; flex-direction: column; align-items: center; gap: 3px; }
-.mini-track { position: relative; height: 22px; width: 20px; }
-.mini-track::after { content: ''; position: absolute; left: -2px; right: -2px; bottom: 0; height: 1px; background: var(--border-strong); }
-.mini-track i {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: var(--h, 0%);
-  min-height: 2px;
-  border-radius: 4px 4px 0 0;
-  z-index: 1;
-  background: linear-gradient(to bottom, var(--bar), var(--bar-base, var(--bar)));
-  background-size: 100% 22px;
-  background-position: bottom;
-  background-repeat: no-repeat;
-  transform-origin: bottom;
-  opacity: 0.55;
-  animation: mchart-grow var(--dur-slow) var(--ease) both;
-  animation-delay: calc(var(--i, 0) * 22ms + var(--t, 0) * 30ms + 220ms);
-}
-.mini-track i.now { opacity: 1; }
-.mini-l { font-size: 10px; line-height: 10px; color: var(--text-muted); }
-.mini-l.now { color: var(--text-heading); font-weight: 700; }
+/* The three-month mini-bars that used to sit in every tile's band are GONE
+   (owner, 2026-09-12: they did not earn their height). Their .mini/.mini-track/
+   .mini-l rules went with them; the month-by-month chart is where bars live. */
 
 /* Earned = in hand + still owed: the one bar that answers "why is profit so small". */
 .gap-bar { display: flex; gap: 2px; height: 8px; margin-top: 2px; min-width: 0; }
@@ -965,13 +990,12 @@ a.card:focus-visible {
   }
 }
 @media (min-width: 900px) {
-  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-  /* Option B bands cost each tile row about 18px; the desk pays for it here so the
-     board still fits one 820px screen with the calendar closed. */
-  .tile-band { padding: 5px 11px 5px; }
-  .tile-words { padding-bottom: 6px; }
-  .mini-track { height: 20px; }
-  .mini-track i { background-size: 100% 20px; }
+  /* Dropping the mini-bars gave each tile row about 41px back (a banded tile
+     was 152px, a bandless one is 111px). It is spent here: the plot height
+     first, then the board's own gap. See the handoff arithmetic. */
+  .board { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .tile-band { padding: 6px 11px 6px; }
+  .tile-words:has(+ .tile-band) { padding-bottom: 6px; }
   .tile-delta { margin-top: 4px; }
   .board-head, .lane, .cal, .board-tiles > *, .board-tiles > .tile--lead, .board-tiles > .tile--second,
   .ledger-card, .strip, .board-chart, .recent, .doors { order: 0; }
@@ -987,7 +1011,9 @@ a.card:focus-visible {
   /* Fit levers for the 1200 x 820 screen: the strip's row labels never wrap
      into a second line, and the chart gives up 14px it does not need. */
   .strip .vs-lab > span:first-child { white-space: nowrap; }
-  .mchart-panel { --plot-h: 50px; }
+  /* Back up from the 50px the last fit-pass shaved it to: four panels across
+     need the height more than the tiles needed their bars. */
+  .mchart-panel { --plot-h: 68px; }
   /* 16px keeps the tallest bar's cap (12px, sitting 3px above the bar) clear of the panel head. */
   .board-chart .mchart-body { margin-top: 16px; }
   .ledger-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }

@@ -10,6 +10,12 @@ export interface MonthlyJob {
   hours: number
   /** job_totals.profit_cents: labor + parts charged − parts cost (counter tax included). */
   profitCents: number
+  /**
+   * job_totals.parts_cost_cents: what the parts on THIS job cost, sales tax
+   * paid at the counter included. Bucketed by the job's date like everything
+   * else here — not the Parts spend tile's cash-by-purchase-date figure.
+   */
+  partsCostCents: number
   /** Approved parts still waiting on their receipt, so the job's profit reads high. */
   uncosted: boolean
 }
@@ -24,6 +30,7 @@ interface Month {
   jobs: number
   hours: number
   profit: number
+  partsCost: number
   uncosted: number
   state: MonthState
 }
@@ -50,6 +57,9 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 const MONTH_SHORT = MONTH_NAMES.map((m) => m.slice(0, 3))
+/** J F M A M J J A S O N D — the conventional twelve-month axis; position
+ *  disambiguates the repeats. Used only where three letters would collide. */
+const MONTH_INITIAL = MONTH_NAMES.map((m) => m[0])
 
 const round1 = (n: number) => Math.round(n * 10) / 10
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
@@ -102,6 +112,22 @@ const SERIES: Series[] = [
     integer: false,
     dots: false,
   },
+  {
+    // Grey = cost, the same grey the Parts spend tile used. Each panel is a
+    // single series, so the colour only has to read against the card.
+    name: 'Parts cost',
+    top: 'most',
+    color: 'var(--chart-neutral)',
+    base: 'var(--chart-neutral-base)',
+    value: (m) => m.partsCost,
+    full: formatCents,
+    compact: compactDollars,
+    integer: true,
+    // An approved part with no receipt yet is MISSING from parts_cost_cents,
+    // so this is the series it distorts most directly — the bar reads low by
+    // exactly the amount the profit bar reads high. It gets the dot too.
+    dots: true,
+  },
 ]
 
 /** The smallest 1 / 2 / 2.5 / 5 × 10^k that is at least `raw`. */
@@ -132,9 +158,14 @@ function scaleFor(values: number[], integer: boolean) {
 }
 
 /**
- * Profit, jobs, and labor hours per month for one year (or every year added
- * together), as three small charts on a shared Jan–Dec axis — three units, so
- * never one chart with two scales. Tapping a month lines it up in all three.
+ * Profit, jobs, labor hours and parts cost per month for one year (or every
+ * year added together), as four small charts on a shared Jan–Dec axis — four
+ * units, so never one chart with two scales. Tapping a month lines it up in
+ * all four.
+ *
+ * Every panel buckets DONE jobs by JOB date, parts cost included: that is what
+ * makes the four line up. The Parts spend tile is a different basis (cash on
+ * the day the parts were bought) and deliberately does not feed this chart.
  */
 export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year: 'all' | number }) {
   const [hover, setHover] = useState<number | null>(null)
@@ -159,7 +190,7 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
         if (key > thisYear * 12 + thisMonth) state = 'future'
         else if (firstKey !== null && key < firstKey) state = 'before'
       }
-      return { jobs: 0, hours: 0, profit: 0, uncosted: 0, state }
+      return { jobs: 0, hours: 0, profit: 0, partsCost: 0, uncosted: 0, state }
     })
     for (const j of jobs) {
       if (year !== 'all' && Number(j.date.slice(0, 4)) !== year) continue
@@ -168,6 +199,7 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
       m.jobs += 1
       m.hours += j.hours
       m.profit += j.profitCents
+      m.partsCost += j.partsCostCents
       if (j.uncosted) m.uncosted += 1
       // A job dated ahead (booked for next month) still counts where it lands.
       m.state = 'open'
@@ -176,8 +208,13 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
   }, [jobs, year])
 
   const totals = months.reduce(
-    (t, m) => ({ jobs: t.jobs + m.jobs, hours: t.hours + m.hours, profit: t.profit + m.profit }),
-    { jobs: 0, hours: 0, profit: 0 },
+    (t, m) => ({
+      jobs: t.jobs + m.jobs,
+      hours: t.hours + m.hours,
+      profit: t.profit + m.profit,
+      partsCost: t.partsCost + m.partsCost,
+    }),
+    { jobs: 0, hours: 0, profit: 0, partsCost: 0 },
   )
   const anyUncosted = months.some((m) => m.uncosted > 0)
 
@@ -186,7 +223,7 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
     const label = year === 'all' ? `${MONTH_NAMES[i]}, all years` : `${MONTH_NAMES[i]} ${year}`
     if (m.state === 'future') return `${label}: not here yet`
     if (m.state === 'before') return `${label}: before you started logging jobs here`
-    return `${label}: ${formatCents(m.profit)} profit · ${plural(m.jobs, 'job')} · ${formatHours(round1(m.hours))} of labor`
+    return `${label}: ${formatCents(m.profit)} profit · ${plural(m.jobs, 'job')} · ${formatHours(round1(m.hours))} of labor · ${formatCents(m.partsCost)} of parts`
   }
 
   function onKey(e: KeyboardEvent<HTMLDivElement>) {
@@ -208,7 +245,8 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
   const idle =
     year === 'all'
       ? 'Every year added together — each bar is every January, every February…'
-      : 'Tap a month to line it up in all three.'
+      : // "four" tracks SERIES.length — Profit, Jobs, Labor hours, Parts cost.
+        'Tap a month to line it up in all four.'
 
   // The answer in words: the month that earned the most, and the busiest one
   // (most labor hours, ties broken by jobs). Only open months compete.
@@ -251,7 +289,9 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
               {year === 'all' ? 'all years' : year}
             </>
           )}
-          . The Cash profit tile counts money when it reaches you.
+          . Parts cost is what the parts on those finished jobs cost you; the Parts spend tile
+          counts cash the day the parts were bought, including parts for work still scheduled.
+          The Cash profit tile counts money when it reaches you.
         </p>
         <button
           type="button"
@@ -274,7 +314,7 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
           key={String(year)}
           className="mchart-group"
           role="group"
-          aria-label="Profit, jobs, and labor hours by month. Left and right arrow keys step through the months."
+          aria-label="Profit, jobs, labor hours, and parts cost by month. Left and right arrow keys step through the months."
           tabIndex={0}
           onKeyDown={onKey}
         >
@@ -296,7 +336,7 @@ export default function MonthlyChart({ jobs, year }: { jobs: MonthlyJob[]; year:
           <i className="mchart-dot mt-[5px] shrink-0" aria-hidden="true" />
           <span>
             A month marked with a dot has a job whose approved parts are still waiting on their
-            receipt, so its profit reads high until you enter it.
+            receipt, so its profit reads high and its parts cost reads low until you enter it.
           </span>
         </p>
       )}
@@ -400,6 +440,11 @@ function Panel({
           })}
         </div>
       </div>
+      {/* Both forms of the month are rendered and CSS shows exactly one: three
+          letters everywhere, a single letter at the 4-across desktop
+          breakpoint, where a column is only about 15px wide and "Sep" would
+          touch "Oct". The row is aria-hidden and the tap readout names the
+          full month, so a screen reader loses nothing either way. */}
       <div className="mchart-x" aria-hidden="true">
         {months.map((m, i) => (
           <span
@@ -407,7 +452,8 @@ function Panel({
             data-muted={m.state !== 'open' || undefined}
             data-active={active === i || undefined}
           >
-            {MONTH_SHORT[i]}
+            <span className="mchart-m3">{MONTH_SHORT[i]}</span>
+            <span className="mchart-m1">{MONTH_INITIAL[i]}</span>
             {series.dots && m.uncosted > 0 && <i className="mchart-dot" />}
           </span>
         ))}
@@ -422,7 +468,7 @@ function MonthTable({
   totals,
 }: {
   months: Month[]
-  totals: { jobs: number; hours: number; profit: number }
+  totals: { jobs: number; hours: number; profit: number; partsCost: number }
 }) {
   return (
     <table className="mchart-table">
@@ -431,6 +477,13 @@ function MonthTable({
           <th scope="col">Month</th>
           <th scope="col">Jobs</th>
           <th scope="col">Labor</th>
+          {/* Both forms rendered, CSS shows one: five columns at 375px have
+              about 8px of slack and money cannot wrap, so the phone drops the
+              spare word. The footnote below defines the figure either way. */}
+          <th scope="col">
+            <span className="mchart-th-long">Parts cost</span>
+            <span className="mchart-th-short">Parts</span>
+          </th>
           <th scope="col">Profit</th>
         </tr>
       </thead>
@@ -445,10 +498,11 @@ function MonthTable({
               <>
                 <td>{m.jobs}</td>
                 <td>{formatHours(round1(m.hours))}</td>
+                <td>{formatCents(m.partsCost)}</td>
                 <td className={m.profit < 0 ? 'money-owed' : undefined}>{formatCents(m.profit)}</td>
               </>
             ) : (
-              <td colSpan={3}>{m.state === 'future' ? 'not yet' : 'before the app'}</td>
+              <td colSpan={4}>{m.state === 'future' ? 'not yet' : 'before the app'}</td>
             )}
           </tr>
         ))}
@@ -458,6 +512,7 @@ function MonthTable({
           <th scope="row">Total</th>
           <td>{totals.jobs}</td>
           <td>{formatHours(round1(totals.hours))}</td>
+          <td>{formatCents(totals.partsCost)}</td>
           <td className={totals.profit < 0 ? 'money-owed' : undefined}>{formatCents(totals.profit)}</td>
         </tr>
       </tfoot>

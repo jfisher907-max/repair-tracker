@@ -5,12 +5,10 @@ import { monthLabel, type MonthFigures } from '@/lib/finances'
 import { figure, type FigureKind } from './format'
 import { useCountUp } from './useCountUp'
 
-export type Series = 'busy' | 'neutral' | 'profit' | 'loss'
-
 /** Which months the tile's trend row reads, and which one is "now". */
 export interface TrendScope {
   months: MonthFigures[]
-  /** Index of the month the small figure and the bright bar belong to. */
+  /** Index of the month the small figure belongs to. */
   now: number
   /** "so far" when that month is still running; a finished month just names itself. */
   running: boolean
@@ -21,22 +19,26 @@ export interface TrendTileProps {
   kind: FigureKind
   /** The year figure. */
   total: number
-  /** Colour of the year figure by meaning; the series colour never touches text. */
+  /** Colour of the year figure by meaning; a series colour never touches text. */
   valueTone?: 'in' | 'owed'
   /** Coloured 1px outline on the neutral tile. */
   tone?: 'ok' | 'stop'
-  series: Series
   /** Full width on the phone. */
   wide?: boolean
   /** Phone order group: lead = first, second = right after the ledger. */
   lead?: 'lead' | 'second'
   /** Arrival stagger slot. */
   t: number
-  /** The trend row's data; omit it (Cash profit) and the children take its place. */
+  /**
+   * The months behind the figure. It no longer draws anything (owner,
+   * 2026-09-12: the three-month mini-bars came out) — it feeds the two lines
+   * of words underneath: "Sep so far $323.81" and "down from 6 in Aug".
+   */
   trend?: { scope: TrendScope; pick: (m: MonthFigures) => number; subExtra?: (m: MonthFigures) => ReactNode }
   /** Replaces the "this month so far" line. */
   sub?: ReactNode
   hint: ReactNode
+  /** A graph. Passing one is what gives this tile its band — see below. */
   children?: ReactNode
   /** The expand control for the ledger. */
   expandable?: { open: boolean; onToggle: () => void; controls: string; name: string }
@@ -62,7 +64,6 @@ export default function TrendTile({
   total,
   valueTone,
   tone,
-  series,
   wide,
   lead,
   t,
@@ -73,13 +74,7 @@ export default function TrendTile({
   expandable,
 }: TrendTileProps) {
   const [valueRef, valueText] = useCountUp(kind, total)
-  // Loss has no baseline step (a same-hue ramp under the 3:1 floor is worse
-  // than none), so its bars are a flat fill; the other series ramp to the plot.
-  const style = {
-    '--t': t,
-    '--bar': `var(--chart-${series})`,
-    '--bar-base': series === 'loss' ? 'var(--chart-loss)' : `var(--chart-${series}-base)`,
-  } as CSSProperties
+  const style = { '--t': t } as CSSProperties
   const classes = [
     'stat-tile',
     'tile',
@@ -90,15 +85,12 @@ export default function TrendTile({
     .filter(Boolean)
     .join(' ')
 
-  let trendRow: ReactNode = null
+  let deltaRow: ReactNode = null
   let subLine: ReactNode = sub
   if (trend) {
     const { scope, pick, subExtra } = trend
     const { months, now, running } = scope
     const cur = months[now]
-    const first = Math.max(0, now - 2)
-    const span = months.slice(first, now + 1)
-    const max = Math.max(0, ...span.map((m) => (m.state === 'open' ? pick(m) : 0)))
     if (subLine === undefined) {
       subLine = (
         <>
@@ -109,37 +101,19 @@ export default function TrendTile({
         </>
       )
     }
-    trendRow = (
-      <>
-        <div className="mini" aria-hidden="true">
-          {span.map((m, i) => {
-            const v = m.state === 'open' ? pick(m) : 0
-            const isNow = m.index === cur.index
-            return (
-              <span key={m.index}>
-                <span className="mini-track">
-                  {v > 0 && max > 0 && (
-                    <i
-                      className={isNow ? 'now' : undefined}
-                      style={{ '--h': `${((v / max) * 100).toFixed(1)}%`, '--i': i } as CSSProperties}
-                    />
-                  )}
-                </span>
-                <span className={`mini-l${isNow ? ' now' : ''}`}>{monthLabel(m.index)}</span>
-              </span>
-            )
-          })}
-        </div>
-        <div className="tile-delta">{changeWords(kind, scope, pick)}</div>
-      </>
-    )
+    deltaRow = <div className="tile-delta">{changeWords(kind, scope, pick)}</div>
   }
 
-  // Two parts, every tile the same (owner, 2026-09-12: "synchronization and
-  // similar layouts for similar information"): the words on the card, the
-  // graph on a sunken band across the bottom with its own hairline. The band
-  // holds whatever this tile's graph is: the three-month bars and the change
-  // in words, or the earned split for Cash profit.
+  // THE RULE (owner, 2026-09-12): a graph lives in the band; a tile with no
+  // graph has no band. The six number tiles are one clean column of words —
+  // label, figure, this month so far, the change in words, the caption — and
+  // nothing else. Only a tile handed a graph as `children` (Cash profit's
+  // earned split; the strip's paired bars, in MonthVsStrip) gets the sunken
+  // band, flush to the card's bottom edge and taking its 13px inner radius.
+  // Do not reintroduce a band to hold words: .tile's own bottom padding
+  // closes a bandless tile.
+  const hasGraph = Boolean(children)
+
   return (
     <div className={classes} style={style}>
       <div className="tile-words">
@@ -163,12 +137,10 @@ export default function TrendTile({
           {valueText}
         </div>
         {subLine !== undefined && subLine !== null && <div className="tile-sub">{subLine}</div>}
+        {deltaRow}
         <div className="tile-hint">{hint}</div>
       </div>
-      <div className="tile-band">
-        {trendRow}
-        {children}
-      </div>
+      {hasGraph && <div className="tile-band">{children}</div>}
     </div>
   )
 }

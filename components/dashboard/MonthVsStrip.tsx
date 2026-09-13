@@ -8,6 +8,10 @@ import { daysInMonth, figure, type FigureKind } from './format'
  * This month against the previous calendar month, on the three things the
  * shop can actually control: jobs, hours, and what the work earned. Two flat
  * fills, one legend; values sit in text tokens, never in the series colour.
+ *
+ * This card keeps its .tile-band because it keeps its graph: the rule is that
+ * a graph lives in the band and a bandless card has no band (the six number
+ * tiles lost both on 2026-09-12). Cash profit is the only other one left.
  */
 export default function MonthVsStrip({
   current,

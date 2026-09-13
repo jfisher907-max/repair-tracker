@@ -98,11 +98,17 @@ export default function DashboardView({
     return computeFinances(rows, thisYear - 1, now).months[11]
   }, [rows, live, thisYear, thisMonth, now])
 
-  // The chart buckets by JOB date, so profit, job count and hours for a month
-  // all come from the same jobs and the three panels line up. It does its own
-  // year filtering (it needs all years to know when tracking started), so it
-  // gets every DONE job, not the scoped list: a scheduled or in-progress job
-  // is not work yet (0043), the same rule the tiles read from Finances.
+  // The chart buckets by JOB date, so profit, job count, hours and parts cost
+  // for a month all come from the same jobs and the four panels line up. It
+  // does its own year filtering (it needs all years to know when tracking
+  // started), so it gets every DONE job, not the scoped list: a scheduled or
+  // in-progress job is not work yet (0043), the same rule the tiles read from
+  // Finances.
+  //
+  // partsCostCents is job_totals.parts_cost_cents — what the parts ON THIS JOB
+  // cost, counter tax included. It is deliberately NOT the Parts spend tile's
+  // figure: that one is cash by PURCHASE date and includes parts bought for
+  // work still scheduled. One basis per chart.
   const chartJobs = useMemo<MonthlyJob[]>(
     () =>
       rows.jobs
@@ -111,6 +117,7 @@ export default function DashboardView({
           date: it.job.date,
           hours: Number(it.job.labor_hours),
           profitCents: it.totals?.profit_cents ?? 0,
+          partsCostCents: it.totals?.parts_cost_cents ?? 0,
           uncosted: rows.uncostedJobIds.has(it.job.id),
         })),
     [rows],
@@ -205,7 +212,6 @@ export default function DashboardView({
           label="Jobs"
           kind="int"
           total={f.count}
-          series="busy"
           t={0}
           trend={liveScope ? { scope: liveScope, pick: (m) => m.jobs } : undefined}
           hint={`jobs done, dated ${yearWords}, paid or not`}
@@ -214,7 +220,6 @@ export default function DashboardView({
           label="Labor hours"
           kind="hours"
           total={f.hours}
-          series="busy"
           t={1}
           trend={liveScope ? { scope: liveScope, pick: (m) => m.hours } : undefined}
           hint="hours sold on those jobs"
@@ -223,7 +228,6 @@ export default function DashboardView({
           label="Billed"
           kind="money"
           total={f.charged}
-          series="neutral"
           t={2}
           trend={liveScope ? { scope: liveScope, pick: (m) => m.billed } : undefined}
           hint="what the done work came to, before tax"
@@ -233,7 +237,6 @@ export default function DashboardView({
           kind="money"
           total={f.collected}
           valueTone="in"
-          series="profit"
           t={3}
           trend={liveScope ? { scope: liveScope, pick: (m) => m.collected } : undefined}
           hint="payments received, tax included"
@@ -242,7 +245,6 @@ export default function DashboardView({
           label="Parts spend"
           kind="money"
           total={f.partsSpend}
-          series="neutral"
           t={4}
           wide
           trend={liveScope ? { scope: liveScope, pick: (m) => m.partsSpend } : undefined}
@@ -254,7 +256,6 @@ export default function DashboardView({
           total={f.cashProfit}
           valueTone={f.cashProfit >= 0 ? 'in' : 'owed'}
           tone={f.cashProfit >= 0 ? 'ok' : 'stop'}
-          series="profit"
           wide
           lead="lead"
           t={5}
@@ -278,7 +279,6 @@ export default function DashboardView({
           total={f.unpaid}
           valueTone={f.unpaid > 0 ? 'owed' : undefined}
           tone={f.unpaid > 0 ? 'stop' : 'ok'}
-          series="loss"
           wide
           lead="second"
           t={6}
