@@ -282,10 +282,15 @@ export default function DocView({ doc }: { doc: DocData }) {
                from disclaiming the ceiling. And no promise that the bill may
                come in LOWER — the owner will happily bill under the estimate
                when he can, but he does not want the customer arriving expecting
-               it. The ceiling is stated; the floor is not. */
+               it. The ceiling is stated; the floor is not.
+
+               Said actively rather than as a promise (his wording, 2026-09-13):
+               the authorization is a requirement on the customer's side, which
+               is both how AS 45.45.170 actually works and how it reads with
+               most authority. */
             <p>
-              This is a written estimate, valid until the date shown above. The final price will
-              not exceed it without your authorization.
+              This is an estimate, valid until the date shown above. Your authorization is
+              required for any increase to this price.
             </p>
           ) : (
             <>
