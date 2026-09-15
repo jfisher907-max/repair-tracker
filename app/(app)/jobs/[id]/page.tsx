@@ -19,7 +19,7 @@ import {
 } from '@/lib/cores'
 import JobPhotos from '@/components/JobPhotos'
 import RecommendationList from '@/components/RecommendationList'
-import BillingCheck, { type BillingSheet } from '@/components/BillingCheck'
+import BillingCheck, { RecordedOks, type BillingSheet, type JobOk } from '@/components/BillingCheck'
 import {
   buildAuthorizationTrail,
   isOverApproval,
@@ -117,6 +117,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [auth, setAuth] = useState<JobAuthorization | null>(null)
   /** The approval check itself couldn't be read — not the same as "it's fine". */
   const [authFailed, setAuthFailed] = useState(false)
+  /** The AS 45.45.170(d) record of every OK past the estimate, owner's copy. */
+  const [oks, setOks] = useState<JobOk[]>([])
   const [billingSheet, setBillingSheet] = useState<BillingSheet>(null)
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
@@ -149,12 +151,23 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setVehicle(v ?? null)
     setCustomer(v?.customer ?? null)
 
-    const [linesRes, receiptsRes, settingsRes, invoicesRes, paymentsRes] = await Promise.all([
+    const [linesRes, receiptsRes, settingsRes, invoicesRes, paymentsRes, oksRes] = await Promise.all([
       supabase.from('part_lines').select('*').eq('job_id', id).order('created_at'),
       supabase.from('receipts').select('*').eq('job_id', id).order('created_at'),
       supabase.from('settings').select('store_suggestions, parts_markup_enabled, parts_markup_tiers').single(),
       supabase.from('invoices').select('*').eq('job_id', id).order('created_at'),
       supabase.from('payments').select('*').eq('job_id', id).order('date'),
+      // Chain order — the same (authorized_at, recorded_at, id) the database
+      // rebuilds previous_ceiling_cents in, so the list reads in the order the
+      // deltas telescope. `select('*')` on purpose: corrected_at arrives with
+      // migration 0044, and naming it would break this read until then.
+      supabase
+        .from('job_authorizations')
+        .select('*')
+        .eq('job_id', id)
+        .order('authorized_at')
+        .order('recorded_at')
+        .order('id'),
     ])
     setLines((linesRes.data as PartLine[]) ?? [])
     const recs = (receiptsRes.data as Receipt[]) ?? []
@@ -167,6 +180,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     })
     setInvoices((invoicesRes.data as Invoice[]) ?? [])
     setPayments((paymentsRes.data as Payment[]) ?? [])
+    setOks((oksRes.data as JobOk[]) ?? [])
 
     if (recs.length) {
       const urls: Record<string, string> = {}
@@ -1182,6 +1196,21 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </p>
         </div>
       )}
+
+      {/* The OKs past the estimate (AS 45.45.170(d)) as the OWNER sees them,
+          each correctable until an invoice goes out. The wrong time on one of
+          these is what the owner could not fix (2026-09-14); the record has to
+          be accurate, and a correction shows on the row rather than quietly
+          replacing what was there. Not the customer's copy — that trail is
+          built by buildAuthorizationTrail and frozen onto the invoice, and it
+          carries the facts of the approval, never this app's edit history. */}
+      <RecordedOks
+        jobId={id}
+        oks={oks}
+        lines={lines}
+        locked={lockedByInvoice}
+        onChanged={load}
+      />
 
       {/* Recommendations — trackable items that follow the vehicle and seed
           the invoice the customer receives. */}
