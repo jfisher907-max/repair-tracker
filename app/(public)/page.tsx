@@ -68,18 +68,27 @@ const AUTOMOTIVE_SERVICES: ServiceCard[] = [
   },
 ]
 
-// AWAITING THE OWNER: this list is a starting point pending Jake's
-// confirmation and additions — add, reword or drop cards here as the
-// aviation offering is settled. The panel sizes itself to however many
-// cards there are.
+// AWAITING THE OWNER: repair services for private and business jets
+// transiting Juneau. This list still awaits Jake's confirmation — the
+// certificate scope and the jet types he'll take on are open — so add,
+// reword or drop cards here as that is settled. The panel sizes itself to
+// however many cards there are (four run two-up on a wide screen).
 const AVIATION_SERVICES: ServiceCard[] = [
   {
-    title: 'Hangar Space',
-    body: 'Hangar space in Juneau, by arrangement.',
+    title: 'AOG Response',
+    body: 'Stuck in Juneau? We come to the aircraft, find the fault, and give your maintenance control a plan.',
   },
   {
-    title: 'Hangar Management',
-    body: 'Scheduling and upkeep for operators who base aircraft with us.',
+    title: 'Troubleshooting & Repair',
+    body: 'Write-ups from the last leg diagnosed and fixed on the ramp, with a clear record of the work.',
+  },
+  {
+    title: 'Tires, Brakes & Servicing',
+    body: 'Wheel and brake changes, fluids, and the servicing that keeps a trip on schedule.',
+  },
+  {
+    title: 'Photo-Documented Records',
+    body: 'Every repair photographed and written up, with a digital invoice your operator can review before approving.',
   },
 ]
 
@@ -94,12 +103,6 @@ interface Step {
   body: string
 }
 
-const APPROVE_STEP: Step = {
-  n: '3',
-  title: 'Approve from your phone',
-  body: 'Estimates are approved online — line by line if you want. Work is photo-documented, and your invoice is digital.',
-}
-
 const STEPS: Record<ServiceLine, Step[]> = {
   automotive: [
     {
@@ -112,20 +115,28 @@ const STEPS: Record<ServiceLine, Step[]> = {
       title: 'We come back with a plan',
       body: 'Expect a reply within one business day: what we think it is, a written estimate, and a time and place for the vehicle that works for you.',
     },
-    APPROVE_STEP,
+    {
+      n: '3',
+      title: 'Approve from your phone',
+      body: 'Estimates are approved online — line by line if you want. Work is photo-documented, and your invoice is digital.',
+    },
   ],
   aviation: [
     {
       n: '1',
-      title: 'Tell us about your aircraft',
-      body: 'Use the request form below — the aircraft, what it needs, and how to reach you.',
+      title: 'Tell us about the aircraft',
+      body: 'Type and tail number, the squawk, where it’s parked, and who to reach — the crew or maintenance control.',
     },
     {
       n: '2',
       title: 'We come back with a plan',
-      body: 'Expect a reply within one business day: a written estimate, and a time and place for the aircraft that works for you.',
+      body: 'A written estimate and a time at the aircraft.',
     },
-    APPROVE_STEP,
+    {
+      n: '3',
+      title: 'Approve from your phone',
+      body: 'The crew or maintenance control approves the estimate online. Work is photo-documented, and the invoice is digital.',
+    },
   ],
 }
 
@@ -133,8 +144,16 @@ const REQUEST_INTRO: Record<ServiceLine, string> = {
   automotive:
     "Tell us about your vehicle and what it needs. We'll get back to you within one business day with an estimate and a plan for getting the vehicle in.",
   aviation:
-    "Tell us about your aircraft and what it needs. We'll get back to you within one business day with an estimate and a plan for getting the aircraft in.",
+    'Tell us about the aircraft and the squawk. We’ll come back with an estimate and a plan to return it to service.',
 }
+
+// Runs at HTML parse time — before the first paint and before React loads —
+// so /#aviation never flashes the automotive side. It only sets
+// <html data-line="aviation">; the CSS that acts on it is in globals.css and
+// the store in components/public/ServiceLine.tsx keeps the attribute in
+// step once React takes over. Must agree with lineFromHash() there.
+const LINE_BOOT_SCRIPT =
+  "try{if(location.hash.toLowerCase()==='#aviation')document.documentElement.dataset.line='aviation'}catch(e){}"
 
 // Local, not ServiceLine.tsx's SERVICE_LINES: a value exported from a
 // 'use client' module arrives here as a client reference, not an array.
@@ -150,6 +169,9 @@ export default function LandingPage() {
         fontFamily: 'var(--font-doc-body), system-ui, sans-serif',
       }}
     >
+      {/* First, so every per-side element below is covered before it paints. */}
+      <script dangerouslySetInnerHTML={{ __html: LINE_BOOT_SCRIPT }} />
+
       {/* Owner fast path, evaluated at HTML parse time — before React loads.
           The installed PWA's start_url is still '/' on phones that installed
           before the move; presence of the stored session key sends the owner
@@ -232,26 +254,28 @@ export default function LandingPage() {
             How it works
           </h2>
           {LINES.map((line) => (
-            <LineOnly key={line} line={line} className="mt-6 grid gap-6 sm:grid-cols-3">
-              {STEPS[line].map((s) => (
-                <div key={s.n}>
-                  <span
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-base font-bold"
-                    style={{ background: '#10141c', color: '#f0a832', fontFamily: 'var(--font-doc-display), sans-serif' }}
-                  >
-                    {s.n}
-                  </span>
-                  <h3
-                    className="mt-3 text-base font-semibold"
-                    style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
-                  >
-                    {s.title}
-                  </h3>
-                  <p className="mt-1 text-sm leading-relaxed" style={{ color: '#2a3040' }}>
-                    {s.body}
-                  </p>
-                </div>
-              ))}
+            <LineOnly key={line} line={line} className="mt-6">
+              <div className="grid gap-6 sm:grid-cols-3">
+                {STEPS[line].map((s) => (
+                  <div key={s.n}>
+                    <span
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-base font-bold"
+                      style={{ background: '#10141c', color: '#f0a832', fontFamily: 'var(--font-doc-display), sans-serif' }}
+                    >
+                      {s.n}
+                    </span>
+                    <h3
+                      className="mt-3 text-base font-semibold"
+                      style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
+                    >
+                      {s.title}
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed" style={{ color: '#2a3040' }}>
+                      {s.body}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </LineOnly>
           ))}
         </section>
