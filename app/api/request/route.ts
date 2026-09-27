@@ -17,6 +17,9 @@ export const dynamic = 'force-dynamic'
  * this route shapes the payload, hands it over, and — when notification env
  * vars are present — emails the owner about the new request. Honeypot hits
  * return no id, so bots never generate email.
+ *
+ * serviceLine records which side of the page (Automotive / Aviation) the
+ * request came from. Validated strictly: 'aviation' or it is 'automotive'.
  */
 export async function POST(request: Request) {
   let body: Record<string, unknown>
@@ -45,7 +48,9 @@ export async function POST(request: Request) {
 
   const name = str(body.name, 120)
   const vehicle = str(body.vehicle, 200)
-  const { data, error } = await supabase.rpc('submit_service_request', {
+  const serviceLine: 'automotive' | 'aviation' =
+    body.serviceLine === 'aviation' ? 'aviation' : 'automotive'
+  const args = {
     p_name: name,
     p_phone: str(body.phone, 40) || null,
     p_email: str(body.email, 200) || null,
@@ -56,7 +61,20 @@ export async function POST(request: Request) {
     p_company: str(body.company, 200) || null,
     p_ip: ip,
     p_user_agent: userAgent.slice(0, 400),
+  }
+  let res = await supabase.rpc('submit_service_request', {
+    ...args,
+    p_service_line: serviceLine,
   })
+  // Deploy-order guard: until migration 0046 is applied the function has no
+  // p_service_line, and PostgREST answers PGRST202 (no such function) WITHOUT
+  // calling anything — so one retry on the old signature cannot double-insert.
+  // The shop's only contact channel must not go down over a label; the row
+  // just reads 'automotive' until 0046 lands. Remove once 0046 is applied.
+  if (res.error?.code === 'PGRST202') {
+    res = await supabase.rpc('submit_service_request', args)
+  }
+  const { data, error } = res
 
   if (error) {
     return Response.json(
@@ -83,7 +101,7 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           from: process.env.NOTIFY_FROM_EMAIL ?? 'onboarding@resend.dev',
           to: process.env.OWNER_NOTIFY_EMAIL,
-          subject: `New service request — ${name} (${vehicle})`,
+          subject: `New ${serviceLine} service request — ${name} (${vehicle})`,
           text: `A new service request just came in.\n\nOpen it: https://wingsnthings.repair/requests\n\n(Details are in the app, not this email.)`,
         }),
         signal: AbortSignal.timeout(4000),

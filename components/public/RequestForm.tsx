@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { LineToggle, useServiceLine, type ServiceLine } from './ServiceLine'
 
 /**
  * The public service-request form — the shop's only contact channel (no
@@ -9,6 +10,11 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
  * again and rate-limits. The `company` field is a honeypot: visually hidden,
  * never labeled for humans, and any value in it gets the row silently
  * dropped server-side.
+ *
+ * The form follows the page's Automotive / Aviation choice (ServiceLine.tsx)
+ * — the toggle at its top is the same shared state as the tabs above — and
+ * sends that line with the request so the owner's inbox can tell a car
+ * from an aircraft.
  */
 
 const labelStyle: React.CSSProperties = {
@@ -19,6 +25,21 @@ const labelStyle: React.CSSProperties = {
   letterSpacing: '0.08em',
   color: '#8b94a7',
   marginBottom: 6,
+}
+
+// Per-line copy for the one field that names the thing being serviced, and
+// the message hint. Automotive is the original wording, unchanged.
+const LINE_COPY: Record<ServiceLine, { label: string; placeholder: string; hint: string }> = {
+  automotive: {
+    label: 'Vehicle (year, make & model) *',
+    placeholder: 'e.g. 2015 Subaru Outback',
+    hint: 'Noises, warning lights, leaks, or the specific work you want — anything helps.',
+  },
+  aviation: {
+    label: 'Aircraft (make, model & tail number) *',
+    placeholder: 'e.g. Cessna 182, N-number',
+    hint: 'Squawks, hangar needs, or the specific work you want — anything helps.',
+  },
 }
 
 const CONTACT_PREFS = [
@@ -43,6 +64,8 @@ export default function RequestForm() {
   const [vehicle, setVehicle] = useState('')
   const [message, setMessage] = useState('')
   const [company, setCompany] = useState('') // honeypot
+  const line = useServiceLine()
+  const copy = LINE_COPY[line]
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
@@ -94,6 +117,7 @@ export default function RequestForm() {
           vehicle,
           message,
           source,
+          serviceLine: line,
           company,
         }),
       })
@@ -136,7 +160,12 @@ export default function RequestForm() {
 
   return (
     <form onSubmit={submit} className="max-w-xl space-y-5">
-      <div className="grid gap-5 sm:grid-cols-2">
+      {/* For visitors who jumped straight here from #request. */}
+      <LineToggle labelStyle={labelStyle} />
+
+      {/* items-end: the aircraft label wraps to two lines beside "Your name"
+          at two-up widths; aligning cell bottoms keeps the inputs level. */}
+      <div className="grid gap-5 sm:grid-cols-2 sm:items-end">
         <div>
           <label style={labelStyle} htmlFor="rq-name">Your name *</label>
           <input
@@ -149,11 +178,11 @@ export default function RequestForm() {
           />
         </div>
         <div>
-          <label style={labelStyle} htmlFor="rq-vehicle">Vehicle (year, make &amp; model) *</label>
+          <label style={labelStyle} htmlFor="rq-vehicle">{copy.label}</label>
           <input
             id="rq-vehicle"
             className="pub-input"
-            placeholder="e.g. 2015 Subaru Outback"
+            placeholder={copy.placeholder}
             value={vehicle}
             onChange={(e) => setVehicle(e.target.value)}
             required
@@ -221,7 +250,7 @@ export default function RequestForm() {
           id="rq-message"
           className="pub-input"
           style={{ minHeight: 120, resize: 'vertical' }}
-          placeholder="Noises, warning lights, leaks, or the specific work you want — anything helps."
+          placeholder={copy.hint}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           required
