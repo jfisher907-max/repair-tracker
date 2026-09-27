@@ -1,7 +1,13 @@
 'use client'
 
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { LineToggle, useServiceLine, type ServiceLine } from './ServiceLine'
+import {
+  LineOnly,
+  LineToggle,
+  SERVICE_LINES,
+  useServiceLine,
+  type ServiceLine,
+} from './ServiceLine'
 
 /**
  * The public service-request form — the shop's only contact channel (no
@@ -28,7 +34,9 @@ const labelStyle: React.CSSProperties = {
 }
 
 // Per-line copy for the one field that names the thing being serviced, and
-// the message hint. Automotive is the original wording, unchanged.
+// the message hint. Automotive is the original wording, unchanged. Both
+// labels are in the HTML (LineOnly) so /#aviation shows the right one before
+// hydration; the placeholders are attributes and follow once React loads.
 const LINE_COPY: Record<ServiceLine, { label: string; placeholder: string; hint: string }> = {
   automotive: {
     label: 'Vehicle (year, make & model) *',
@@ -36,9 +44,9 @@ const LINE_COPY: Record<ServiceLine, { label: string; placeholder: string; hint:
     hint: 'Noises, warning lights, leaks, or the specific work you want — anything helps.',
   },
   aviation: {
-    label: 'Aircraft (make, model & tail number) *',
-    placeholder: 'e.g. Cessna 182, N-number',
-    hint: 'Squawks, hangar needs, or the specific work you want — anything helps.',
+    label: 'Aircraft (type & tail number) *',
+    placeholder: 'e.g. Challenger 350, N-number',
+    hint: 'The squawk, where the aircraft is parked, and when it needs to fly — anything helps.',
   },
 }
 
@@ -178,7 +186,13 @@ export default function RequestForm() {
           />
         </div>
         <div>
-          <label style={labelStyle} htmlFor="rq-vehicle">{copy.label}</label>
+          <label style={labelStyle} htmlFor="rq-vehicle">
+            {SERVICE_LINES.map((l) => (
+              <LineOnly key={l} line={l} as="span">
+                {LINE_COPY[l].label}
+              </LineOnly>
+            ))}
+          </label>
           <input
             id="rq-vehicle"
             className="pub-input"

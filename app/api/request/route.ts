@@ -71,7 +71,11 @@ export async function POST(request: Request) {
   // calling anything — so one retry on the old signature cannot double-insert.
   // The shop's only contact channel must not go down over a label; the row
   // just reads 'automotive' until 0046 lands. Remove once 0046 is applied.
+  // Whether the stored row actually carries the line. After the fallback it
+  // doesn't (the row reads 'automotive'), so the email must not claim one.
+  let lineRecorded = true
   if (res.error?.code === 'PGRST202') {
+    lineRecorded = false
     res = await supabase.rpc('submit_service_request', args)
   }
   const { data, error } = res
@@ -101,7 +105,9 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           from: process.env.NOTIFY_FROM_EMAIL ?? 'onboarding@resend.dev',
           to: process.env.OWNER_NOTIFY_EMAIL,
-          subject: `New ${serviceLine} service request — ${name} (${vehicle})`,
+          subject: lineRecorded
+            ? `New ${serviceLine} service request — ${name} (${vehicle})`
+            : `New service request — ${name} (${vehicle})`,
           text: `A new service request just came in.\n\nOpen it: https://wingsnthings.repair/requests\n\n(Details are in the app, not this email.)`,
         }),
         signal: AbortSignal.timeout(4000),

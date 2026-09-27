@@ -63,8 +63,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // suppressHydrationWarning: the public page's pre-paint script may set
+  // data-line on <html> before React hydrates (app/(public)/page.tsx). It
+  // covers this element's own attributes only, not anything inside it.
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${barlow.variable} ${barlowCondensed.variable} ${inter.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}>
         <SWRegister />
         {children}

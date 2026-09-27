@@ -1807,6 +1807,91 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   outline: none;
   box-shadow: var(--focus-ring);
 }
+/* Selected state lives here, not inline, so the pre-hydration #aviation
+   rules below can paint it before React loads. "What we do" tabs: */
+.pub-svc-tab {
+  background: transparent;
+  color: #2a3040;
+}
+.pub-svc-tab[aria-selected="true"] {
+  background: #10141c;
+  color: #f0a832;
+}
+/* The request form's pills; the check is the non-color state signal. */
+.pub-line-pill {
+  background: #1a202c;
+  color: #aeb6c4;
+  border: 1px solid #222a38;
+}
+.pub-line-pill[aria-checked="true"] {
+  background: #f0a832;
+  color: #201503;
+  border-color: #f0a832;
+}
+.pub-line-check {
+  display: none;
+}
+.pub-line-pill[aria-checked="true"] .pub-line-check {
+  display: inline;
+}
+
+/* ── /#aviation before hydration ─────────────────────────────────
+   The static HTML is always the automotive render (aviation `hidden`,
+   Automotive selected). An inline script in app/(public)/page.tsx sets
+   html[data-line="aviation"] before the first paint when the hash asks
+   for it, and these rules show that side until React takes over. The
+   store in components/public/ServiceLine.tsx keeps the attribute equal to
+   its own value on every change, so afterwards these rules only ever
+   agree with what React renders.
+
+   The selected-state flips out-specify the rules above (0,3,1 vs 0,2,0). */
+html[data-line="aviation"] .pub-svc-tab[data-line-tab="aviation"] {
+  background: #10141c;
+  color: #f0a832;
+}
+html[data-line="aviation"] .pub-svc-tab[data-line-tab="automotive"] {
+  background: transparent;
+  color: #2a3040;
+}
+html[data-line="aviation"] .pub-line-pill[data-line-tab="aviation"] {
+  background: #f0a832;
+  color: #201503;
+  border-color: #f0a832;
+}
+html[data-line="aviation"] .pub-line-pill[data-line-tab="automotive"] {
+  background: #1a202c;
+  color: #aeb6c4;
+  border-color: #222a38;
+}
+html[data-line="aviation"] [data-line-tab="aviation"] .pub-line-check {
+  display: inline;
+}
+html[data-line="aviation"] [data-line-tab="automotive"] .pub-line-check {
+  display: none;
+}
+
+/* Showing an element that carries `hidden` means beating Tailwind's
+   preflight, which is `[hidden]:where(:not([hidden="until-found"])) {
+   display: none !important }` inside @layer base. For !important
+   declarations the cascade runs layers in REVERSE — base beats utilities
+   beats unlayered — so an unlayered !important here would LOSE no matter
+   its specificity. These rules therefore sit in @layer base too, where
+   specificity decides: (0,3,2) against preflight's (0,1,0).
+
+   The restored display values are the elements' own defaults: LineOnly and
+   the tab panels are plain divs (block) or spans (inline); any grid lives
+   on a child. */
+@layer base {
+  html[data-line="aviation"] [data-line-only="automotive"] {
+    display: none !important;
+  }
+  html[data-line="aviation"] div[data-line-only="aviation"][hidden] {
+    display: block !important;
+  }
+  html[data-line="aviation"] span[data-line-only="aviation"][hidden] {
+    display: inline !important;
+  }
+}
 
 /* ── Hangar section ──────────────────────────────────────────────
    The one-tap location switch on the hangar board: three equal segments,

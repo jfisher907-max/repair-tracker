@@ -39,6 +39,16 @@ alter table public.service_requests
 comment on column public.service_requests.service_line is
   'Which side of the shop the request is for: automotive (default; every row before 0046) or aviation. Set from the public page''s Automotive / Aviation choice via submit_service_request; shown as an "Aviation" chip in the owner''s Requests inbox.';
 
+-- The live signature, read from pg_proc on 2026-09-27 before this file was
+-- finalised (one row):
+--   submit_service_request(text,text,text,text,text,text,text,text,text,text)
+--   p_name text, p_phone text, p_email text, p_contact_pref text,
+--   p_vehicle text, p_message text, p_source text, p_company text,
+--   p_ip text, p_user_agent text
+-- This DROP names exactly that. If the live function has drifted, the DROP
+-- finds nothing, the CREATE below adds a second overload, and the check at
+-- the end of this file raises — rolling the whole migration back rather
+-- than leaving two versions that make every named call ambiguous.
 drop function if exists public.submit_service_request(text, text, text, text, text, text, text, text, text, text);
 
 create or replace function public.submit_service_request(
@@ -84,7 +94,7 @@ begin
   if length(v_vehicle) < 2 then
     return jsonb_build_object('ok', false, 'error',
       case when v_line = 'aviation'
-        then 'Tell us which aircraft this is about.'
+        then 'Tell us which aircraft this is about — type and tail number.'
         else 'Tell us which vehicle this is about.' end);
   end if;
   if length(v_message) < 5 then
@@ -132,3 +142,20 @@ grant execute on function public.submit_service_request(text, text, text, text, 
 
 comment on function public.submit_service_request(text, text, text, text, text, text, text, text, text, text, text) is
   'Public service-request intake. service_role only — called by /api/request, which observes the real IP (0025). p_service_line: ''aviation'' or anything else = ''automotive'' (0046).';
+
+-- Drift guard. The shop's only contact channel is this one function; two
+-- overloads would make every named call from the route ambiguous and take
+-- intake down. Exactly one must remain, or the migration is rolled back —
+-- which holds when this file is run as ONE batch (the SQL editor and
+-- apply_migration both do; a multi-statement query is one implicit
+-- transaction). Do not paste it in pieces.
+do $$
+declare
+  n int;
+begin
+  select count(*) into n from pg_proc where proname = 'submit_service_request';
+  if n <> 1 then
+    raise exception 'submit_service_request: expected exactly 1 function after 0046, found % — the live signature drifted from the DROP above; rolling back', n;
+  end if;
+end;
+$$;
