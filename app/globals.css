@@ -1796,6 +1796,17 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .pub-input::placeholder {
   color: var(--ink-400);
 }
+/* The Automotive / Aviation tabs and the form's matching toggle — same
+   reason: the keyboard focus ring can't be an inline style. */
+.pub-tab {
+  outline: none;
+  transition: var(--transition-control);
+}
+.pub-tab:focus-visible,
+.pub-tabpanel:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
 
 /* ── Hangar section ──────────────────────────────────────────────
    The one-tap location switch on the hangar board: three equal segments,

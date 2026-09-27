@@ -2,6 +2,12 @@ import type { Metadata } from 'next'
 import WingMark from '@/components/WingMark'
 import RequestForm from '@/components/public/RequestForm'
 import RedirectIfOwner from '@/components/public/RedirectIfOwner'
+import {
+  LineOnly,
+  ServiceTabs,
+  type ServiceCard,
+  type ServiceLine,
+} from '@/components/public/ServiceLine'
 import { AUTH_STORAGE_KEY } from '@/lib/supabase'
 import { BRAND_TAGLINE } from '@/lib/brand'
 
@@ -17,6 +23,12 @@ import { BRAND_TAGLINE } from '@/lib/brand'
  *    The owner's app lives at /dashboard; RedirectIfOwner forwards a
  *    signed-in session there so the installed PWA still opens the shop.
  *
+ * The page tailors itself to one of two service lines — Automotive (the
+ * default) or Aviation — chosen by the tabs in "What we do" or the toggle at
+ * the top of the request form, and deep-linked by #aviation / #automotive.
+ * Both sides' copy is in the static HTML; the inactive side is `hidden`
+ * (see components/public/ServiceLine.tsx).
+ *
  * The visual language is the Bold Brand document system (charcoal band,
  * amber accent, Space Grotesk display) — the same paper a customer sees on
  * their quote and invoice, so the site and the documents read as one shop.
@@ -29,7 +41,7 @@ export const metadata: Metadata = {
     'Aviation and automotive service in Juneau, Alaska. Detail-focused, professional service: photo-documented work, online estimates you approve from your phone, and digital invoices. Request service online.',
 }
 
-const SERVICES = [
+const AUTOMOTIVE_SERVICES: ServiceCard[] = [
   {
     title: 'Diagnostics',
     body: 'Finding the actual fault. Scan, test, repair.',
@@ -56,23 +68,77 @@ const SERVICES = [
   },
 ]
 
-const STEPS = [
+// AWAITING THE OWNER: this list is a starting point pending Jake's
+// confirmation and additions — add, reword or drop cards here as the
+// aviation offering is settled. The panel sizes itself to however many
+// cards there are.
+const AVIATION_SERVICES: ServiceCard[] = [
   {
-    n: '1',
-    title: 'Tell us about your vehicle',
-    body: 'Use the request form below — the vehicle, what it’s doing, and how to reach you.',
+    title: 'Hangar Space',
+    body: 'Hangar space in Juneau, by arrangement.',
   },
   {
-    n: '2',
-    title: 'We come back with a plan',
-    body: 'Expect a reply within one business day: what we think it is, a written estimate, and a time and place for the vehicle that works for you.',
-  },
-  {
-    n: '3',
-    title: 'Approve from your phone',
-    body: 'Estimates are approved online — line by line if you want. Work is photo-documented, and your invoice is digital.',
+    title: 'Hangar Management',
+    body: 'Scheduling and upkeep for operators who base aircraft with us.',
   },
 ]
+
+const SERVICES: Record<ServiceLine, ServiceCard[]> = {
+  automotive: AUTOMOTIVE_SERVICES,
+  aviation: AVIATION_SERVICES,
+}
+
+interface Step {
+  n: string
+  title: string
+  body: string
+}
+
+const APPROVE_STEP: Step = {
+  n: '3',
+  title: 'Approve from your phone',
+  body: 'Estimates are approved online — line by line if you want. Work is photo-documented, and your invoice is digital.',
+}
+
+const STEPS: Record<ServiceLine, Step[]> = {
+  automotive: [
+    {
+      n: '1',
+      title: 'Tell us about your vehicle',
+      body: 'Use the request form below — the vehicle, what it’s doing, and how to reach you.',
+    },
+    {
+      n: '2',
+      title: 'We come back with a plan',
+      body: 'Expect a reply within one business day: what we think it is, a written estimate, and a time and place for the vehicle that works for you.',
+    },
+    APPROVE_STEP,
+  ],
+  aviation: [
+    {
+      n: '1',
+      title: 'Tell us about your aircraft',
+      body: 'Use the request form below — the aircraft, what it needs, and how to reach you.',
+    },
+    {
+      n: '2',
+      title: 'We come back with a plan',
+      body: 'Expect a reply within one business day: a written estimate, and a time and place for the aircraft that works for you.',
+    },
+    APPROVE_STEP,
+  ],
+}
+
+const REQUEST_INTRO: Record<ServiceLine, string> = {
+  automotive:
+    "Tell us about your vehicle and what it needs. We'll get back to you within one business day with an estimate and a plan for getting the vehicle in.",
+  aviation:
+    "Tell us about your aircraft and what it needs. We'll get back to you within one business day with an estimate and a plan for getting the aircraft in.",
+}
+
+// Local, not ServiceLine.tsx's SERVICE_LINES: a value exported from a
+// 'use client' module arrives here as a client reference, not an array.
+const LINES: ServiceLine[] = ['automotive', 'aviation']
 
 export default function LandingPage() {
   return (
@@ -150,16 +216,33 @@ export default function LandingPage() {
         <section style={{ background: '#ffffff', borderTop: '1px solid #dadde4', borderBottom: '1px solid #dadde4' }}>
           <div className="mx-auto max-w-4xl px-5 py-12">
             <h2
+              id="what-we-do"
               className="text-xs font-semibold uppercase tracking-widest"
               style={{ color: '#5f6779' }}
             >
               What we do
             </h2>
-            <div className="mt-6 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
-              {SERVICES.map((s) => (
-                <div key={s.title}>
+            <ServiceTabs labelledBy="what-we-do" services={SERVICES} />
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section className="mx-auto max-w-4xl px-5 py-12">
+          <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5f6779' }}>
+            How it works
+          </h2>
+          {LINES.map((line) => (
+            <LineOnly key={line} line={line} className="mt-6 grid gap-6 sm:grid-cols-3">
+              {STEPS[line].map((s) => (
+                <div key={s.n}>
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-base font-bold"
+                    style={{ background: '#10141c', color: '#f0a832', fontFamily: 'var(--font-doc-display), sans-serif' }}
+                  >
+                    {s.n}
+                  </span>
                   <h3
-                    className="text-base font-semibold"
+                    className="mt-3 text-base font-semibold"
                     style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
                   >
                     {s.title}
@@ -169,36 +252,8 @@ export default function LandingPage() {
                   </p>
                 </div>
               ))}
-            </div>
-          </div>
-        </section>
-
-        {/* How it works */}
-        <section className="mx-auto max-w-4xl px-5 py-12">
-          <h2 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#5f6779' }}>
-            How it works
-          </h2>
-          <div className="mt-6 grid gap-6 sm:grid-cols-3">
-            {STEPS.map((s) => (
-              <div key={s.n}>
-                <span
-                  className="flex h-9 w-9 items-center justify-center rounded-full text-base font-bold"
-                  style={{ background: '#10141c', color: '#f0a832', fontFamily: 'var(--font-doc-display), sans-serif' }}
-                >
-                  {s.n}
-                </span>
-                <h3
-                  className="mt-3 text-base font-semibold"
-                  style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
-                >
-                  {s.title}
-                </h3>
-                <p className="mt-1 text-sm leading-relaxed" style={{ color: '#2a3040' }}>
-                  {s.body}
-                </p>
-              </div>
-            ))}
-          </div>
+            </LineOnly>
+          ))}
         </section>
 
         {/* Request form — the one and only contact channel. */}
@@ -215,9 +270,11 @@ export default function LandingPage() {
               Request service
             </h2>
             <p className="mt-2 max-w-xl text-sm leading-relaxed" style={{ color: '#8b94a7' }}>
-              Tell us about your vehicle and what it needs. We&apos;ll get back to you
-              within one business day with an estimate and a plan for getting
-              the vehicle in.
+              {LINES.map((line) => (
+                <LineOnly key={line} line={line} as="span">
+                  {REQUEST_INTRO[line]}
+                </LineOnly>
+              ))}
             </p>
             <div className="mt-8">
               <RequestForm />

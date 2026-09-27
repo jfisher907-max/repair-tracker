@@ -16,6 +16,9 @@ interface ServiceRequest {
   message: string
   status: 'new' | 'contacted' | 'closed'
   source: string
+  // Which side of the public page it came from (migration 0046). Optional:
+  // before 0046 is applied select('*') has no such key — read as automotive.
+  service_line?: 'automotive' | 'aviation'
   created_at: string
 }
 
@@ -91,6 +94,9 @@ export default function RequestsPage() {
               <span className="ml-2 text-sm" style={{ color: 'var(--text2)' }}>{r.vehicle}</span>
             </div>
             <div className="flex flex-none items-center gap-2">
+              {r.service_line === 'aviation' && (
+                <span className="chip" style={{ background: 'var(--bg3)' }}>Aviation</span>
+              )}
               {r.source !== 'web' && (
                 <span className="chip" style={{ background: 'var(--bg3)' }}>{r.source.toUpperCase()}</span>
               )}
