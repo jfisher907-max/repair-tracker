@@ -46,7 +46,7 @@ const LINE_COPY: Record<ServiceLine, { label: string; placeholder: string; hint:
   aviation: {
     label: 'Aircraft (type & tail number) *',
     placeholder: 'e.g. Challenger 350, N-number',
-    hint: 'The squawk, where the aircraft is parked, and when it needs to fly — anything helps.',
+    hint: 'The discrepancy, where the aircraft is parked, and when it needs to fly — anything helps.',
   },
 }
 

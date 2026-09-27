@@ -125,7 +125,7 @@ const STEPS: Record<ServiceLine, Step[]> = {
     {
       n: '1',
       title: 'Tell us about the aircraft',
-      body: 'Type and tail number, the squawk, where it’s parked, and who to reach — the crew or maintenance control.',
+      body: 'Type and tail number, the discrepancy, where it’s parked, and who to reach — the crew or maintenance control.',
     },
     {
       n: '2',
@@ -144,7 +144,7 @@ const REQUEST_INTRO: Record<ServiceLine, string> = {
   automotive:
     "Tell us about your vehicle and what it needs. We'll get back to you within one business day with an estimate and a plan for getting the vehicle in.",
   aviation:
-    'Tell us about the aircraft and the squawk. We’ll come back with an estimate and a plan to return it to service.',
+    'Tell us about the aircraft and the discrepancy. We’ll come back with an estimate and a plan to return it to service.',
 }
 
 // Runs at HTML parse time — before the first paint and before React loads —
