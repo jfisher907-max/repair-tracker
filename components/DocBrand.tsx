@@ -1,6 +1,7 @@
 'use client'
 
 import WingMark from '@/components/WingMark'
+import { BRAND_TAGLINE } from '@/lib/brand'
 
 /**
  * The charcoal brand band shared by every customer-facing document —
@@ -38,6 +39,9 @@ export default function DocBrand({
           <WingMark size={38} />
           <h1>{business.name || `${docType}${docRef ? ` ${docRef}` : ''}`}</h1>
         </div>
+        {/* Only under a real name: with the shop name unset the h1 falls back
+            to "INVOICE INV-016", and a tagline under that reads as nonsense. */}
+        {business.name && <p className="doc-tagline">{BRAND_TAGLINE}</p>}
         {(business.address || phoneEmail) && (
           <p className="doc-contact">
             {business.address && (

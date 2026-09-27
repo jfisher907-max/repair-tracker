@@ -3,6 +3,7 @@ import WingMark from '@/components/WingMark'
 import RequestForm from '@/components/public/RequestForm'
 import RedirectIfOwner from '@/components/public/RedirectIfOwner'
 import { AUTH_STORAGE_KEY } from '@/lib/supabase'
+import { BRAND_TAGLINE } from '@/lib/brand'
 
 /**
  * PUBLIC landing page — the address on the Google Business Profile.
@@ -99,13 +100,22 @@ export default function LandingPage() {
       {/* Charcoal brand band — same header the quotes and invoices wear. */}
       <header className="wnt-dark" style={{ background: '#10141c', color: '#f2f4f8' }}>
         <div className="mx-auto flex max-w-4xl items-center justify-between px-5 py-4">
-          <span
-            className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"
-            style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
-          >
-            <WingMark size={30} />
-            Wings N Things
-          </span>
+          <div className="min-w-0">
+            <span
+              className="flex items-center gap-2.5 text-lg font-semibold tracking-tight"
+              style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
+            >
+              <WingMark size={30} />
+              Wings N Things
+            </span>
+            {/* Same line, same place as the letterhead this band copies. */}
+            <span
+              className="mt-0.5 block text-[11px] font-semibold uppercase tracking-[0.18em]"
+              style={{ color: '#a7b0c2' }}
+            >
+              {BRAND_TAGLINE}
+            </span>
+          </div>
           <span className="text-xs uppercase tracking-widest" style={{ color: '#8b94a7' }}>
             Juneau, Alaska
           </span>

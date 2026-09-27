@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import WingMark from '@/components/WingMark'
-import { BRAND_NAME } from '@/lib/brand'
+import { BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand'
 import { usePathname } from 'next/navigation'
 import { useSyncExternalStore } from 'react'
 
@@ -119,6 +119,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Link href="/dashboard" className="display flex items-center gap-2 px-2 text-xl font-semibold">
           <WingMark size={22} /> {BRAND_NAME}
         </Link>
+        {/* Outside the link: the name is the click target, this is a label.
+            Desktop only - the phone header is a single row of controls and a
+            second line there costs the screen its scarcest space. */}
+        <div
+          className="px-2 pt-0.5 text-[10px] font-semibold uppercase tracking-[0.18em]"
+          style={{ color: 'var(--text3)' }}
+        >
+          {BRAND_TAGLINE}
+        </div>
         <nav className="mt-2 flex-1">
           <SideNavLinks pathname={pathname} />
         </nav>
