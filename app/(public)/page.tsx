@@ -24,9 +24,9 @@ import { BRAND_TAGLINE } from '@/lib/brand'
 
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
-  title: 'Wings N Things — Automotive Diagnostics & Repair in Juneau, Alaska',
+  title: 'Wings N Things — Aviation & Automotive Service in Juneau, Alaska',
   description:
-    'Premier automotive diagnostics and repair in Juneau, Alaska. Detail-focused, professional service: photo-documented work, online estimates you approve from your phone, and digital invoices. Request service online.',
+    'Aviation and automotive service in Juneau, Alaska. Detail-focused, professional service: photo-documented work, online estimates you approve from your phone, and digital invoices. Request service online.',
 }
 
 const SERVICES = [
@@ -130,7 +130,7 @@ export default function LandingPage() {
             className="max-w-2xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl"
             style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
           >
-            Premier automotive diagnostics&nbsp;&amp; repair.
+            Premier aviation&nbsp;&amp; automotive service.
           </h1>
           <p className="mt-4 max-w-xl text-lg leading-relaxed" style={{ color: '#2a3040' }}>
             Detail-focused, professional service in Juneau, Alaska. Clear
@@ -251,7 +251,7 @@ export default function LandingPage() {
             },
             areaServed: 'Juneau, Alaska',
             description:
-              'Premier automotive diagnostics and repair in Juneau, Alaska. Detail-focused, professional service with online estimates and digital invoices.',
+              'Aviation and automotive service in Juneau, Alaska. Detail-focused, professional service with online estimates and digital invoices.',
           }),
         }}
       />
