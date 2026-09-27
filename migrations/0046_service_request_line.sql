@@ -153,7 +153,8 @@ do $$
 declare
   n int;
 begin
-  select count(*) into n from pg_proc where proname = 'submit_service_request';
+  select count(*) into n from pg_proc
+   where proname = 'submit_service_request' and pronamespace = 'public'::regnamespace;
   if n <> 1 then
     raise exception 'submit_service_request: expected exactly 1 function after 0046, found % — the live signature drifted from the DROP above; rolling back', n;
   end if;
