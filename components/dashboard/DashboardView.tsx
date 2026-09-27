@@ -143,20 +143,62 @@ export default function DashboardView({
   // identity is earned − owed − parts for scheduled work + deposits held =
   // cash profit, and the scheduled pieces are named only when they are there.
   const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked - f.cashProfit
+  // Cash taken over a job's bill (J011: $240.00 on a $231.00 invoice) is cash
+  // in that settles nothing billed. It is named as that, never as timing —
+  // and what is left after it is called timing only when some cash in scope
+  // really does cross the year line (Finances.crossesYearLine).
+  // Cash above the charge on a done job with no invoice yet (paid ahead of the
+  // invoice: the sales tax it will bill) narrows the gap the same way.
+  const gapRest = bridgeGap + f.overCollected + f.paidAheadOfInvoice
+  // Written out: earned − cash profit = owed + parts for scheduled work −
+  // deposits held − cash over a bill − cash paid ahead + gapRest. gapRest
+  // keeps its OWN sign: positive widens the gap and reads "plus", negative
+  // narrows it and reads "less". Its sign is never dropped.
+  const restWord = f.crossesYearLine ? 'timing across the year line' : 'not reconciled'
+  // Timing is named without an amount; an unexplained residual with one.
+  const restPhrase = (cents: number) => (f.crossesYearLine ? restWord : `${money(cents)} ${restWord}`)
   // The pieces that WIDEN the gap between earned and cash (owed, parts out
-  // ahead of the work, timing) read "plus"; deposits held NARROW it — cash
-  // in ahead of the work — so they carry their own sign, "less".
+  // ahead of the work, a positive residual) read "plus"; deposits held, cash
+  // over a bill, cash paid ahead of an invoice and a negative residual
+  // NARROW it — cash in ahead of, or beyond, the work — and read "less".
   const plusParts = [
     f.owedJobs > 0 ? plural(f.owedJobs, 'unpaid job') : '',
     f.partsSpendOnBooked > 0 ? `${money(f.partsSpendOnBooked)} of parts bought for scheduled work` : '',
-    bridgeGap !== 0 ? 'timing across the year line' : '',
+    gapRest > 0 ? restPhrase(gapRest) : '',
   ].filter(Boolean)
-  const lessDeposits =
-    f.depositsOnBooked > 0 ? `less ${money(f.depositsOnBooked)} held as deposits on scheduled work` : ''
+  const overWords =
+    f.overCollected > 0
+      ? `${money(f.overCollected)} collected over the invoice (${f.overCollectedJobs.map((j) => j.jobNumber).join(', ')})`
+      : ''
+  const aheadWords =
+    f.paidAheadOfInvoice > 0
+      ? `${money(f.paidAheadOfInvoice)} paid ahead of the invoice (${f.paidAheadJobs.map((j) => j.jobNumber).join(', ')})`
+      : ''
+  const restLessWords = gapRest < 0 ? restPhrase(-gapRest) : ''
+  const lessDeposits = [
+    f.depositsOnBooked > 0 ? `${money(f.depositsOnBooked)} held as deposits on scheduled work` : '',
+    overWords,
+    aheadWords,
+    restLessWords,
+  ]
+    .filter(Boolean)
+    .map((w) => `less ${w}`)
+    .join(', ')
   const restWords =
     plusParts.length === 0
       ? lessDeposits
-        ? `; ${money(f.depositsOnBooked)} of it is deposits held on scheduled work`
+        ? `; ${[
+            f.depositsOnBooked > 0 ? `${money(f.depositsOnBooked)} of it is deposits held on scheduled work` : '',
+            overWords ? `${overWords.replace(' collected', ' of it was collected')}` : '',
+            aheadWords ? `${aheadWords.replace(' paid ahead', ' of it was paid ahead')}` : '',
+            restLessWords
+              ? f.crossesYearLine
+                ? `some of it is ${restWord}`
+                : `${money(-gapRest)} of it is ${restWord}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('; ')}`
         : ''
       : plusParts.length === 1 && f.owedJobs > 0 && !lessDeposits
         ? `; the rest is the ${plusParts[0]}`
@@ -274,7 +316,10 @@ export default function DashboardView({
             .ledger-card's own grid-column and order keep it where it was. */}
         <MoneyLedger f={f} year={year} id={LEDGER_ID} now={now} hidden={!ledgerOpen} />
         <TrendTile
-          label="Unpaid balance"
+          // f.unpaid is the books' figure, BEFORE tax on purpose (the ledger
+          // and the monthly trend use it). The hint's per-job figure is the
+          // customer's paper balance, so the two are labelled by basis.
+          label="Unpaid balance, before tax"
           kind="money"
           total={f.unpaid}
           valueTone={f.unpaid > 0 ? 'owed' : undefined}
@@ -294,7 +339,8 @@ export default function DashboardView({
           hint={
             oldest ? (
               <>
-                <span className="wnt-id">{oldest.jobNumber}</span> {money(oldest.cents)} · {shortDate(oldest.date)} ·{' '}
+                <span className="wnt-id">{oldest.jobNumber}</span> {money(oldest.cents)}{' '}
+                {oldest.taxLine ? 'due with tax' : oldest.invoiced ? 'due' : 'before tax'} · {shortDate(oldest.date)} ·{' '}
                 {ageWords(oldestAge)}
                 <span className="hint-long">
                   {' '}

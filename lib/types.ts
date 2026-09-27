@@ -266,9 +266,11 @@ export interface Invoice {
   tax_rate_bp: number
   tax_cents: number
   total_cents: number
-  /** Sales tax hidden inside total_cents when no tax line was charged (0041):
-   *  the state's 5% of what the customer paid. Books only — the document the
-   *  customer sees is total_cents, unchanged. Always 0 when tax_cents > 0. */
+  /** Sales tax the shop owes when no tax line was charged (0041/0045): 5% OF
+   *  the invoiced price (CBJ Procedure 130 — it cannot be backed out of a
+   *  price that billed none), paid by the shop out of what the customer paid.
+   *  Books only — the document the customer sees is total_cents, unchanged.
+   *  Always 0 when tax_cents > 0. */
   included_tax_cents: number
   memo: string | null
   /** The approvals behind this bill, frozen with it (AS 45.45.170(d)). */

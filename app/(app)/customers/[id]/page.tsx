@@ -7,7 +7,7 @@ import JobRow from '@/components/JobRow'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
-import { unpaidBalanceCents } from '@/lib/calc'
+import { collectedForJob, governingInvoice, owedGrossCents } from '@/lib/calc'
 import { isBookedJob } from '@/lib/finances'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
@@ -18,6 +18,13 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [jobs, setJobs] = useState<JobWithContext[]>([])
+  /** Live invoices and ledger payments on this customer's jobs: what their balance is measured against. */
+  const [invoices, setInvoices] = useState<
+    { job_id: string; status: string; total_cents: number; created_at: string }[]
+  >([])
+  const [payments, setPayments] = useState<{ job_id: string; amount_cents: number }[]>([])
+  /** The invoice or payment read failed: no balance is shown rather than a wrong one. */
+  const [moneyFailed, setMoneyFailed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
   const [addingVehicle, setAddingVehicle] = useState(false)
@@ -31,6 +38,28 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
       fetchJobsWithContext(),
     ])
     const cust = c as Customer
+    const mine = all.filter((j) => j.customer?.id === id)
+    const jobIds = mine.map((j) => j.job.id)
+    // Invoices and payments are read BEFORE anything is set, so the page
+    // never renders the jobs with an empty ledger — that would briefly print
+    // "owes" at the pre-tax charge. A failed read shows as failed, not as a
+    // balance computed from nothing.
+    let inv: typeof invoices = []
+    let pay: typeof payments = []
+    let failed = false
+    if (jobIds.length) {
+      const [invRes, payRes] = await Promise.all([
+        supabase
+          .from('invoices')
+          .select('job_id, status, total_cents, created_at')
+          .in('job_id', jobIds)
+          .neq('status', 'void'),
+        supabase.from('payments').select('job_id, amount_cents').in('job_id', jobIds),
+      ])
+      failed = !!invRes.error || !!payRes.error
+      inv = (invRes.data as typeof invoices | null) ?? []
+      pay = (payRes.data as typeof payments | null) ?? []
+    }
     setCustomer(cust)
     setForm({
       name: cust?.name ?? '',
@@ -39,7 +68,10 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
       notes: cust?.notes ?? '',
     })
     setVehicles((v as Vehicle[]) ?? [])
-    setJobs(all.filter((j) => j.customer?.id === id))
+    setInvoices(inv)
+    setPayments(pay)
+    setMoneyFailed(failed)
+    setJobs(mine)
   }, [id])
 
   useEffect(() => {
@@ -51,14 +83,32 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
   // A scheduled or in-progress job (0043) is booked, not owed: its total is
   // shown as booked, not inside "owes", so this line agrees with the
   // dashboard, Billing and Reports about what the customer actually owes.
+  // "Owes" is their paper balance (owedGrossCents): the governing invoice's
+  // total, tax line included, less every payment — the figure the statement
+  // link below shows them, not the pre-tax charge. "Lifetime" is on the SAME
+  // basis — each done job at the larger of its charge and its governing
+  // invoice's total, the target owedGrossCents measures against — so what a
+  // customer owes can never exceed their lifetime total. Booked work has no
+  // bill yet and is labelled before tax.
   const lifetime = jobs.reduce(
     (acc, j) => {
       if (isBookedJob(j.job)) {
         acc.booked += j.totals?.total_charged_cents ?? 0
         return acc
       }
-      acc.charged += j.totals?.total_charged_cents ?? 0
-      acc.unpaid += j.totals ? unpaidBalanceCents(j.job, j.totals.total_charged_cents) : 0
+      if (!j.totals) return acc
+      const gov = governingInvoice(invoices.filter((i) => i.job_id === j.job.id))
+      acc.charged += Math.max(j.totals.total_charged_cents, gov?.total_cents ?? 0)
+      if (j.job.payment_status !== 'paid') {
+        const onLedger = payments.filter((p) => p.job_id === j.job.id)
+        const collected = collectedForJob(
+          j.job,
+          j.totals.total_charged_cents,
+          onLedger.reduce((s, p) => s + p.amount_cents, 0),
+          onLedger.length > 0,
+        )
+        acc.unpaid += owedGrossCents(j.totals.total_charged_cents, gov?.total_cents, collected)
+      }
       return acc
     },
     { charged: 0, unpaid: 0, booked: 0 },
@@ -153,18 +203,25 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
         )}
         <div className="flex flex-wrap items-center gap-3 border-t pt-2" style={{ borderColor: 'var(--border)' }}>
           <span className="text-sm" style={{ color: 'var(--text2)' }}>
-            {jobs.length} jobs · lifetime <b className="money">{formatCents(lifetime.charged)}</b>
-            {lifetime.unpaid > 0 && (
-              <> · owes <b className="money" style={{ color: 'var(--red)' }}>{formatCents(lifetime.unpaid)}</b></>
+            {jobs.length} jobs
+            {moneyFailed ? (
+              <> · <span style={{ color: 'var(--red)' }}>balances did not load — reload to see them</span></>
+            ) : (
+              <>
+                {' '}· lifetime <b className="money">{formatCents(lifetime.charged)}</b>
+                {lifetime.unpaid > 0 && (
+                  <> · owes <b className="money" style={{ color: 'var(--red)' }}>{formatCents(lifetime.unpaid)}</b></>
+                )}
+              </>
             )}
             {lifetime.booked > 0 && (
-              <> · booked <b className="money">{formatCents(lifetime.booked)}</b></>
+              <> · booked <b className="money">{formatCents(lifetime.booked)}</b> before tax</>
             )}
           </span>
           <Link href={`/report?customer=${id}`} className="btn btn-sm btn-primary">
             Print repair history
           </Link>
-          {lifetime.unpaid > 0 && (
+          {!moneyFailed && lifetime.unpaid > 0 && (
             <button
               className="btn btn-sm"
               onClick={async () => {

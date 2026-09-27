@@ -525,13 +525,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <DocView doc={doc} />
-      {/* Books only (0041): the document above is exactly what the customer
-          paid; this tells the owner how much of it belongs to the state. Never
-          passed into DocView, never on the public link, and off the print. */}
+      {/* Books only (0041/0045): the document above is exactly what the
+          customer paid; this tells the owner the sales tax they still owe on
+          it. Never passed into DocView, never on the public link, and off the
+          print. */}
       {(invoice.included_tax_cents ?? 0) > 0 && (
         <p className="no-print text-xs" style={{ color: 'var(--text3)' }}>
-          No tax line was charged; {formatCents(invoice.included_tax_cents)} of this total is sales
-          tax owed to the state.
+          No tax line was charged, so the customer paid the price only. You still owe the state{' '}
+          {formatCents(invoice.included_tax_cents)} sales tax on this price, out of your own money.
         </p>
       )}
     </div>

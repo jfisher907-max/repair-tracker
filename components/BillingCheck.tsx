@@ -849,7 +849,7 @@ export default function BillingCheck({
           </div>
           <div className="text-sm" style={{ color: 'var(--text2)' }}>
             Approved <b className="money">{formatCents(auth.authorized_cents)}</b> before tax · the job
-            now comes to <b className="money">{formatCents(auth.current_cents)}</b> · over by{' '}
+            now comes to <b className="money">{formatCents(auth.current_cents)}</b> before tax · over by{' '}
             <b className="money" style={{ color: 'var(--status-stop-fg)' }}>
               {formatCents(auth.over_cents)}
             </b>

@@ -1,3 +1,12 @@
+-- CORRECTED BY 0045 (comments only here; the SQL below is as applied): the
+-- "included tax = round(total × 5 / 105)" back-out and the claims that the
+-- tax sits "inside" the total and that total_charged_cents "is what the
+-- customer pays" are wrong. Under CBJ Procedure 130 the full invoiced price
+-- is the gross sale and the tax owed is 5% ON it, absorbed by the shop;
+-- total_charged_cents is the charge BEFORE any tax line, and the customer's
+-- bill is the governing invoice's total_cents. 0045 resets the six values
+-- and reissues both COMMENTs.
+--
 -- Sales tax that was never charged is still owed — it comes out of the total.
 --
 -- The owner's rule (2026-09-12): "Everything should default to having sales
@@ -49,8 +58,9 @@ update public.settings
   where default_tax_rate_bp = 0;
 
 -- ---------------------------------------------------------------------------
--- job_totals: profit now takes out the sales tax hidden inside an untaxed
--- invoice's total. total_charged_cents stays what the customer pays.
+-- job_totals: profit now takes out the sales tax the shop owes on an untaxed
+-- invoice (0045: 5% of its price). total_charged_cents is unchanged — the
+-- job's charge before any tax line, not the customer's bill (see 0045).
 --
 -- The governing invoice of a job is its largest-total non-void invoice — the
 -- revision rule used everywhere else (finances.ts, the job page). Ties break

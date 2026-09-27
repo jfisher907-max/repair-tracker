@@ -156,7 +156,9 @@ export default function ActionLane({
       title:
         f.unpaid > 0 ? (
           <>
-            Billing <span className="money money-owed">{money(f.unpaid)} owed</span>
+            {/* f.unpaid is before tax (the books' basis); an invoice's tax
+                line is on top of it, so the figure says so. */}
+            Billing <span className="money money-owed">{money(f.unpaid)} owed before tax</span>
           </>
         ) : (
           'Billing'

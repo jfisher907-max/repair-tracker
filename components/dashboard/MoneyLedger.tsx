@@ -44,26 +44,54 @@ export default function MoneyLedger({
   // work not started is cash that settles nothing billed yet, so it sits on
   // its own line after "collected on the work" and is not timing.
   const collectedOnWork = f.collected - f.taxCollected - f.depositsOnBooked
-  const timing = collectedOnWork - (f.charged - f.unpaid)
+  const residual = collectedOnWork - (f.charged - f.unpaid)
+  // Cash taken over a job's bill (J011: $240.00 on a $231.00 invoice) lands in
+  // collected but settles nothing billed. It is named for what it is, and
+  // only what is left after it can be timing — and it is called timing only
+  // when some cash in scope really does cross the year line.
+  // Cash above the charge on a done job with no invoice yet is not over any
+  // bill — the invoice will add sales tax on top — so it is its own row,
+  // "paid ahead of the invoice", never a tip and never timing.
+  const timing = residual - f.overCollected - f.paidAheadOfInvoice
+  const overWords = f.overCollectedJobs
+    .map((j) => `${money(j.cents)} on ${j.jobNumber}`)
+    .join(', ')
+  const aheadWords = f.paidAheadJobs
+    .map((j) => `${money(j.cents)} on ${j.jobNumber}`)
+    .join(', ')
+  const cashOverCharge = f.overCollected + f.paidAheadOfInvoice
   // Earned − owed equals cash profit only when the parts on this scope's jobs
   // are the parts bought in this scope — true inside a year, not across one —
   // once the cash that belongs to booked work (parts bought ahead, deposits
-  // held) is named. Written from the same figures the rows above use.
+  // held) and any cash over a bill are named. Written from the same figures
+  // the rows above use.
   const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked - f.cashProfit
+  const bridgeRest = bridgeGap + cashOverCharge
   const hasBookedCash = f.partsSpendOnBooked > 0 || f.depositsOnBooked > 0
   // Sales tax the state is owed comes in two ways: charged on a tax line, or
-  // hidden inside a total that went out with no tax line (the owner's rule:
-  // 5% of what those customers paid is the state's). Both add to the same
-  // "held for the state" figure; the split is shown so the second kind is
-  // never mistaken for money the shop kept. The invoice COUNT belongs only on
+  // owed by the shop on an invoice that went out with no tax line (the
+  // owner's rule; CBJ Procedure 130: 5% of the invoiced price, which the shop
+  // pays out of what those customers paid). Both add to the same "held for
+  // the state" figure; the split is shown so the second kind is never
+  // mistaken for money the shop kept. The invoice COUNT belongs only on
   // the job-dated "Billed" caption: the collected-side amounts follow payment
   // dates, and last year's untaxed job paid this year would show "0 invoices"
   // beside a real amount.
   const taxChargedCollected = f.taxCollected - f.taxIncludedCollected
   const taxNotYetCollected = f.taxBilled - f.taxCollected
+  // What earned takes off for the tax owed on untaxed invoices: by
+  // construction earned = labor + parts margin − that amount (finances.ts), so
+  // the row below makes the column add on screen without a second source.
+  const includedOffEarned = f.laborCharged + f.partsMarkup - f.earned
 
-  const laborShare = f.earned > 0 ? Math.max(0, Math.min(1, f.laborCharged / f.earned)) : 0
-  const partsShare = f.earned > 0 ? Math.max(0, Math.min(1 - laborShare, f.partsMarkup / f.earned)) : 0
+  // The split bar shows labor against parts margin, both out of ONE
+  // denominator — their sum — so the widths, the percentages and the dollars
+  // printed beside them all describe the same whole. (Out of earned, which
+  // is net of the tax row, the two shares summed past 100% and one had to be
+  // clamped, printing a percentage its own dollars did not match.)
+  const splitWhole = f.laborCharged + f.partsMarkup
+  const laborShare = splitWhole > 0 ? f.laborCharged / splitWhole : 0
+  const partsShare = splitWhole > 0 ? f.partsMarkup / splitWhole : 0
   const pctWords = (x: number) => `${Math.round(x * 100)}%`
 
   const partsCap = [
@@ -84,7 +112,7 @@ export default function MoneyLedger({
           label="Billed to customers, before sales tax"
           cap={`${plural(f.count, 'job')} done and dated ${scopeWords}, paid or not${
             f.taxIncludedBilled > 0
-              ? `; net of the ${money(f.taxIncludedBilled)} sales tax inside ${plural(f.taxIncludedInvoices, 'untaxed total')}`
+              ? `; less the ${money(f.taxIncludedBilled)} sales tax you owe on ${plural(f.taxIncludedInvoices, 'invoice')} sent with no tax line`
               : ''
           }`}
           amount={f.charged}
@@ -100,14 +128,38 @@ export default function MoneyLedger({
           amount={-f.unpaid}
           tone={f.unpaid > 0 ? 'owed' : undefined}
         />
-        {timing !== 0 && (
+        {f.overCollected > 0 && (
           <Row
-            op={timing > 0 ? '+' : '−'}
-            label="Paid in a different year from the job"
-            cap="payments count on the day they landed; billed and owed on the job's date"
-            amount={timing}
+            op="+"
+            label="Collected over the invoice"
+            cap={`${overWords}: more cash than the bill; a tip, or owed back`}
+            amount={f.overCollected}
           />
         )}
+        {f.paidAheadOfInvoice > 0 && (
+          <Row
+            op="+"
+            label="Paid ahead of the invoice"
+            cap={`${aheadWords}: more than the charge before tax on work not invoiced yet; the invoice will add the sales tax`}
+            amount={f.paidAheadOfInvoice}
+          />
+        )}
+        {timing !== 0 &&
+          (f.crossesYearLine ? (
+            <Row
+              op={timing > 0 ? '+' : '−'}
+              label="Paid in a different year from the job"
+              cap="payments count on the day they landed; billed and owed on the job's date"
+              amount={timing}
+            />
+          ) : (
+            <Row
+              op={timing > 0 ? '+' : '−'}
+              label="Not reconciled"
+              cap="no payment crosses a year line here; this difference is unexplained and worth a look"
+              amount={timing}
+            />
+          ))}
         <Row op="=" label="Collected on the work, before tax" amount={collectedOnWork} sum />
         {f.depositsOnBooked > 0 && (
           <Row
@@ -121,8 +173,8 @@ export default function MoneyLedger({
         {f.taxIncludedCollected > 0 && (
           <Row
             op="+"
-            label="Sales tax included in untaxed totals"
-            cap="on invoices that went out with no tax line; 5% of what those customers paid is the state's"
+            label="Sales tax you owe on untaxed invoices"
+            cap="no tax line was charged, so 5% of those invoiced prices comes out of what the customers paid"
             amount={f.taxIncludedCollected}
           />
         )}
@@ -131,7 +183,7 @@ export default function MoneyLedger({
         <Row
           op="−"
           label="Sales tax held for the state"
-          cap={f.taxIncludedCollected > 0 ? 'the state’s money, never yours: charged on top and included in untaxed totals' : 'the state’s money, never yours'}
+          cap={f.taxIncludedCollected > 0 ? 'the state’s money, never yours: charged on top, and owed by you on untaxed invoices' : 'the state’s money, never yours'}
           amount={-f.taxCollected}
         />
         <Row op="=" label="Cash profit, before overhead" amount={f.cashProfit} sum total tone={f.cashProfit >= 0 ? 'in' : 'owed'} />
@@ -156,8 +208,20 @@ export default function MoneyLedger({
               , plus the <b>{money(f.depositsOnBooked)}</b> held as deposits on scheduled work
             </>
           )}
-          {bridgeGap === 0 ? (
-            hasBookedCash ? (
+          {f.overCollected > 0 && (
+            <>
+              , plus the <b>{money(f.overCollected)}</b> collected over the invoice (
+              {f.overCollectedJobs.map((j) => j.jobNumber).join(', ')})
+            </>
+          )}
+          {f.paidAheadOfInvoice > 0 && (
+            <>
+              , plus the <b>{money(f.paidAheadOfInvoice)}</b> paid ahead of the invoice (
+              {f.paidAheadJobs.map((j) => j.jobNumber).join(', ')})
+            </>
+          )}
+          {bridgeRest === 0 ? (
+            hasBookedCash || cashOverCharge > 0 ? (
               <>
                 {' '}is <b>{money(f.cashProfit)}</b>, the cash profit: it adds to the cent.
                 {f.owedJobs > 0 && ' The parts on the unpaid jobs are already bought.'}
@@ -170,7 +234,16 @@ export default function MoneyLedger({
             )
           ) : (
             <>
-              {' '}is <b>{money(f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked)}</b>; cash profit is <b>{money(f.cashProfit)}</b>. The <b>{money(Math.abs(bridgeGap))}</b> between them is timing — parts bought, or payments landing, in a different year from their job.
+              {' '}is <b>{money(f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked + cashOverCharge)}</b>; cash profit is <b>{money(f.cashProfit)}</b>.{' '}
+              {f.crossesYearLine ? (
+                <>
+                  The <b>{money(Math.abs(bridgeRest))}</b> between them is timing — parts bought, or payments landing, in a different year from their job.
+                </>
+              ) : (
+                <>
+                  Nothing crosses a year line here, so the <b>{money(Math.abs(bridgeRest))}</b> between them is not timing; it is unexplained and worth a look.
+                </>
+              )}
             </>
           )}
         </p>
@@ -182,12 +255,12 @@ export default function MoneyLedger({
         <Row op="" label="Parts billed" amount={f.partsCharged} />
         <Row op="−" label="What the parts cost you" cap="counter tax included" amount={-f.partsCostOnJobs} />
         <Row op="=" label="Parts margin" amount={f.partsMarkup} sum />
-        {f.earned > 0 && f.laborCharged >= 0 && f.partsMarkup >= 0 && (
+        {splitWhole > 0 && f.laborCharged >= 0 && f.partsMarkup >= 0 && (
           <>
             <div
               className="split-bar"
               role="img"
-              aria-label={`Labor ${pctWords(laborShare)} of what the work earned, parts margin ${pctWords(partsShare)}`}
+              aria-label={`Of labor plus parts margin, ${money(splitWhole)}: labor ${pctWords(laborShare)}, parts margin ${pctWords(partsShare)}`}
             >
               <i className="split-labor" style={{ '--w': `${(laborShare * 100).toFixed(2)}%`, '--i': 0 } as CSSProperties} />
               <i className="split-parts" style={{ '--w': `${(partsShare * 100).toFixed(2)}%`, '--i': 1 } as CSSProperties} />
@@ -204,8 +277,24 @@ export default function MoneyLedger({
             </div>
           </>
         )}
+        {includedOffEarned !== 0 && (
+          <Row
+            op="−"
+            label="Sales tax you owe on untaxed invoices"
+            cap={`5% of the price on ${plural(f.taxIncludedInvoices, 'invoice')} sent with no tax line; the customers paid the price, so it comes out of yours`}
+            amount={-includedOffEarned}
+          />
+        )}
         {/* Overhead is taken off once, after cash profit in the first block. */}
-        <Row op="=" label="Earned on the work" cap="labor plus parts margin on the jobs done, paid or not, before overhead" amount={f.earned} sum total tone={f.earned >= 0 ? 'in' : 'owed'} />
+        <Row
+          op="="
+          label="Earned on the work"
+          cap={`labor plus parts margin${includedOffEarned !== 0 ? ', less that tax,' : ''} on the jobs done, paid or not, before overhead`}
+          amount={f.earned}
+          sum
+          total
+          tone={f.earned >= 0 ? 'in' : 'owed'}
+        />
       </div>
 
       {/* The state's money, shown as what it is: a figure you owe, not a
@@ -230,7 +319,7 @@ export default function MoneyLedger({
           />
         )}
         <p className="ledger-bridge">
-          The gross figure for {year === 'all' ? 'all time' : year}. Reports has it by filing quarter. Remittances are not
+          The gross figure for {year === 'all' ? 'all time' : year}, by payment date. Reports lists the tax BILLED by filing quarter (by invoice issue date); the two differ when an invoice is paid in a later quarter. Remittances are not
           recorded here yet, so nothing is taken off for returns already filed.
         </p>
       </div>

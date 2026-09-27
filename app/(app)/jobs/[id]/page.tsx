@@ -4,8 +4,8 @@ import Link from 'next/link'
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { computeTotals } from '@/lib/calc'
-import { buildInvoiceSnapshot, statusChipClass } from '@/lib/billing'
+import { collectedForJob, computeTotals, governingInvoice, overCollectedCents, owedGrossCents } from '@/lib/calc'
+import { buildInvoiceSnapshot, formatTaxRate, statusChipClass } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate, todayLocalIso } from '@/lib/date'
@@ -135,6 +135,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [stageBusy, setStageBusy] = useState(false)
   /** The "Booked for" date while it is being changed; null = show job.date. */
   const [bookedDraft, setBookedDraft] = useState<string | null>(null)
+  /** Settings' sales tax rate: what a new invoice on this job will carry. Null until read. */
+  const [defaultTaxRateBp, setDefaultTaxRateBp] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     const { data: j, error: jErr } = await supabase
@@ -154,7 +156,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     const [linesRes, receiptsRes, settingsRes, invoicesRes, paymentsRes, oksRes] = await Promise.all([
       supabase.from('part_lines').select('*').eq('job_id', id).order('created_at'),
       supabase.from('receipts').select('*').eq('job_id', id).order('created_at'),
-      supabase.from('settings').select('store_suggestions, parts_markup_enabled, parts_markup_tiers').single(),
+      supabase
+        .from('settings')
+        .select('store_suggestions, parts_markup_enabled, parts_markup_tiers, default_tax_rate_bp')
+        .single(),
       supabase.from('invoices').select('*').eq('job_id', id).order('created_at'),
       supabase.from('payments').select('*').eq('job_id', id).order('date'),
       // Chain order — the same (authorized_at, recorded_at, id) the database
@@ -173,6 +178,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     const recs = (receiptsRes.data as Receipt[]) ?? []
     setReceipts(recs)
     setStoreSuggestions(settingsRes.data?.store_suggestions ?? [])
+    setDefaultTaxRateBp(settingsRes.data?.default_tax_rate_bp ?? null)
     setRecs(await listForJob(id))
     setMarkup({
       enabled: !!settingsRes.data?.parts_markup_enabled,
@@ -236,39 +242,47 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  does it, and broken out below the cost line so the figure can be
    *  reconciled against the paper receipt. */
   const receiptTaxCents = receipts.reduce((s, r) => s + (r.tax_cents ?? 0), 0)
-  /** The governing invoice: the LARGEST live one (ties to the newest — the
-   *  list is in created_at order, so `>=` keeps the later revision), the same
-   *  rule job_totals and finances.ts use. Its included_tax_cents is the 5% the
-   *  state is owed out of a total that went out with no tax line (0041); it
-   *  comes off profit here so the figure matches job_totals. `?? 0` covers a
-   *  row read before the column exists. */
-  const governingInvoice = invoices
-    .filter((i) => i.status !== 'void')
-    .reduce<Invoice | null>((best, i) => (!best || i.total_cents >= best.total_cents ? i : best), null)
-  const includedTaxCents = governingInvoice?.included_tax_cents ?? 0
+  /** The governing invoice: the LARGEST live one, ties to the newest — the
+   *  same rule job_totals and finances.ts use (lib/calc governingInvoice). It
+   *  is what the customer is billed. Its included_tax_cents is the sales tax
+   *  the shop owes on an invoice that went out with no tax line — 5% of its
+   *  price, which the shop absorbs (0041/0045); it comes off profit here so
+   *  the figure matches job_totals. `?? 0` covers a row read before the
+   *  column exists. */
+  const govInvoice = governingInvoice(invoices)
+  const includedTaxCents = govInvoice?.included_tax_cents ?? 0
   const totals = computeTotals(job, lines, receiptTaxCents, includedTaxCents)
   // Ledger is authoritative once it has entries; jobs settled before payment
-  // tracking existed fall back to their cached status/amount.
+  // tracking existed fall back to their cached status/amount — the one rule
+  // in lib/calc collectedForJob, which every other surface calls too.
   const paidFromLedger = payments.reduce((s, p) => s + p.amount_cents, 0)
   const legacyPaid =
-    payments.length === 0
-      ? (job.amount_paid_cents ?? (job.payment_status === 'paid' ? totals.total_charged_cents : 0))
-      : 0
-  // What the customer actually owes: an issued invoice can add sales tax on
-  // top of the job's charge math, so the balance targets the larger figure.
-  //
-  // LARGEST live invoice, never the sum — every invoice snapshots the WHOLE
-  // job, so two live invoices are revisions of one debt, not two debts.
-  // (Same rule as syncJobPayment; summing here made the quick-settle panel
-  // offer to collect double.)
-  const invoicedTotal = invoices
-    .filter((i) => i.status !== 'void')
-    .reduce((s, i) => Math.max(s, i.total_cents), 0)
-  const owedTarget = Math.max(totals.total_charged_cents, invoicedTotal)
-  const balanceDue = Math.max(0, owedTarget - paidFromLedger - legacyPaid)
+    payments.length === 0 ? collectedForJob(job, totals.total_charged_cents, 0, false) : 0
   /** Money actually collected on this job. It, and nothing else, pins the
    *  stage at done (owner, 2026-09-12). */
   const collectedCents = paidFromLedger + legacyPaid
+  // What the customer actually owes (owedGrossCents): an issued invoice can
+  // add sales tax on top of the job's charge math, so the balance targets the
+  // larger figure. The GOVERNING invoice, never the sum — every invoice
+  // snapshots the WHOLE job, so two live invoices are revisions of one debt,
+  // not two debts. (Same rule as syncJobPayment; summing here made the
+  // quick-settle panel offer to collect double.)
+  const balanceDue = owedGrossCents(totals.total_charged_cents, govInvoice?.total_cents, collectedCents)
+  /** Cash taken beyond the bill (J011: $240.00 on a $231.00 invoice). Shown,
+   *  never hidden behind "Paid in full". With NO invoice yet it is measured
+   *  against the charge before tax, so it is not over any bill: it is cash
+   *  paid ahead of the invoice, which will add sales tax on top — labelled as
+   *  that below, never "over the invoice" (finances.ts: paidAheadOfInvoice). */
+  const overCollected = overCollectedCents(totals.total_charged_cents, govInvoice?.total_cents, collectedCents)
+  /** With no invoice yet: the invoice Create invoice would build right now, at
+   *  Settings' rate (Juneau's 5% if Settings did not load — the same fallback
+   *  createInvoice uses). Built by the same snapshot function, never
+   *  total_charged × rate. An estimate: the rate on the draft can change. */
+  const estimateRateBp = defaultTaxRateBp ?? 500
+  const invoiceEstimate = govInvoice ? null : buildInvoiceSnapshot(job, lines, estimateRateBp)
+  /** An invoice made before the job last changed: its pre-tax figure no longer
+   *  matches the job's. The invoice still governs what the customer owes. */
+  const invoicePreTax = govInvoice ? govInvoice.total_cents - govInvoice.tax_cents : null
   // Payments recorded here default onto the job's open invoice so it settles.
   const openInvoice = invoices.find((i) => i.status === 'draft' || i.status === 'sent')
   /** The job came from a quote: anything not on it goes past what the
@@ -707,6 +721,18 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       router.push(`/invoices/${openInvoice.id}`)
       return
     }
+    // A job settled before payment tracking (J001) is marked paid with no
+    // payments on record: its credit is the pre-tax charge. A new invoice
+    // would put sales tax on top of that and leave a balance the customer
+    // does not owe on a job that says "paid". Refuse, in plain words.
+    if (job!.payment_status === 'paid' && payments.length === 0) {
+      setActionMsg({
+        text: `${job!.job_number} was marked paid before payments were tracked, so there is no payment on record to set an invoice against. A new invoice would add sales tax on top of what the customer already paid and show a balance they do not owe. Nothing was created. To give them a copy of the bill, use ⋯ More → Print this job.`,
+        ok: false,
+      })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
     setInvoicing(true)
     try {
       // An invoice bills DONE work (0043). On a scheduled or in-progress job
@@ -1070,7 +1096,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         {payQuickOpen && job.payment_status !== 'paid' && (
           <div className="panel-in space-y-2 pt-2">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="label !mb-0">Settle {formatCents(balanceDue)} by</span>
+              <span className="label !mb-0">
+                Settle {formatCents(balanceDue)}
+                {govInvoice ? '' : ' before tax'} by
+              </span>
               {PAYMENT_METHODS.map((m) => (
                 <button
                   key={m.value}
@@ -1688,8 +1717,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         <Row label={`Labor (${Number(job.labor_hours)} hr × ${formatCents(job.labor_rate_cents)})`} value={totals.labor_charge_cents} />
         <Row label="Parts cost (what you paid)" value={totals.parts_cost_cents} />
         {receiptTaxCents > 0 && (
+          // What the SHOP paid the parts store in tax: a cost inside the line
+          // above. The customer's sales tax is further down, by the bill.
           <div className="flex items-center justify-between text-xs" style={{ color: 'var(--text3)' }}>
-            <span>— of which sales tax at the counter</span>
+            <span>— incl. tax you paid the parts store (your cost)</span>
             <span className="money">{formatCents(receiptTaxCents)}</span>
           </div>
         )}
@@ -1735,9 +1766,56 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </button>
           </div>
         )}
+        {/* The customer's side: the charge before tax, the sales tax, and the
+            bill. With an invoice, tax and bill are read off the governing
+            invoice itself — never the charge × a rate, which would invent tax
+            on the untaxed invoices. With none yet, the invoice Create invoice
+            would build now, marked as an estimate. */}
         <div className="border-t pt-1" style={{ borderColor: 'var(--border2)' }}>
-          <Row label="Total charged" value={totals.total_charged_cents} bold />
+          <Row label="Charged before tax" value={totals.total_charged_cents} />
+          {govInvoice ? (
+            <>
+              <Row
+                label={
+                  govInvoice.tax_cents > 0
+                    ? `Sales tax (${formatTaxRate(govInvoice.tax_rate_bp)})`
+                    : 'Sales tax (none on the invoice)'
+                }
+                value={govInvoice.tax_cents}
+              />
+              <Row
+                label={
+                  govInvoice.status === 'draft'
+                    ? `To bill (${govInvoice.invoice_number}, draft)`
+                    : `Billed to customer (${govInvoice.invoice_number})`
+                }
+                value={govInvoice.total_cents}
+                bold
+              />
+            </>
+          ) : (
+            invoiceEstimate && (
+              <>
+                <Row
+                  label={`Sales tax when invoiced (${formatTaxRate(estimateRateBp)}, estimate)`}
+                  value={invoiceEstimate.tax_cents}
+                />
+                <Row label="Will bill" value={invoiceEstimate.total_cents} bold />
+              </>
+            )
+          )}
         </div>
+        {govInvoice && invoicePreTax !== null && invoicePreTax !== totals.total_charged_cents && (
+          <p className="text-xs" style={{ color: 'var(--status-wait-fg)' }}>
+            {govInvoice.invoice_number} was made when the job came to {formatCents(invoicePreTax)} before
+            tax; it comes to {formatCents(totals.total_charged_cents)} now.{' '}
+            {/* The balance targets the LARGER of the two (owedGrossCents), so
+                the note names whichever one the balance below is using. */}
+            {totals.total_charged_cents > govInvoice.total_cents
+              ? `That is more than the invoice's whole ${formatCents(govInvoice.total_cents)}, so the balance below is measured against ${formatCents(totals.total_charged_cents)}, which is not on any invoice the customer has. Void and reissue the invoice so their paper matches.`
+              : `The balance below is measured against the invoice's ${formatCents(govInvoice.total_cents)}, which is what the customer was billed.`}
+          </p>
+        )}
         <div
           className="mt-2 flex items-center justify-between rounded-lg px-3 py-2"
           style={{ background: 'var(--bg2)', border: '1px dashed var(--border2)' }}
@@ -1751,8 +1829,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         </div>
         {includedTaxCents > 0 && (
           <p className="text-xs" style={{ color: 'var(--text3)' }}>
-            Includes {formatCents(includedTaxCents)} sales tax owed to the state (this invoice went
-            out with no tax line).
+            {govInvoice?.invoice_number ?? 'The invoice'} went out with no tax line, so the customer
+            paid the price only. You still owe the state {formatCents(includedTaxCents)} sales tax on
+            that price; it is taken off the profit above.
           </p>
         )}
         {awaitingLines.length > 0 && (
@@ -1793,7 +1872,21 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             className="money text-sm font-bold"
             style={{ color: balanceDue > 0 ? 'var(--red)' : 'var(--green)' }}
           >
-            {balanceDue > 0 ? `Balance due ${formatCents(balanceDue)}` : 'Paid in full ✓'}
+            {/* With no invoice the balance is measured against the charge
+                BEFORE tax (the "Will bill" figure above adds the tax), so it
+                says so, and cash above that charge is paid ahead of the
+                invoice — never "over" a bill that does not exist yet. */}
+            {govInvoice
+              ? balanceDue > 0
+                ? `Balance due ${formatCents(balanceDue)}`
+                : overCollected > 0
+                  ? `Paid in full ✓ · ${formatCents(overCollected)} over the invoice`
+                  : 'Paid in full ✓'
+              : balanceDue > 0
+                ? `Balance due ${formatCents(balanceDue)} before tax`
+                : overCollected > 0
+                  ? `Paid before tax ✓ · ${formatCents(overCollected)} paid ahead of the invoice`
+                  : 'Paid before tax ✓'}
           </span>
         </div>
 

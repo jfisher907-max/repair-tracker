@@ -1,3 +1,8 @@
+-- SUPERSEDED BY 0045: the formula below backs the tax out of the price
+-- (total × 500/10500), which CBJ Procedure 130 does not allow. The tax owed
+-- is 5% OF the invoiced price, absorbed by the shop; 0045 resets the six
+-- values to round(total_cents × 0.05). Do not re-run this file.
+--
 -- Backfill included_tax_cents on the six invoices that went out with no tax
 -- line (see 0041 for the owner's rule and why the documents do not change).
 --

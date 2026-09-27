@@ -50,7 +50,15 @@ export default function JobRow({ item }: { item: JobWithContext }) {
         </div>
       </div>
       <div className="text-right">
-        <div className="money font-semibold">{formatCents(totals?.total_charged_cents)}</div>
+        {/* The job's charge BEFORE sales tax (job_totals.total_charged_cents):
+            an invoice adds its tax line on top, so say so rather than let a
+            scheduled job read 5% under the bill it will get. */}
+        <div className="money font-semibold">
+          {formatCents(totals?.total_charged_cents)}
+          <span className="ml-1 text-[0.65rem] font-normal" style={{ color: 'var(--text3)' }}>
+            before tax
+          </span>
+        </div>
         {booked ? (
           job.stage === 'scheduled' ? (
             <span className="chip chip-booked">scheduled</span>
