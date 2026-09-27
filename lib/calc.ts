@@ -134,9 +134,14 @@ export function governingInvoice<T extends { status: string; total_cents: number
  * total (an issued invoice can add sales tax on top of the job's charge
  * math), less the money collected on the job (collectedForJob). Never below 0.
  *
- * The one definition for every collections surface (the job page, Reports'
- * receivables and aging, the customer page, the dashboard's oldest-owed). It
- * is NOT Finances.unpaid, which is the pre-tax figure on purpose.
+ * The one definition for the owner's collections surfaces (the job page,
+ * Reports' receivables and aging, the dashboard's oldest-owed), and the same
+ * target refresh_job_payment_cache sets a job's paid status against. The
+ * customer page and the statement link use statementTotalCents, which agrees
+ * with this on every invoiced job (the same greatest(), less 0035's
+ * approved-estimate cap on the charge) and, on a finished job with no invoice
+ * yet, adds the sales tax the invoice will bill. It is NOT Finances.unpaid,
+ * which is the pre-tax figure on purpose.
  */
 export function owedGrossCents(
   totalChargedCents: number,
@@ -147,9 +152,11 @@ export function owedGrossCents(
 }
 
 /**
- * Over-collection: cash taken on a job beyond what it is owed (the larger of
- * its charge and its governing invoice's total). 0 when nothing is over.
- * J011 is the live case: $240.00 cash against a $231.00 invoice.
+ * Over-collection: PAYMENT cash taken on a job beyond what it is owed (the
+ * larger of its charge and its governing invoice's total). 0 when nothing is
+ * over. Tips are not payments (0048) and never reach this: J011's $240.00 on
+ * a $231.00 invoice was over by $9.00 until 0048 recorded the $9.00 as a tip.
+ * What is left here is money to record as a tip or to give back.
  */
 export function overCollectedCents(
   totalChargedCents: number,
@@ -157,4 +164,63 @@ export function overCollectedCents(
   collectedCents: number,
 ): number {
   return Math.max(0, collectedCents - Math.max(totalChargedCents, governingInvoiceTotalCents ?? 0))
+}
+
+/**
+ * The rate the shop OWES the city on a sale — the books' rate: Settings'
+ * default when it is above 0, else Juneau's 5%. Settings at 0% means
+ * documents go out with no tax line, never that no tax is owed, so this never
+ * returns 0. The same rule as the 0047 trigger (which books included_tax_cents
+ * at it) and the invoice page's untaxed banner. NOT the rate a customer is
+ * billed: that is billedTaxRateBp.
+ */
+export function effectiveTaxRateBp(defaultTaxRateBp: number | null | undefined): number {
+  return defaultTaxRateBp != null && defaultTaxRateBp > 0 ? defaultTaxRateBp : 500
+}
+
+/**
+ * The rate a customer is BILLED on a new invoice: Settings' default as the
+ * owner set it — 0 stays 0 ("0% means documents go out untaxed", Settings) —
+ * and Juneau's 5% only when Settings did not load (0041: never untaxed by
+ * accident). Create invoice, the job page's invoice estimate, the customer
+ * page and the statement (0049: coalesce(settings rate, 500)) all use this,
+ * so what a statement shows for an uninvoiced job is what its invoice will
+ * bill.
+ */
+export function billedTaxRateBp(defaultTaxRateBp: number | null | undefined): number {
+  return defaultTaxRateBp ?? 500
+}
+
+/**
+ * What a job stands at on the customer's STATEMENT — mirror of the
+ * total_cents case in get_public_statement (migration 0049); keep identical.
+ *
+ *  - a live invoice: the larger of the capped charge and the governing
+ *    invoice's total (tax line included) — 0035's greatest(), unchanged, so
+ *    it matches owedGrossCents and the job's paid status when the job grew
+ *    after its invoice;
+ *  - no invoice yet: the before-tax charge, capped at the approved total when
+ *    there is a real approved estimate (0035), PLUS the sales tax the invoice
+ *    will carry (billedTaxRateBp), rounded exactly as lib/billing
+ *    buildInvoiceSnapshot rounds it.
+ *
+ * The statement lists finished (done) work only; callers filter the stage.
+ */
+export function statementTotalCents(input: {
+  totalChargedCents: number
+  governingInvoiceTotalCents: number | null | undefined
+  /** job_authorized_totals for the job; null/undefined = no quote behind it. */
+  auth?: { checked: boolean; quoted_cents: number; authorized_cents: number } | null
+  /** settings.default_tax_rate_bp as stored; billedTaxRateBp applies the fallback. */
+  defaultTaxRateBp: number | null | undefined
+}): number {
+  const a = input.auth
+  const capped =
+    a && a.checked && a.quoted_cents > 0
+      ? Math.min(input.totalChargedCents, a.authorized_cents)
+      : input.totalChargedCents
+  if (input.governingInvoiceTotalCents != null) {
+    return Math.max(capped, input.governingInvoiceTotalCents)
+  }
+  return capped + Math.round((capped * billedTaxRateBp(input.defaultTaxRateBp)) / 10000)
 }

@@ -7,7 +7,8 @@ import DocView, { type DocData } from '@/components/DocView'
 import { useDocumentTitle } from '@/lib/title'
 import { listForJob, toMemo } from '@/lib/recommendations'
 import { supabase } from '@/lib/supabase'
-import { buildInvoiceSnapshot, statusChipClass } from '@/lib/billing'
+import { buildInvoiceSnapshot, formatTaxRate, statusChipClass } from '@/lib/billing'
+import { effectiveTaxRateBp } from '@/lib/calc'
 import { buildAuthorizationTrail, isOverApproval, loadJobAuthorization } from '@/lib/authorization'
 import { PAYMENT_METHODS, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
@@ -38,6 +39,10 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [editingMemo, setEditingMemo] = useState(false)
   const [memoInput, setMemoInput] = useState('')
   const [savingMemo, setSavingMemo] = useState(false)
+  /** Recording the customer's sales-tax exemption on an untaxed draft (0047). */
+  const [exemptOpen, setExemptOpen] = useState(false)
+  const [exemptInput, setExemptInput] = useState('')
+  const [savingExempt, setSavingExempt] = useState(false)
 
   const load = useCallback(async () => {
     const { data: inv } = await supabase.from('invoices').select('*').eq('id', id).single()
@@ -172,6 +177,21 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   if (!invoice) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
   const publicUrl = `${window.location.origin}/i/${invoice.public_token}`
+  /** The rate this invoice owes the city: the rate pinned when it was issued
+   *  (0047; a paid invoice that fell back to draft keeps it), else Settings'
+   *  default, else 5% — and what that comes to on this price. The same
+   *  arithmetic the 0047 trigger books into included_tax_cents: the rate on
+   *  the selling price (total − tax line), less the tax line. */
+  const untaxedRateBp = invoice.included_tax_rate_bp ?? effectiveTaxRateBp(settings?.default_tax_rate_bp)
+  const untaxedTaxOwed = Math.round((invoice.total_cents * untaxedRateBp) / 10000)
+  /** A tax line charged below the city's rate: the rest is still owed. */
+  const taxShortfall =
+    invoice.tax_cents > 0
+      ? Math.max(
+          0,
+          Math.round(((invoice.total_cents - invoice.tax_cents) * untaxedRateBp) / 10000) - invoice.tax_cents,
+        )
+      : 0
   const doc: DocData = {
     docType: 'Invoice',
     number: invoice.invoice_number,
@@ -310,29 +330,91 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               {refreshing ? 'Updating…' : '↻ Update from job'}
             </button>
           )}
-          {/* Owner rule 2026-09-12: every invoice defaults to sales tax, and six
-              went out untaxed before he knew the system. A 0% draft says so out
-              loud, with the fix one tap away; an issued invoice is left alone. */}
-          {invoice.status === 'draft' && (invoice.tax_rate_bp ?? 0) === 0 && (
+          {/* Owner rules 2026-09-12 and 2026-09-27: every invoice defaults to
+              sales tax, and an untaxed one still owes the city 5% of its price
+              (CBJ Procedure 130) unless the customer is exempt. A draft with
+              no tax says so out loud, with both fixes one tap away: charge the
+              tax, or record the exemption. The 0047 trigger books the tax owed
+              (or 0 for an exemption) on the invoice itself; an issued invoice
+              is left alone. */}
+          {invoice.status === 'draft' && invoice.tax_cents === 0 && invoice.total_cents > 0 && (
+            <div
+              className="flex basis-full flex-wrap items-center gap-2 rounded-lg p-2 text-sm"
+              style={{ background: 'var(--status-wait-bg)', color: 'var(--status-wait-fg)' }}
+              role="status"
+            >
+              {invoice.tax_exempt_note ? (
+                <>
+                  <span className="min-w-0 flex-1">
+                    No sales tax: the customer is exempt — <b>{invoice.tax_exempt_note}</b>. Nothing is
+                    owed to the city on this invoice.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => {
+                      setExemptInput(invoice.tax_exempt_note ?? '')
+                      setExemptOpen(!exemptOpen)
+                    }}
+                  >
+                    Edit exemption
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="min-w-0 flex-1">
+                    No sales tax on this invoice. Unless the customer is exempt, you still owe the city{' '}
+                    {formatTaxRate(untaxedRateBp)} of the price ({formatCents(untaxedTaxOwed)}), and it
+                    comes out of your profit.
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    disabled={refreshing}
+                    onClick={async () => {
+                      const { data } = await supabase.from('settings').select('default_tax_rate_bp').single()
+                      await refreshFromJob(
+                        invoice.included_tax_rate_bp ?? effectiveTaxRateBp(data?.default_tax_rate_bp),
+                      )
+                    }}
+                  >
+                    Apply {formatTaxRate(untaxedRateBp)}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => {
+                      setExemptInput('')
+                      setExemptOpen(!exemptOpen)
+                    }}
+                    aria-expanded={exemptOpen}
+                  >
+                    Customer is exempt
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+          {/* A tax line BELOW the city's rate (the "% Tax" editor takes any
+              value): the rest is still owed, and 0047 books it. */}
+          {invoice.status === 'draft' && taxShortfall > 0 && !invoice.tax_exempt_note && (
             <div
               className="flex basis-full flex-wrap items-center gap-2 rounded-lg p-2 text-sm"
               style={{ background: 'var(--status-wait-bg)', color: 'var(--status-wait-fg)' }}
               role="status"
             >
               <span className="min-w-0 flex-1">
-                No sales tax on this draft. Every invoice defaults to 5%, and an untaxed one still owes
-                the state 5% out of its total.
+                This invoice charges {formatTaxRate(invoice.tax_rate_bp ?? 0)} sales tax; the city&apos;s rate
+                is {formatTaxRate(untaxedRateBp)}. You still owe the other {formatCents(taxShortfall)}, and it
+                comes out of your profit.
               </span>
               <button
                 type="button"
                 className="btn btn-sm btn-primary"
                 disabled={refreshing}
-                onClick={async () => {
-                  const { data } = await supabase.from('settings').select('default_tax_rate_bp').single()
-                  await refreshFromJob(data?.default_tax_rate_bp || 500)
-                }}
+                onClick={() => refreshFromJob(untaxedRateBp)}
               >
-                Apply 5%
+                Apply {formatTaxRate(untaxedRateBp)}
               </button>
             </div>
           )}
@@ -422,6 +504,52 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             <span className="text-xs" style={{ color: 'var(--text3)' }}>
               0 removes the tax line entirely.
             </span>
+          </div>
+        )}
+        {exemptOpen && invoice.status === 'draft' && invoice.tax_cents === 0 && (
+          <div className="panel-in space-y-2">
+            <label className="label !mb-0" htmlFor="tax-exempt-note">
+              Why is this sale exempt?
+            </label>
+            <input
+              id="tax-exempt-note"
+              className="input"
+              placeholder="CBJ senior card #1234 · non-profit card · work done outside the borough"
+              value={exemptInput}
+              onChange={(e) => setExemptInput(e.target.value)}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={savingExempt || exemptInput.trim() === ''}
+                onClick={async () => {
+                  setSavingExempt(true)
+                  await patch({ tax_exempt_note: exemptInput.trim() })
+                  setSavingExempt(false)
+                  setExemptOpen(false)
+                }}
+              >
+                {savingExempt ? 'Saving…' : 'Save exemption'}
+              </button>
+              {invoice.tax_exempt_note && (
+                <button
+                  className="btn btn-sm"
+                  disabled={savingExempt}
+                  onClick={async () => {
+                    setSavingExempt(true)
+                    await patch({ tax_exempt_note: null })
+                    setSavingExempt(false)
+                    setExemptOpen(false)
+                  }}
+                >
+                  Not exempt after all
+                </button>
+              )}
+              <button className="btn btn-sm" onClick={() => setExemptOpen(false)}>Cancel</button>
+              <span className="text-xs" style={{ color: 'var(--text3)' }}>
+                Kept with your books for the city&apos;s records; the customer&apos;s link does not show it.
+              </span>
+            </div>
           </div>
         )}
         {refreshMsg && (
@@ -525,14 +653,31 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       </div>
 
       <DocView doc={doc} />
-      {/* Books only (0041/0045): the document above is exactly what the
-          customer paid; this tells the owner the sales tax they still owe on
-          it. Never passed into DocView, never on the public link, and off the
-          print. */}
-      {(invoice.included_tax_cents ?? 0) > 0 && (
+      {/* Books only (0041/0045/0047): the document above is exactly what the
+          customer was billed; this tells the owner the sales tax they still
+          owe on it, or the exemption that means they owe none. Never passed
+          into DocView, never on the public link (get_public_invoice does not
+          return either column), and off the print. A draft says this in the
+          banner at the top instead. */}
+      {invoice.status !== 'draft' && invoice.tax_cents === 0 && invoice.tax_exempt_note && (
         <p className="no-print text-xs" style={{ color: 'var(--text3)' }}>
-          No tax line was charged, so the customer paid the price only. You still owe the state{' '}
-          {formatCents(invoice.included_tax_cents)} sales tax on this price, out of your own money.
+          Sales tax exempt: {invoice.tax_exempt_note}. Nothing is owed to the city on this invoice.
+        </p>
+      )}
+      {invoice.status !== 'draft' && (invoice.included_tax_cents ?? 0) > 0 && (
+        <p className="no-print text-xs" style={{ color: 'var(--text3)' }}>
+          {invoice.tax_cents > 0 ? (
+            <>
+              The tax line charged {formatCents(invoice.tax_cents)}, below the city&apos;s rate on this price.
+              You still owe the city the other {formatCents(invoice.included_tax_cents)}, out of your own
+              money.
+            </>
+          ) : (
+            <>
+              No tax line was charged, so the customer paid the price only. You still owe the city{' '}
+              {formatCents(invoice.included_tax_cents)} sales tax on this price, out of your own money.
+            </>
+          )}
         </p>
       )}
     </div>

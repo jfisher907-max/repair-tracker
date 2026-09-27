@@ -45,8 +45,8 @@ export default function MoneyLedger({
   // its own line after "collected on the work" and is not timing.
   const collectedOnWork = f.collected - f.taxCollected - f.depositsOnBooked
   const residual = collectedOnWork - (f.charged - f.unpaid)
-  // Cash taken over a job's bill (J011: $240.00 on a $231.00 invoice) lands in
-  // collected but settles nothing billed. It is named for what it is, and
+  // PAYMENT cash taken over a job's bill (J011's $9.00, until 0048 moved it
+  // to a tip) lands in collected but settles nothing billed. It is named for what it is, and
   // only what is left after it can be timing — and it is called timing only
   // when some cash in scope really does cross the year line.
   // Cash above the charge on a done job with no invoice yet is not over any
@@ -63,11 +63,11 @@ export default function MoneyLedger({
   // Earned − owed equals cash profit only when the parts on this scope's jobs
   // are the parts bought in this scope — true inside a year, not across one —
   // once the cash that belongs to booked work (parts bought ahead, deposits
-  // held) and any cash over a bill are named. Written from the same figures
-  // the rows above use.
-  const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked - f.cashProfit
+  // held), tips (0048: cash profit no job earned) and any cash over a bill are
+  // named. Written from the same figures the rows above use.
+  const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked + f.tips - f.cashProfit
   const bridgeRest = bridgeGap + cashOverCharge
-  const hasBookedCash = f.partsSpendOnBooked > 0 || f.depositsOnBooked > 0
+  const hasBookedCash = f.partsSpendOnBooked > 0 || f.depositsOnBooked > 0 || f.tips > 0
   // Sales tax the state is owed comes in two ways: charged on a tax line, or
   // owed by the shop on an invoice that went out with no tax line (the
   // owner's rule; CBJ Procedure 130: 5% of the invoiced price, which the shop
@@ -112,7 +112,7 @@ export default function MoneyLedger({
           label="Billed to customers, before sales tax"
           cap={`${plural(f.count, 'job')} done and dated ${scopeWords}, paid or not${
             f.taxIncludedBilled > 0
-              ? `; less the ${money(f.taxIncludedBilled)} sales tax you owe on ${plural(f.taxIncludedInvoices, 'invoice')} sent with no tax line`
+              ? `; less the ${money(f.taxIncludedBilled)} sales tax you owe on ${plural(f.taxIncludedInvoices, 'invoice')} sent with no tax line or too little`
               : ''
           }`}
           amount={f.charged}
@@ -132,7 +132,7 @@ export default function MoneyLedger({
           <Row
             op="+"
             label="Collected over the invoice"
-            cap={`${overWords}: more cash than the bill; a tip, or owed back`}
+            cap={`${overWords}: more cash than the bill; record it as a tip on the job, or it is owed back`}
             amount={f.overCollected}
           />
         )}
@@ -174,11 +174,25 @@ export default function MoneyLedger({
           <Row
             op="+"
             label="Sales tax you owe on untaxed invoices"
-            cap="no tax line was charged, so 5% of those invoiced prices comes out of what the customers paid"
+            cap="no tax line was charged (or one below 5%), so the rest of 5% of those prices comes out of what the customers paid"
             amount={f.taxIncludedCollected}
           />
         )}
         <Row op="=" label="Payments received" cap="what actually landed, by payment date" amount={f.collected} sum tone="in" />
+        {/* Tips (0048) are cash and income but not a payment on any job and
+            not part of any sale: they join here, after the work's money is
+            added up, and are never taxed. */}
+        {f.tips > 0 && (
+          <>
+            <Row
+              op="+"
+              label="Tips"
+              cap="on top of the bill; yours, not a payment on the job, and no sales tax on them"
+              amount={f.tips}
+            />
+            <Row op="=" label="Cash in" amount={f.collected + f.tips} sum tone="in" />
+          </>
+        )}
         <Row op="−" label="Parts and counter tax you paid" cap={partsCap} amount={-f.partsSpend} />
         <Row
           op="−"
@@ -208,6 +222,11 @@ export default function MoneyLedger({
               , plus the <b>{money(f.depositsOnBooked)}</b> held as deposits on scheduled work
             </>
           )}
+          {f.tips > 0 && (
+            <>
+              , plus the <b>{money(f.tips)}</b> in tips
+            </>
+          )}
           {f.overCollected > 0 && (
             <>
               , plus the <b>{money(f.overCollected)}</b> collected over the invoice (
@@ -234,7 +253,7 @@ export default function MoneyLedger({
             )
           ) : (
             <>
-              {' '}is <b>{money(f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked + cashOverCharge)}</b>; cash profit is <b>{money(f.cashProfit)}</b>.{' '}
+              {' '}is <b>{money(f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked + f.tips + cashOverCharge)}</b>; cash profit is <b>{money(f.cashProfit)}</b>.{' '}
               {f.crossesYearLine ? (
                 <>
                   The <b>{money(Math.abs(bridgeRest))}</b> between them is timing — parts bought, or payments landing, in a different year from their job.
@@ -281,7 +300,7 @@ export default function MoneyLedger({
           <Row
             op="−"
             label="Sales tax you owe on untaxed invoices"
-            cap={`5% of the price on ${plural(f.taxIncludedInvoices, 'invoice')} sent with no tax line; the customers paid the price, so it comes out of yours`}
+            cap={`5% of the price on ${plural(f.taxIncludedInvoices, 'invoice')} sent with no tax line (less any line below 5%); the customers paid the invoice, so it comes out of yours`}
             amount={-includedOffEarned}
           />
         )}

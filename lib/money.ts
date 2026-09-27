@@ -4,7 +4,9 @@ const int = new Intl.NumberFormat('en-US')
 /** 12345 -> "$123.45" (negatives render as -$1.23) */
 export function formatCents(cents: number | null | undefined): string {
   if (cents == null || Number.isNaN(cents)) return '—'
-  return usd.format(cents / 100)
+  // `|| 0` folds negative zero into zero: a subtracted row with nothing in it
+  // (amount={-0}) otherwise printed "-$0.00".
+  return usd.format((cents || 0) / 100)
 }
 
 /** Dollars-and-cents user input ("123.45", "$1,234", "-5") -> integer cents, or null if unparseable. */

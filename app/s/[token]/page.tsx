@@ -35,6 +35,11 @@ interface PublicStatement {
  * page, one total due. Token-keyed like quotes/invoices; customer-safe
  * fields only. Balances update live, so the same link stays current.
  * Bold Brand template, matching quotes/invoices.
+ *
+ * Finished work only (0049): scheduled and in-progress jobs never appear.
+ * Each item's total is what its invoice bills (0035's rule: the larger of
+ * the job's charge and its invoice's total), or — with no invoice yet —
+ * the price plus the sales tax the invoice will bill.
  */
 export default function PublicStatementPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)
@@ -117,7 +122,17 @@ export default function PublicStatementPage({ params }: { params: Promise<{ toke
                   {open.map((i) => (
                     <tr key={i.job_number}>
                       <td className="doc-dim">{formatDate(i.date)}</td>
-                      <td className="doc-desc">{i.title}</td>
+                      <td className="doc-desc">
+                        {i.title}
+                        {/* No invoice yet: the total already includes the
+                            sales tax the invoice will carry (0049), so say so
+                            — it is not the before-tax price. */}
+                        {!i.invoice_number && (
+                          <span className="doc-dim" style={{ display: 'block', fontSize: '0.85em' }}>
+                            Not invoiced yet · total includes any sales tax
+                          </span>
+                        )}
+                      </td>
                       <td className="doc-dim">{i.invoice_number ?? '—'}</td>
                       <td className="doc-n doc-dim doc-col-optional">{formatCents(i.total_cents)}</td>
                       <td className="doc-n doc-dim doc-col-optional">{formatCents(i.paid_cents)}</td>

@@ -142,23 +142,25 @@ export default function DashboardView({
   // out before any work is earned, and deposits held on it are cash in — the
   // identity is earned − owed − parts for scheduled work + deposits held =
   // cash profit, and the scheduled pieces are named only when they are there.
-  const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked - f.cashProfit
-  // Cash taken over a job's bill (J011: $240.00 on a $231.00 invoice) is cash
-  // in that settles nothing billed. It is named as that, never as timing —
+  // Tips (0048) are cash profit that no job earned: they are in cashProfit and
+  // nowhere in earned, so they enter the identity by name, like deposits.
+  const bridgeGap = f.earned - f.unpaid - f.partsSpendOnBooked + f.depositsOnBooked + f.tips - f.cashProfit
+  // PAYMENT cash taken over a job's bill (a tip not recorded as one, or money
+  // owed back) is cash in that settles nothing billed. It is named as that, never as timing —
   // and what is left after it is called timing only when some cash in scope
   // really does cross the year line (Finances.crossesYearLine).
   // Cash above the charge on a done job with no invoice yet (paid ahead of the
   // invoice: the sales tax it will bill) narrows the gap the same way.
   const gapRest = bridgeGap + f.overCollected + f.paidAheadOfInvoice
   // Written out: earned − cash profit = owed + parts for scheduled work −
-  // deposits held − cash over a bill − cash paid ahead + gapRest. gapRest
+  // deposits held − tips − cash over a bill − cash paid ahead + gapRest. gapRest
   // keeps its OWN sign: positive widens the gap and reads "plus", negative
   // narrows it and reads "less". Its sign is never dropped.
   const restWord = f.crossesYearLine ? 'timing across the year line' : 'not reconciled'
   // Timing is named without an amount; an unexplained residual with one.
   const restPhrase = (cents: number) => (f.crossesYearLine ? restWord : `${money(cents)} ${restWord}`)
   // The pieces that WIDEN the gap between earned and cash (owed, parts out
-  // ahead of the work, a positive residual) read "plus"; deposits held, cash
+  // ahead of the work, a positive residual) read "plus"; deposits held, tips, cash
   // over a bill, cash paid ahead of an invoice and a negative residual
   // NARROW it — cash in ahead of, or beyond, the work — and read "less".
   const plusParts = [
@@ -175,8 +177,10 @@ export default function DashboardView({
       ? `${money(f.paidAheadOfInvoice)} paid ahead of the invoice (${f.paidAheadJobs.map((j) => j.jobNumber).join(', ')})`
       : ''
   const restLessWords = gapRest < 0 ? restPhrase(-gapRest) : ''
+  const tipWords = f.tips > 0 ? `${money(f.tips)} in tips` : ''
   const lessDeposits = [
     f.depositsOnBooked > 0 ? `${money(f.depositsOnBooked)} held as deposits on scheduled work` : '',
+    tipWords,
     overWords,
     aheadWords,
     restLessWords,
@@ -189,6 +193,7 @@ export default function DashboardView({
       ? lessDeposits
         ? `; ${[
             f.depositsOnBooked > 0 ? `${money(f.depositsOnBooked)} of it is deposits held on scheduled work` : '',
+            tipWords ? `${money(f.tips)} of it is tips` : '',
             overWords ? `${overWords.replace(' collected', ' of it was collected')}` : '',
             aheadWords ? `${aheadWords.replace(' paid ahead', ' of it was paid ahead')}` : '',
             restLessWords
@@ -203,10 +208,11 @@ export default function DashboardView({
       : plusParts.length === 1 && f.owedJobs > 0 && !lessDeposits
         ? `; the rest is the ${plusParts[0]}`
         : `; the rest is ${plusParts.join(', plus ')}${lessDeposits ? `, ${lessDeposits}` : ''}`
+  const tipsTerm = f.tips > 0 ? ` + ${money(f.tips)} tips` : ''
   const cashHint =
     f.taxCollected > 0
-      ? `collected − parts − ${money(f.taxCollected)} sales tax${restWords}`
-      : `collected − parts${restWords || ', before overhead'}`
+      ? `collected${tipsTerm} − parts − ${money(f.taxCollected)} sales tax${restWords}`
+      : `collected${tipsTerm} − parts${restWords || ', before overhead'}`
 
   return (
     <div className="board">

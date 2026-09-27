@@ -34,6 +34,10 @@
 -- or a snapshot rule is added (set it when a 0-rate invoice is sent, zero it
 -- when a rate is set). New documents start at 5% (0041), so this needs the
 -- owner to have zeroed the rate on the document on purpose.
+-- ^ SUPERSEDED BY 0047: that snapshot rule now exists as the
+-- invoices_book_included_tax trigger (5% of the price, 0 when taxed at the
+-- rate or exempt, the shortfall on a lower tax line, frozen once sent or
+-- paid). Do not re-run this file for any invoice.
 --
 -- UNDO (books only; no document changes either way):
 --   update public.invoices set included_tax_cents = 0

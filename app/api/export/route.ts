@@ -77,13 +77,17 @@ const TABLES: Record<string, string[]> = {
   invoices: [
     'id', 'invoice_number', 'job_id', 'customer_id', 'issue_date', 'due_date', 'status',
     'customer_name', 'vehicle_label', 'job_title', 'lines', 'labor_hours', 'labor_rate_cents',
-    'labor_cents', 'parts_cents', 'tax_rate_bp', 'tax_cents', 'included_tax_cents', 'total_cents',
-    'memo', 'authorizations', 'sent_at', 'paid_at', 'created_at', 'updated_at',
+    'labor_cents', 'parts_cents', 'tax_rate_bp', 'tax_cents', 'included_tax_cents', 'included_tax_rate_bp',
+    'tax_exempt_note',
+    'total_cents', 'memo', 'authorizations', 'sent_at', 'paid_at', 'created_at', 'updated_at',
   ],
   payments: [
     'id', 'job_id', 'invoice_id', 'quote_id', 'date', 'method', 'amount_cents', 'note',
     'external_ref', 'created_at', 'updated_at',
   ],
+  // Tips (0048): income, never payments toward a job — a backup without them
+  // would under-report cash by exactly the tips.
+  tips: ['id', 'job_id', 'date', 'method', 'amount_cents', 'note', 'created_at'],
   job_templates: [
     'id', 'name', 'title', 'work_performed', 'labor_hours', 'lines', 'created_at', 'updated_at',
   ],

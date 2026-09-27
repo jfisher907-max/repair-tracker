@@ -9,7 +9,7 @@ import { isBookedJob, preLedgerCash } from '@/lib/finances'
 import { collectedForJob, governingInvoice, owedGrossCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
-import type { Expense, Invoice, Payment, Settings } from '@/lib/types'
+import type { Expense, Invoice, Payment, Settings, Tip } from '@/lib/types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -27,6 +27,8 @@ export default function ReportsPage() {
   const [payments, setPayments] = useState<Payment[] | null>(null)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [invoices, setInvoices] = useState<Invoice[] | null>(null)
+  // Tips (0048) start null too: "no tips" is a real answer, "not loaded" is not.
+  const [tips, setTips] = useState<Tip[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [year, setYear] = useState<number>(new Date().getFullYear())
@@ -69,6 +71,18 @@ export default function ReportsPage() {
         const rows = (data as (Payment & { job: { deleted_at: string | null } | null })[]) ?? []
         setPayments(rows.filter((p) => !p.job?.deleted_at).map(({ job: _job, ...p }) => p as Payment))
       })
+    // Tips on binned jobs are out with the job, the same as its payments.
+    supabase
+      .from('tips')
+      .select('*, job:jobs(deleted_at)')
+      .then(({ data, error }) => {
+        if (error) {
+          setLoadError(`Tips did not load (${error.message}).`)
+          return
+        }
+        const rows = (data as (Tip & { job: { deleted_at: string | null } | null })[]) ?? []
+        setTips(rows.filter((t) => t.job && !t.job.deleted_at))
+      })
     supabase.from('expenses').select('*').then(({ data }) => setExpenses((data as Expense[]) ?? []))
     // `*` carries included_tax_cents (0041/0045) — the sales tax the shop owes
     // on an invoice that went out with no tax line, 5% of its price — which
@@ -102,7 +116,7 @@ export default function ReportsPage() {
   }, [jobs, expenses])
 
   const report = useMemo(() => {
-    if (!jobs || !payments || !invoices) return null
+    if (!jobs || !payments || !invoices || !tips) return null
     const inYear = (iso: string) => Number(iso.slice(0, 4)) === year
     const monthOf = (iso: string) => Number(iso.slice(5, 7)) - 1
 
@@ -114,7 +128,10 @@ export default function ReportsPage() {
     // collected = ledger payments only (the accrual table's column); cashIn =
     // those plus the cash on jobs settled before the ledger existed (the cash
     // table's Money in). Two different figures, captioned as such.
-    const months = MONTHS.map(() => ({ revenue: 0, parts: 0, overhead: 0, collected: 0, cashIn: 0, partsPaid: 0 }))
+    // tips (0048): income on the tip's date in BOTH views — a tip is not billed
+    // work, so it has no job date to accrue on; it is income the day it is
+    // handed over. Never inside revenue, collected or cashIn, never taxed.
+    const months = MONTHS.map(() => ({ revenue: 0, parts: 0, overhead: 0, collected: 0, cashIn: 0, partsPaid: 0, tips: 0 }))
     for (const j of doneJobs.filter((j) => inYear(j.job.date))) {
       const m = months[monthOf(j.job.date)]
       // Revenue is the job's charge LESS the sales tax the shop owes on an
@@ -150,6 +167,9 @@ export default function ReportsPage() {
     for (const o of partOutflows.filter((o) => inYear(o.date))) {
       months[monthOf(o.date)].partsPaid += o.cents
     }
+    for (const t of tips.filter((t) => inYear(t.date))) {
+      months[monthOf(t.date)].tips += t.amount_cents
+    }
 
     const byMethod = new Map<string, number>()
     for (const p of payments.filter((p) => inYear(p.date))) {
@@ -167,16 +187,27 @@ export default function ReportsPage() {
     // any tax LINE: total − tax_cents. On an untaxed invoice that is the WHOLE
     // total — CBJ Procedure 130 does not let a seller who billed no tax back
     // it out, so the full invoiced price is the sale. Never total − included.
+    //
+    // Exempt (0047) = the sales on invoices that carry no tax AND record the
+    // customer's exemption (tax_exempt_note). Taxable = Sales − Exempt. The
+    // tax owed = tax lines billed + the included tax on untaxed invoices that
+    // are NOT exempt: an exempt invoice owes nothing (the 0047 trigger books 0
+    // on it; it is excluded here as well, so a hand-set figure cannot leak
+    // in). Tips (0048) are not on any invoice, so they are in none of these.
     const taxQuarters = [0, 0, 0, 0]
     const salesQuarters = [0, 0, 0, 0]
+    const exemptQuarters = [0, 0, 0, 0]
     let taxIncludedIssued = 0
     for (const i of invoices.filter(
       (i) => (i.status === 'sent' || i.status === 'paid') && inYear(i.issue_date),
     )) {
-      const included = i.included_tax_cents ?? 0
+      const exempt = i.tax_cents === 0 && !!i.tax_exempt_note?.trim()
+      const included = exempt ? 0 : (i.included_tax_cents ?? 0)
       const q = Math.floor(monthOf(i.issue_date) / 3)
+      const sale = i.total_cents - i.tax_cents
       taxQuarters[q] += i.tax_cents + included
-      salesQuarters[q] += i.total_cents - i.tax_cents
+      salesQuarters[q] += sale
+      if (exempt) exemptQuarters[q] += sale
       taxIncludedIssued += included
     }
 
@@ -188,8 +219,9 @@ export default function ReportsPage() {
         collected: acc.collected + m.collected,
         cashIn: acc.cashIn + m.cashIn,
         partsPaid: acc.partsPaid + m.partsPaid,
+        tips: acc.tips + m.tips,
       }),
-      { revenue: 0, parts: 0, overhead: 0, collected: 0, cashIn: 0, partsPaid: 0 },
+      { revenue: 0, parts: 0, overhead: 0, collected: 0, cashIn: 0, partsPaid: 0, tips: 0 },
     )
 
     const taxCollected = invoices
@@ -249,6 +281,7 @@ export default function ReportsPage() {
       taxCollected,
       taxQuarters,
       salesQuarters,
+      exemptQuarters,
       taxIncludedIssued,
       preLedgerCents,
       byMethod: [...byMethod.entries()].sort((a, b) => b[1] - a[1]),
@@ -257,7 +290,7 @@ export default function ReportsPage() {
       topCustomers,
       byCategory: [...byCategory.entries()].sort((a, b) => b[1] - a[1]),
     }
-  }, [jobs, expenses, payments, invoices, partOutflows, year])
+  }, [jobs, expenses, payments, invoices, tips, partOutflows, year])
 
   if (loadError) {
     return (
@@ -280,14 +313,23 @@ export default function ReportsPage() {
     )
   }
 
-  const net = report.totals.revenue - report.totals.parts - report.totals.overhead
-  const netCash = report.totals.cashIn - report.totals.partsPaid - report.totals.overhead
+  // Tips (0048) are income in both views, on their own line: added to net,
+  // never folded into Billed or Money in.
+  const net = report.totals.revenue + report.totals.tips - report.totals.parts - report.totals.overhead
+  const netCash = report.totals.cashIn + report.totals.tips - report.totals.partsPaid - report.totals.overhead
+  const showTips = report.totals.tips > 0
   const generated = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
   const activeMonths = report.months
     .map((m, i) => ({ ...m, i }))
     .filter(
       (m) =>
-        m.revenue !== 0 || m.overhead !== 0 || m.collected !== 0 || m.cashIn !== 0 || m.partsPaid !== 0 || m.parts !== 0,
+        m.revenue !== 0 ||
+        m.overhead !== 0 ||
+        m.collected !== 0 ||
+        m.cashIn !== 0 ||
+        m.partsPaid !== 0 ||
+        m.parts !== 0 ||
+        m.tips !== 0,
     )
 
   return (
@@ -348,6 +390,7 @@ export default function ReportsPage() {
                   <tr>
                     <th>Month</th>
                     <th className="num">Billed</th>
+                    {showTips && <th className="num">Tips</th>}
                     <th className="num">Parts cost</th>
                     <th className="num">Overhead</th>
                     <th className="num">Net</th>
@@ -359,15 +402,17 @@ export default function ReportsPage() {
                     <tr key={m.i}>
                       <td>{MONTHS[m.i]}</td>
                       <td className="num">{formatCents(m.revenue)}</td>
+                      {showTips && <td className="num">{formatCents(m.tips)}</td>}
                       <td className="num">{formatCents(m.parts)}</td>
                       <td className="num">{formatCents(m.overhead)}</td>
-                      <td className="num">{formatCents(m.revenue - m.parts - m.overhead)}</td>
+                      <td className="num">{formatCents(m.revenue + m.tips - m.parts - m.overhead)}</td>
                       <td className="num">{formatCents(m.collected)}</td>
                     </tr>
                   ))}
                   <tr style={{ fontWeight: 700, borderTop: '1px solid #9ca3af' }}>
                     <td>Total</td>
                     <td className="num">{formatCents(report.totals.revenue)}</td>
+                    {showTips && <td className="num">{formatCents(report.totals.tips)}</td>}
                     <td className="num">{formatCents(report.totals.parts)}</td>
                     <td className="num">{formatCents(report.totals.overhead)}</td>
                     <td className="num">{formatCents(net)}</td>
@@ -381,6 +426,7 @@ export default function ReportsPage() {
                   <tr>
                     <th>Month</th>
                     <th className="num">Money in</th>
+                    {showTips && <th className="num">Tips</th>}
                     <th className="num">Parts paid</th>
                     <th className="num">Overhead</th>
                     <th className="num">Net cash</th>
@@ -391,14 +437,16 @@ export default function ReportsPage() {
                     <tr key={m.i}>
                       <td>{MONTHS[m.i]}</td>
                       <td className="num">{formatCents(m.cashIn)}</td>
+                      {showTips && <td className="num">{formatCents(m.tips)}</td>}
                       <td className="num">{formatCents(m.partsPaid)}</td>
                       <td className="num">{formatCents(m.overhead)}</td>
-                      <td className="num">{formatCents(m.cashIn - m.partsPaid - m.overhead)}</td>
+                      <td className="num">{formatCents(m.cashIn + m.tips - m.partsPaid - m.overhead)}</td>
                     </tr>
                   ))}
                   <tr style={{ fontWeight: 700, borderTop: '1px solid #9ca3af' }}>
                     <td>Total</td>
                     <td className="num">{formatCents(report.totals.cashIn)}</td>
+                    {showTips && <td className="num">{formatCents(report.totals.tips)}</td>}
                     <td className="num">{formatCents(report.totals.partsPaid)}</td>
                     <td className="num">{formatCents(report.totals.overhead)}</td>
                     <td className="num">{formatCents(netCash)}</td>
@@ -408,8 +456,8 @@ export default function ReportsPage() {
             )}
             <p className="report-meta mt-1">
               {basis === 'accrual'
-                ? `Billed = customer charges on jobs marked done and dated in ${year} (labor + parts at your prices, before any tax line), less the sales tax you owe on invoices that went out with no tax line; scheduled and in-progress jobs are not billed yet. Net = billed − parts cost − overhead. Collected = payment rows in the ledger only, by payment date, sales tax included${report.preLedgerCents > 0 ? `; it leaves out ${formatCents(report.preLedgerCents)} settled before payment tracking, so it is NOT the cash view's Money in` : ''} — a record of payments, not a column to subtract from Billed.`
-                : `Cash basis: money in = payments received in ${year}${report.preLedgerCents > 0 ? `, plus ${formatCents(report.preLedgerCents)} on jobs settled before payment tracking (no payment row, so dated on the job's date)` : ''}; sales tax included, since it sits in the bank until it is remitted. Parts paid by purchase date; net cash = in − parts − overhead. This is the view that matches the bank account (Schedule C cash filers report this). Its Money in is not the accrual view's Collected column.`}
+                ? `Billed = customer charges on jobs marked done and dated in ${year} (labor + parts at your prices, before any tax line), less the sales tax you owe on invoices that went out with no tax line; scheduled and in-progress jobs are not billed yet.${showTips ? ' Tips = tips received, by the day they were handed over: income, but not billed work and not a sale, so no sales tax.' : ''} Net = billed${showTips ? ' + tips' : ''} − parts cost − overhead. Collected = payment rows in the ledger only, by payment date, sales tax included${report.preLedgerCents > 0 ? `; it leaves out ${formatCents(report.preLedgerCents)} settled before payment tracking, so it is NOT the cash view's Money in` : ''} — a record of payments, not a column to subtract from Billed.`
+                : `Cash basis: money in = payments received in ${year}${report.preLedgerCents > 0 ? `, plus ${formatCents(report.preLedgerCents)} on jobs settled before payment tracking (no payment row, so dated on the job's date)` : ''}; sales tax included, since it sits in the bank until it is remitted.${showTips ? ' Tips are cash in on their own line, by the day they were handed over; they are not payments and carry no sales tax.' : ''} Parts paid by purchase date; net cash = in${showTips ? ' + tips' : ''} − parts − overhead. This is the view that matches the bank account (Schedule C cash filers report this). Its Money in is not the accrual view's Collected column.`}
             </p>
           </section>
 
@@ -452,6 +500,8 @@ export default function ReportsPage() {
                 <tr>
                   <th>Quarter</th>
                   <th className="num">Sales</th>
+                  <th className="num">Exempt</th>
+                  <th className="num">Taxable</th>
                   <th className="num">Sales tax</th>
                 </tr>
               </thead>
@@ -460,12 +510,21 @@ export default function ReportsPage() {
                   <tr key={q}>
                     <td>Q{q + 1} ({MONTHS[q * 3]}–{MONTHS[q * 3 + 2]})</td>
                     <td className="num">{formatCents(report.salesQuarters[q])}</td>
+                    <td className="num">{formatCents(report.exemptQuarters[q])}</td>
+                    <td className="num">{formatCents(report.salesQuarters[q] - report.exemptQuarters[q])}</td>
                     <td className="num">{formatCents(cents)}</td>
                   </tr>
                 ))}
                 <tr style={{ fontWeight: 700, borderTop: '1px solid #9ca3af' }}>
                   <td>Year total</td>
                   <td className="num">{formatCents(report.salesQuarters.reduce((a, b) => a + b, 0))}</td>
+                  <td className="num">{formatCents(report.exemptQuarters.reduce((a, b) => a + b, 0))}</td>
+                  <td className="num">
+                    {formatCents(
+                      report.salesQuarters.reduce((a, b) => a + b, 0) -
+                        report.exemptQuarters.reduce((a, b) => a + b, 0),
+                    )}
+                  </td>
                   <td className="num">{formatCents(report.taxQuarters.reduce((a, b) => a + b, 0))}</td>
                 </tr>
               </tbody>
@@ -474,7 +533,10 @@ export default function ReportsPage() {
               Issued (sent or paid) invoices only, by issue date, whether the customer has paid yet or
               not — the numbers for your filing periods. This is tax billed, not tax collected: the
               dashboard&apos;s collected figure follows payment dates, and the two differ whenever an
-              invoice is paid in a later quarter. Sales = the invoiced price before any tax line.
+              invoice is paid in a later quarter. Sales = the full invoiced price before any tax line.
+              Exempt = sales on invoices with no tax that record the customer&apos;s exemption; Taxable =
+              Sales − Exempt. Sales tax = the tax lines billed plus 5% of the price on every untaxed
+              invoice that is not exempt. Tips are not sales and are in none of these columns.
             </p>
             {report.taxIncludedIssued > 0 && (
               <p className="report-meta mt-1">

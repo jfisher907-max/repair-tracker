@@ -59,6 +59,37 @@ export async function deletePayment(paymentId: string, jobId: string): Promise<v
 }
 
 /**
+ * Record a tip (0048). A tip is income and cash, NOT a payment toward the job:
+ * it settles nothing, so the job's payment cache is not touched — adding or
+ * removing a tip can never make a job read paid, partial or unpaid. It is not
+ * part of the sale either, so it never enters the sales-tax base.
+ */
+export async function recordTip(input: {
+  jobId: string
+  amountCents: number
+  method: PaymentMethod
+  date: string
+  note?: string | null
+}): Promise<void> {
+  if (!Number.isInteger(input.amountCents) || input.amountCents <= 0) {
+    throw new Error('A tip has to be more than $0.00.')
+  }
+  const { error } = await supabase.from('tips').insert({
+    job_id: input.jobId,
+    amount_cents: input.amountCents,
+    method: input.method,
+    date: input.date,
+    note: input.note?.trim() || null,
+  })
+  if (error) throw error
+}
+
+export async function deleteTip(tipId: string): Promise<void> {
+  const { error } = await supabase.from('tips').delete().eq('id', tipId)
+  if (error) throw error
+}
+
+/**
  * THE paid-to-date rule, mirrored from SQL invoice_paid_cents (keep identical):
  * every payment on a job counts toward any of its invoices. Invoices are
  * whole-job snapshots — revisions of one debt, never installments — so a

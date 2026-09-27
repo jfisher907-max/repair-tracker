@@ -34,6 +34,9 @@
 --     charged tax has nothing "included". The backfill's WHERE enforces that;
 --     it is deliberately NOT a CHECK, so a draft that later gains a tax rate
 --     through invoice-refresh cannot be rejected by a books-only column.
+--     (From 0047 the invoices_book_included_tax trigger enforces it on every
+--     draft write instead: a draft that gains a tax line at the city rate
+--     drops to 0; one below the rate keeps the shortfall.)
 --   * the settings default becomes 500 bp so no new invoice or quote starts
 --     untaxed by accident. Drafts keep the rate they were made with (that is a
 --     choice the owner made on the document), so invoice-refresh is untouched.

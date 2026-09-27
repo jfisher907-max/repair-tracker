@@ -266,12 +266,26 @@ export interface Invoice {
   tax_rate_bp: number
   tax_cents: number
   total_cents: number
-  /** Sales tax the shop owes when no tax line was charged (0041/0045): 5% OF
-   *  the invoiced price (CBJ Procedure 130 — it cannot be backed out of a
-   *  price that billed none), paid by the shop out of what the customer paid.
+  /** Sales tax the shop owes beyond any tax line (0041/0045/0047): the city
+   *  rate on the selling price (total − tax_cents) less the tax line. With no
+   *  tax line that is 5% OF the invoiced price (CBJ Procedure 130 — it cannot
+   *  be backed out of a price that billed none); with a line below the rate
+   *  it is the shortfall. Paid by the shop out of what the customer paid.
    *  Books only — the document the customer sees is total_cents, unchanged.
-   *  Always 0 when tax_cents > 0. */
+   *  Written by the invoices_book_included_tax trigger (0047) while the
+   *  invoice is a draft and as it leaves draft; frozen once sent or paid.
+   *  0 when the tax line is at the rate, when tax_exempt_note is set, and on
+   *  a void draft. */
   included_tax_cents: number
+  /** The city rate included_tax_cents was booked at, pinned by 0047 when the
+   *  invoice was first issued; a paid invoice that falls back to draft keeps
+   *  it. Null on a never-issued draft. Optional: a row read before 0047. */
+  included_tax_rate_bp?: number | null
+  /** The customer's sales-tax exemption when the invoice legitimately carries
+   *  no tax (e.g. "CBJ senior card #1234"). Null = not exempt. Owner-side
+   *  only: get_public_invoice does not return it. Optional because a row
+   *  read before 0047 is applied has no such key. */
+  tax_exempt_note?: string | null
   memo: string | null
   /** The approvals behind this bill, frozen with it (AS 45.45.170(d)). */
   authorizations: AuthorizationEntry[]
@@ -331,6 +345,22 @@ export interface Payment {
   note: string | null
   created_at: string
   updated_at: string
+}
+
+/**
+ * A tip on a job (0048): income and cash on its own date, never a payment
+ * toward the job and never part of the sale — a voluntary tip is not taxable
+ * in Juneau, so it stays out of the sales-tax base and out of every "owed" /
+ * "paid" figure.
+ */
+export interface Tip {
+  id: string
+  job_id: string
+  amount_cents: number
+  method: PaymentMethod
+  date: string
+  note: string | null
+  created_at: string
 }
 
 export interface Expense {

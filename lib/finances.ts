@@ -54,10 +54,10 @@ import type { Job } from './types'
  *   The identities survive: collected − taxCollected + unpaid = charged, and
  *   earned − cashProfit = unpaid, when nothing crosses a year line AND no job
  *   took more cash than it was owed — for a paid, unpaid or partly paid
- *   untaxed invoice alike. Cash over a job's bill (overCollected: J011 took
- *   $240.00 on a $231.00 invoice) is real cash that settles nothing billed,
- *   so it breaks both by exactly its amount; it is reported by name, never
- *   folded into "timing". Cash above the charge on a done job with NO
+ *   untaxed invoice alike. PAYMENT cash over a job's bill (overCollected: J011
+ *   took $240.00 on a $231.00 invoice until 0048 recorded the $9.00 as a
+ *   tip) is real cash that settles nothing billed, so it breaks both by
+ *   exactly its amount; it is reported by name, never folded into "timing". Cash above the charge on a done job with NO
  *   invoice yet (paidAheadOfInvoice) breaks them the same way, and is named
  *   separately: it is the sales tax the coming invoice will bill, paid ahead.
  *   Both identities hold for ANY value of included_tax_cents: charged and
@@ -100,10 +100,27 @@ import type { Job } from './types'
  *     · booked.next is the soonest booked date on or after today; when every
  *       booked job's date has passed, the EARLIEST of them — the one that has
  *       waited longest for its car — ties broken by job_number.
+ * - TIPS (the owner, 2026-09-27: "J011 is a tip"; migration 0048) are their
+ *   own figure, `tips`, from their own table, dated by the tip's date:
+ *     · they ARE income and cash: in the month's and the year's cashProfit
+ *       (cashProfit = collected + tips − partsSpend − taxCollected);
+ *     · they are NOT a payment: never in `collected` (payments received), so
+ *       never in "collected on the work", and never in charged, earned,
+ *       unpaid, owed, over-collection or the paid-ahead figure;
+ *     · they are NOT part of the sale: a voluntary tip is not taxable in
+ *       Juneau, so they never enter the sales-tax proration or taxBilled;
+ *     · a tip on a deleted job is out, like its payments; a tip on any live
+ *       job (done or booked) counts — cash is cash.
+ *   The first identity (collected − taxCollected + unpaid = charged) does not
+ *   see tips at all. The second becomes
+ *     earned − unpaid − partsSpendOnBooked + depositsOnBooked + tips = cashProfit
+ *   (nothing crossing a year line, no cash over a bill).
  */
 export interface FinanceRows {
   jobs: JobWithContext[]
   payments: { amount_cents: number; date: string; job_id: string; invoice_id: string | null }[]
+  /** Tips on live jobs (0048): income and cash on their own date, never payments. */
+  tips: { amount_cents: number; date: string; job_id: string }[]
   /** One row per part line and per receipt's counter tax; job_id ties it to the job it was bought for (0043). */
   partOutflows: { date: string; cents: number; job_id: string }[]
   invoices: {
@@ -111,7 +128,7 @@ export interface FinanceRows {
     job_id: string
     status: string
     tax_cents: number
-    /** Sales tax the shop owes on an untaxed invoice: 5% of its invoiced price (0041/0045); 0 when tax was charged. */
+    /** Sales tax the shop owes beyond the tax line: 5% of the invoiced price when untaxed (0041/0045), the shortfall on a line below the rate (0047); 0 when taxed at the rate or exempt. */
     included_tax_cents: number
     total_cents: number
     /** ISO timestamp; breaks a tie between equal-total invoices (newest governs). */
@@ -139,7 +156,9 @@ export interface MonthFigures {
   collected: number
   /** Parts and counter tax bought this month, for any job. */
   partsSpend: number
-  /** collected − partsSpend − the sales tax owed out of this month's payments; the twelve sum to the year. */
+  /** Tips landing this month (0048): cash in, never a payment, never taxed. */
+  tips: number
+  /** collected + tips − partsSpend − the sales tax owed out of this month's payments; the twelve sum to the year. */
   cashProfit: number
   /** Still owed on the done jobs dated this month, before sales tax (net of the included tax on the unpaid share). */
   unpaid: number
@@ -210,7 +229,12 @@ export interface Finances {
   taxIncludedBilled: number
   /** Governing invoices of this year's done jobs that carry included tax (went out with no tax line). */
   taxIncludedInvoices: number
-  /** collected − partsSpend − taxCollected: the cash side, before overhead. */
+  /**
+   * Tips received in scope, by tip date (0048). Cash in and income, but not a
+   * payment: outside `collected`, charged, earned, unpaid and every tax figure.
+   */
+  tips: number
+  /** collected + tips − partsSpend − taxCollected: the cash side, before overhead. */
   cashProfit: number
   /**
    * Still owed on this year's done jobs, BEFORE sales tax: the balance net of
@@ -240,10 +264,11 @@ export interface Finances {
   /** Parts outflows in scope for jobs not done: cash out ahead of the work. Inside `partsSpend`. */
   partsSpendOnBooked: number
   /**
-   * Cash taken on done jobs in scope beyond what each was owed (the larger of
-   * its charge and its governing invoice total). Inside `collected`. It is
-   * money that settles nothing billed — a tip, or a refund owed — and is
-   * named on its own, never as year-line timing.
+   * PAYMENT cash taken on done jobs in scope beyond what each was owed (the
+   * larger of its charge and its governing invoice total). Inside
+   * `collected`. It is money that settles nothing billed — a tip not yet
+   * recorded as one (0048), or a refund owed — and is named on its own,
+   * never as year-line timing. Tips recorded as tips are never in here.
    */
   overCollected: number
   /** The jobs behind overCollected, largest first. */
@@ -288,11 +313,13 @@ export function isBookedJob(job: Pick<Job, 'stage'>): boolean {
 
 /** The current page's fetches, unchanged in meaning: live jobs, live invoices. */
 export async function loadFinanceRows(): Promise<FinanceRows> {
-  const [jobs, paymentsRes, linesRes, receiptsRes, invoicesRes, expensesRes] = await Promise.all([
+  const [jobs, paymentsRes, tipsRes, linesRes, receiptsRes, invoicesRes, expensesRes] = await Promise.all([
     fetchJobsWithContext(),
     // Payments on binned jobs must not count — their billed/parts/unpaid all
     // vanish with the job. (Reports already filters this way.)
     supabase.from('payments').select('amount_cents, date, job_id, invoice_id, job:jobs(deleted_at)'),
+    // Tips (0048), filtered the same way: a binned job's tip is out with it.
+    supabase.from('tips').select('amount_cents, date, job_id, job:jobs(deleted_at)'),
     supabase
       .from('part_lines')
       .select('job_id, line_total_cents, purchase_date, awaiting_cost, job:jobs(date, deleted_at)'),
@@ -306,6 +333,7 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
   // Loud, not wrong: a failed read (a column the database does not have yet,
   // a policy, a network error) must surface, never render as zero money.
   if (paymentsRes.error) throw paymentsRes.error
+  if (tipsRes.error) throw tipsRes.error
   if (linesRes.error) throw linesRes.error
   if (receiptsRes.error) throw receiptsRes.error
   if (invoicesRes.error) throw invoicesRes.error
@@ -327,6 +355,16 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
       job_id: p.job_id,
       invoice_id: p.invoice_id,
     }))
+  const tipRows =
+    (tipsRes.data as unknown as {
+      amount_cents: number
+      date: string
+      job_id: string
+      job: { deleted_at: string | null } | null
+    }[]) ?? []
+  const tips = tipRows
+    .filter((t) => t.job && !t.job.deleted_at)
+    .map((t) => ({ amount_cents: t.amount_cents, date: t.date, job_id: t.job_id }))
 
   // Parts spend is cash out the door, so it counts the sales tax paid at the
   // counter as well as the parts themselves (receipts.tax_cents).
@@ -366,6 +404,7 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
   return {
     jobs,
     payments,
+    tips,
     partOutflows,
     invoices: (invoicesRes.data as FinanceRows['invoices'] | null) ?? [],
     expenses: (expensesRes.data as FinanceRows['expenses'] | null) ?? [],
@@ -421,6 +460,7 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     earned: 0,
     collected: 0,
     partsSpend: 0,
+    tips: 0,
     cashProfit: 0,
     unpaid: 0,
     unpaidJobs: 0,
@@ -524,15 +564,21 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     // exact COMPLEMENT of the proration below (included − round(included × paid
     // ÷ total)), not a second rounding of the unpaid share, so that collected −
     // taxCollected + unpaid = charged holds to the cent for a partly paid
-    // untaxed invoice. (An untaxed invoice has tax_cents 0, so the line above
-    // took nothing out and paid = charge − owedBeforeLine exactly.)
+    // untaxed invoice. The paid share is the job's cash over the invoice
+    // total — the proration's own share — read from the cached amount paid
+    // (the ledger sum). On an untaxed invoice this is included − round(included
+    // × share). On an invoice whose tax line is BELOW the rate (0047 books
+    // the shortfall as included) the proration rounds line + included as ONE
+    // amount while unpaidBalanceCents took round(line × share) out on its
+    // own, so the complement is included + round(line × share) − round((line
+    // + included) × share): exact to the cent either way (the line term is 0
+    // on an untaxed invoice).
     let includedOwed = 0
     if (included > 0 && owedBeforeLine > 0 && gov) {
-      const paidShare =
-        gov.total_cents > 0
-          ? Math.max(0, Math.min(1, (t.total_charged_cents - owedBeforeLine) / gov.total_cents))
-          : 0
-      includedOwed = included - Math.round(included * paidShare)
+      const paidCash = it.job.payment_status === 'partial' ? (it.job.amount_paid_cents ?? 0) : 0
+      const paidShare = gov.total_cents > 0 ? Math.max(0, Math.min(1, paidCash / gov.total_cents)) : 0
+      includedOwed =
+        included + Math.round(gov.tax_cents * paidShare) - Math.round((gov.tax_cents + included) * paidShare)
     }
     // Owed on the WORK, before tax: a taxed invoice's tax line was never in
     // here, and neither is the tax the shop owes on an untaxed one.
@@ -621,6 +667,16 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     months[monthOf(c.date)].collected += c.amount_cents
     if (bookedJobIds.has(c.job_id)) depositsOnBooked += c.amount_cents
     cashIn.push(c)
+  }
+  // Tips (0048): cash in on the tip's own date, any live job. Deliberately
+  // NOT pushed into cashIn — that list is what the sales-tax proration runs
+  // over, and a voluntary tip is not taxable — and NOT in `collected`, which
+  // is payments received on the work.
+  let tips = 0
+  for (const t of rows.tips) {
+    if (!inYear(t.date)) continue
+    tips += t.amount_cents
+    months[monthOf(t.date)].tips += t.amount_cents
   }
   let partsSpend = 0
   let partsSpendOnBooked = 0
@@ -721,7 +777,7 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
       else if (firstKey !== null && key < firstKey) m.state = 'before'
     }
   }
-  for (const m of months) m.cashProfit = m.collected - m.partsSpend - taxByMonth[m.index]
+  for (const m of months) m.cashProfit = m.collected + m.tips - m.partsSpend - taxByMonth[m.index]
 
   return {
     count: doneCount,
@@ -734,7 +790,8 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
     taxBilled,
     taxIncludedBilled,
     taxIncludedInvoices,
-    cashProfit: collected - partsSpend - taxCollected,
+    tips,
+    cashProfit: collected + tips - partsSpend - taxCollected,
     unpaid,
     laborCharged,
     partsCharged,
@@ -762,6 +819,7 @@ export function financeYears(rows: FinanceRows): number[] {
   const set = new Set<number>()
   for (const it of rows.jobs) set.add(yearOf(it.job.date))
   for (const p of rows.payments) set.add(yearOf(p.date))
+  for (const t of rows.tips) set.add(yearOf(t.date))
   return [...set].sort((a, b) => b - a)
 }
 

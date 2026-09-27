@@ -7,7 +7,7 @@ import JobRow from '@/components/JobRow'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
-import { collectedForJob, governingInvoice, owedGrossCents } from '@/lib/calc'
+import { collectedForJob, governingInvoice, statementTotalCents } from '@/lib/calc'
 import { isBookedJob } from '@/lib/finances'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
@@ -23,6 +23,12 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
     { job_id: string; status: string; total_cents: number; created_at: string }[]
   >([])
   const [payments, setPayments] = useState<{ job_id: string; amount_cents: number }[]>([])
+  /** job_authorized_totals on this customer's jobs: the statement's approved-total cap (0035). */
+  const [auths, setAuths] = useState<
+    { job_id: string; checked: boolean; quoted_cents: number; authorized_cents: number }[]
+  >([])
+  /** settings.default_tax_rate_bp: the tax an uninvoiced job's statement line includes (0049). */
+  const [defaultTaxRateBp, setDefaultTaxRateBp] = useState<number | null>(null)
   /** The invoice or payment read failed: no balance is shown rather than a wrong one. */
   const [moneyFailed, setMoneyFailed] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -46,19 +52,28 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
     // balance computed from nothing.
     let inv: typeof invoices = []
     let pay: typeof payments = []
+    let au: typeof auths = []
+    let rate: number | null = null
     let failed = false
     if (jobIds.length) {
-      const [invRes, payRes] = await Promise.all([
+      const [invRes, payRes, authRes, settingsRes] = await Promise.all([
         supabase
           .from('invoices')
           .select('job_id, status, total_cents, created_at')
           .in('job_id', jobIds)
           .neq('status', 'void'),
         supabase.from('payments').select('job_id, amount_cents').in('job_id', jobIds),
+        supabase
+          .from('job_authorized_totals')
+          .select('job_id, checked, quoted_cents, authorized_cents')
+          .in('job_id', jobIds),
+        supabase.from('settings').select('default_tax_rate_bp').single(),
       ])
-      failed = !!invRes.error || !!payRes.error
+      failed = !!invRes.error || !!payRes.error || !!authRes.error || !!settingsRes.error
       inv = (invRes.data as typeof invoices | null) ?? []
       pay = (payRes.data as typeof payments | null) ?? []
+      au = (authRes.data as typeof auths | null) ?? []
+      rate = (settingsRes.data as { default_tax_rate_bp: number } | null)?.default_tax_rate_bp ?? null
     }
     setCustomer(cust)
     setForm({
@@ -70,6 +85,8 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
     setVehicles((v as Vehicle[]) ?? [])
     setInvoices(inv)
     setPayments(pay)
+    setAuths(au)
+    setDefaultTaxRateBp(rate)
     setMoneyFailed(failed)
     setJobs(mine)
   }, [id])
@@ -80,16 +97,23 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
 
   if (!customer) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
-  // A scheduled or in-progress job (0043) is booked, not owed: its total is
-  // shown as booked, not inside "owes", so this line agrees with the
-  // dashboard, Billing and Reports about what the customer actually owes.
-  // "Owes" is their paper balance (owedGrossCents): the governing invoice's
-  // total, tax line included, less every payment — the figure the statement
-  // link below shows them, not the pre-tax charge. "Lifetime" is on the SAME
-  // basis — each done job at the larger of its charge and its governing
-  // invoice's total, the target owedGrossCents measures against — so what a
-  // customer owes can never exceed their lifetime total. Booked work has no
-  // bill yet and is labelled before tax.
+  // "Owes" is EXACTLY what the statement link below shows them (the owner,
+  // 2026-09-27: statements list finished work only; migration 0049), so the
+  // figure and the "Send statement" button can never disagree with the page
+  // the customer opens:
+  //   · finished (done) jobs not marked paid, only — a scheduled or
+  //     in-progress job (0043) is booked, not owed, deposits or not; its total
+  //     is shown as booked, before tax;
+  //   · each at its statement total (statementTotalCents, the mirror of the
+  //     0049 SQL): the larger of the capped charge and the governing
+  //     invoice's total, tax line included (0035's rule, the same target as
+  //     the job page's balance); or, with no invoice yet, the capped
+  //     before-tax charge plus the sales tax the invoice will bill;
+  //   · less what was paid on it (the ledger, else the cached amount — the
+  //     statement's coalesce). Tips (0048) are not payments and never count.
+  // "Lifetime" counts an unpaid done job at that same statement total and a
+  // paid one at what it was billed (the larger of its charge and its
+  // governing invoice), so what a customer owes never exceeds their lifetime.
   const lifetime = jobs.reduce(
     (acc, j) => {
       if (isBookedJob(j.job)) {
@@ -98,17 +122,25 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
       }
       if (!j.totals) return acc
       const gov = governingInvoice(invoices.filter((i) => i.job_id === j.job.id))
-      acc.charged += Math.max(j.totals.total_charged_cents, gov?.total_cents ?? 0)
-      if (j.job.payment_status !== 'paid') {
-        const onLedger = payments.filter((p) => p.job_id === j.job.id)
-        const collected = collectedForJob(
-          j.job,
-          j.totals.total_charged_cents,
-          onLedger.reduce((s, p) => s + p.amount_cents, 0),
-          onLedger.length > 0,
-        )
-        acc.unpaid += owedGrossCents(j.totals.total_charged_cents, gov?.total_cents, collected)
+      if (j.job.payment_status === 'paid') {
+        acc.charged += Math.max(j.totals.total_charged_cents, gov?.total_cents ?? 0)
+        return acc
       }
+      const onStatement = statementTotalCents({
+        totalChargedCents: j.totals.total_charged_cents,
+        governingInvoiceTotalCents: gov?.total_cents,
+        auth: auths.find((a) => a.job_id === j.job.id) ?? null,
+        defaultTaxRateBp,
+      })
+      acc.charged += onStatement
+      const onLedger = payments.filter((p) => p.job_id === j.job.id)
+      const collected = collectedForJob(
+        j.job,
+        j.totals.total_charged_cents,
+        onLedger.reduce((s, p) => s + p.amount_cents, 0),
+        onLedger.length > 0,
+      )
+      acc.unpaid += Math.max(0, onStatement - collected)
       return acc
     },
     { charged: 0, unpaid: 0, booked: 0 },

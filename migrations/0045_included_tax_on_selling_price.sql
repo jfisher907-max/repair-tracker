@@ -54,8 +54,12 @@
 -- values), the guard still matches, and it writes the same numbers again.
 --
 -- DO NOT re-run 0042 for a new untaxed invoice: its formula is the back-out
--- this migration replaces. Set that invoice's included_tax_cents to
--- round(total_cents × 0.05) instead.
+-- this migration replaces. (Comment updated with 0047; the SQL below is as
+-- applied.) Nothing needs setting by hand any more: from 0047 on, the
+-- invoices_book_included_tax trigger writes round(total_cents × rate / 10000)
+-- on every untaxed, non-exempt invoice (and the shortfall on a tax line
+-- below the rate) while it is a draft and as it leaves draft, and never
+-- touches it again once sent or paid.
 --
 -- UNDO (books only; no document changes either way):
 --   update public.invoices set included_tax_cents = round(total_cents * 500.0 / 10500)

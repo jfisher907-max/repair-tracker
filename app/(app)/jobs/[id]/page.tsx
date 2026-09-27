@@ -4,10 +4,17 @@ import Link from 'next/link'
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { collectedForJob, computeTotals, governingInvoice, overCollectedCents, owedGrossCents } from '@/lib/calc'
+import {
+  billedTaxRateBp,
+  collectedForJob,
+  computeTotals,
+  governingInvoice,
+  overCollectedCents,
+  owedGrossCents,
+} from '@/lib/calc'
 import { buildInvoiceSnapshot, formatTaxRate, statusChipClass } from '@/lib/billing'
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
-import { PAYMENT_METHODS, deletePayment, recordPayment, syncJobPayment } from '@/lib/payments'
+import { PAYMENT_METHODS, deletePayment, deleteTip, recordPayment, recordTip, syncJobPayment } from '@/lib/payments'
 import { formatDate, todayLocalIso } from '@/lib/date'
 import { saveJobAsTemplate } from '@/lib/templates'
 import {
@@ -39,6 +46,7 @@ import {
   type PaymentMethod,
   type Quote,
   type Receipt,
+  type Tip,
   type Vehicle,
 } from '@/lib/types'
 
@@ -84,6 +92,26 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
   const [payDate, setPayDate] = useState(todayIso())
   const [payingBusy, setPayingBusy] = useState(false)
+  /** Tips on this job (0048): income, never payments toward it. */
+  const [tips, setTips] = useState<Tip[]>([])
+  /** The tips read failed (e.g. before 0048 is applied): said, not shown as "no tips". */
+  const [tipsFailed, setTipsFailed] = useState(false)
+  const [tipOpen, setTipOpen] = useState(false)
+  const [tipAmount, setTipAmount] = useState('')
+  const [tipMethod, setTipMethod] = useState<PaymentMethod>('cash')
+  const [tipDate, setTipDate] = useState(todayIso)
+  const [tipBusy, setTipBusy] = useState(false)
+  const [tipMsg, setTipMsg] = useState<string | null>(null)
+  /** The tip whose ✕ was tapped: confirmed in its own row, never a dialog. */
+  const [tipDeleteId, setTipDeleteId] = useState<string | null>(null)
+  /** A payment being recorded came to more than the balance: asked in the
+   *  page whether the extra is a tip, never with a dialog. */
+  const [overPay, setOverPay] = useState<{
+    amount: number
+    balance: number
+    method: PaymentMethod
+    date: string
+  } | null>(null)
   const [receiptUrls, setReceiptUrls] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
 
@@ -153,7 +181,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setVehicle(v ?? null)
     setCustomer(v?.customer ?? null)
 
-    const [linesRes, receiptsRes, settingsRes, invoicesRes, paymentsRes, oksRes] = await Promise.all([
+    const [linesRes, receiptsRes, settingsRes, invoicesRes, paymentsRes, oksRes, tipsRes] = await Promise.all([
       supabase.from('part_lines').select('*').eq('job_id', id).order('created_at'),
       supabase.from('receipts').select('*').eq('job_id', id).order('created_at'),
       supabase
@@ -173,6 +201,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         .order('authorized_at')
         .order('recorded_at')
         .order('id'),
+      // Tips (0048). Not payments: they change nothing owed on this page.
+      supabase.from('tips').select('*').eq('job_id', id).order('date').order('created_at'),
     ])
     setLines((linesRes.data as PartLine[]) ?? [])
     const recs = (receiptsRes.data as Receipt[]) ?? []
@@ -187,6 +217,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     setInvoices((invoicesRes.data as Invoice[]) ?? [])
     setPayments((paymentsRes.data as Payment[]) ?? [])
     setOks((oksRes.data as JobOk[]) ?? [])
+    // A failed tips read cannot move any balance (tips are not payments), so
+    // the page still renders — but it says the tips did not load rather than
+    // showing none.
+    setTips(tipsRes.error ? [] : ((tipsRes.data as Tip[]) ?? []))
+    setTipsFailed(!!tipsRes.error)
 
     if (recs.length) {
       const urls: Record<string, string> = {}
@@ -275,11 +310,22 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  that below, never "over the invoice" (finances.ts: paidAheadOfInvoice). */
   const overCollected = overCollectedCents(totals.total_charged_cents, govInvoice?.total_cents, collectedCents)
   /** With no invoice yet: the invoice Create invoice would build right now, at
-   *  Settings' rate (Juneau's 5% if Settings did not load — the same fallback
-   *  createInvoice uses). Built by the same snapshot function, never
-   *  total_charged × rate. An estimate: the rate on the draft can change. */
-  const estimateRateBp = defaultTaxRateBp ?? 500
+   *  Settings' rate (Juneau's 5% if Settings did not load) — billedTaxRateBp,
+   *  the one rule createInvoice and the statement (0049) use too. Built by
+   *  the same snapshot function, never total_charged × rate. An estimate:
+   *  the rate on the draft can change. */
+  const estimateRateBp = billedTaxRateBp(defaultTaxRateBp)
   const invoiceEstimate = govInvoice ? null : buildInvoiceSnapshot(job, lines, estimateRateBp)
+  /** What an incoming payment is measured against before asking whether the
+   *  extra is a tip: owedGrossCents against the governing invoice — or, with
+   *  no invoice yet, against the invoice Create invoice would build (tax
+   *  included), so sales tax paid ahead is never offered as a tip. */
+  const owedWithTax = owedGrossCents(
+    totals.total_charged_cents,
+    govInvoice?.total_cents ?? invoiceEstimate?.total_cents,
+    collectedCents,
+  )
+  const tipsTotal = tips.reduce((s, t) => s + t.amount_cents, 0)
   /** An invoice made before the job last changed: its pre-tax figure no longer
    *  matches the job's. The invoice still governs what the customer owes. */
   const invoicePreTax = govInvoice ? govInvoice.total_cents - govInvoice.tax_cents : null
@@ -311,6 +357,45 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       note: 'Balance recorded before payment tracking',
     })
     if (error) throw error
+  }
+
+  /**
+   * Record money handed over on this job from the Payments card. The payment
+   * is recorded first (it is what settles the job); a tip, when the owner
+   * chose to split one off, is recorded after it on the same date and method.
+   * A tip that fails to save after the payment landed is reported in the page
+   * — the payment is not rolled back, and the tip can be added again.
+   */
+  async function recordPaymentAndTip(amountCents: number, method: PaymentMethod, date: string, tipCents: number) {
+    setPayingBusy(true)
+    setTipMsg(null)
+    try {
+      await ensureLegacyCredit()
+      await recordPayment({
+        jobId: id,
+        invoiceId: openInvoice?.id ?? null,
+        amountCents,
+        method,
+        date,
+      })
+      setPayAmount('')
+      setOverPay(null)
+      if (tipCents > 0) {
+        try {
+          await recordTip({ jobId: id, amountCents: tipCents, method, date })
+        } catch (e) {
+          setTipMsg(
+            `The ${formatCents(amountCents)} payment is recorded, but the ${formatCents(tipCents)} tip did not save (${
+              e instanceof Error ? e.message : String(e)
+            }). Add it with “+ Add tip”.`,
+          )
+        }
+      }
+      await load()
+    } catch (e) {
+      setTipMsg(`The payment did not save: ${e instanceof Error ? e.message : String(e)}`)
+    }
+    setPayingBusy(false)
   }
 
   /** resyncPayments: money-changing edits must re-derive cached payment status from the ledger. */
@@ -777,8 +862,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       // the owner turns — so it wins over any quote's rate. It stays editable
       // on the draft invoice for one-off cases. If settings did not load, the
       // fallback is Juneau's 5% (0041): an invoice must never go out untaxed
-      // by accident.
-      const taxRateBp = settings?.default_tax_rate_bp ?? 500
+      // by accident. billedTaxRateBp: the same rule the statement (0049) uses
+      // for a finished job not yet invoiced, so the two never disagree.
+      const taxRateBp = billedTaxRateBp(settings?.default_tax_rate_bp)
       const snapshot = buildInvoiceSnapshot(job!, current, taxRateBp)
       // Terms from Settings: 0 = due on receipt (due date = issue date).
       const termsDays = settings?.default_invoice_terms_days ?? 0
@@ -1929,8 +2015,147 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             here will take over the math.
           </p>
         )}
+        {govInvoice && overCollected > 0 && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            {formatCents(overCollected)} more than the invoice was recorded as payment. If it was a
+            tip, delete that payment and record it again — you&apos;ll be asked whether the extra is a
+            tip. Otherwise it is owed back.
+          </p>
+        )}
 
-        {balanceDue > 0 && (
+        {/* Tips (0048): income on their own date — never a payment toward the
+            job, never part of the sale, no sales tax. They change nothing
+            owed above. */}
+        {tips.map((t) => (
+          <div
+            key={t.id}
+            className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+            style={{ background: 'var(--bg2)' }}
+          >
+            {tipDeleteId === t.id ? (
+              <>
+                <span className="text-sm" style={{ color: 'var(--text2)' }} role="status">
+                  Delete this {formatCents(t.amount_cents)} tip?
+                </span>
+                <span className="flex items-center gap-2">
+                  <button
+                    className="btn btn-sm btn-danger"
+                    disabled={tipBusy}
+                    onClick={async () => {
+                      setTipBusy(true)
+                      setTipMsg(null)
+                      try {
+                        await deleteTip(t.id)
+                        setTipDeleteId(null)
+                        await load()
+                      } catch (e) {
+                        setTipMsg(`The tip was not deleted: ${e instanceof Error ? e.message : String(e)}`)
+                      }
+                      setTipBusy(false)
+                    }}
+                  >
+                    Delete
+                  </button>
+                  <button className="btn btn-sm" disabled={tipBusy} onClick={() => setTipDeleteId(null)}>
+                    Cancel
+                  </button>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-sm" style={{ color: 'var(--text2)' }}>
+                  Tip {formatCents(t.amount_cents)} ·{' '}
+                  {(PAYMENT_METHODS.find((m) => m.value === t.method)?.label ?? t.method).toLowerCase()} ·{' '}
+                  {formatDate(t.date)}
+                  {t.note && t.note !== 'Tip' && ` · ${t.note}`}
+                </span>
+                <span className="flex items-center gap-2">
+                  <button
+                    className="btn btn-sm btn-danger !px-1.5 text-xs"
+                    aria-label="Delete tip"
+                    onClick={() => {
+                      setTipMsg(null)
+                      setTipDeleteId(t.id)
+                    }}
+                  >
+                    ✕
+                  </button>
+                </span>
+              </>
+            )}
+          </div>
+        ))}
+        {tips.length > 1 && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Tips on this job: <b className="money">{formatCents(tipsTotal)}</b> — yours, not part of the bill.
+          </p>
+        )}
+        {tipsFailed && (
+          <p className="text-xs" style={{ color: 'var(--red)' }}>
+            Tips did not load — reload to see them. The balance above does not depend on them.
+          </p>
+        )}
+        {tipMsg && (
+          <p className="text-sm" style={{ color: 'var(--red)' }} role="status">
+            {tipMsg}
+          </p>
+        )}
+
+        {overPay && (
+          <div
+            className="panel-in space-y-2 rounded-lg p-3 text-sm"
+            style={{ background: 'var(--status-wait-bg)', color: 'var(--status-wait-fg)' }}
+            role="status"
+          >
+            {/* With no invoice yet the balance on the card is BEFORE tax, so
+                the figure this is measured against is named: the invoice
+                will add sales tax, and that is owed, not a tip. */}
+            <p>
+              {!govInvoice && invoiceEstimate ? (
+                <>
+                  That&apos;s {formatCents(overPay.amount - overPay.balance)} more than the{' '}
+                  {formatCents(overPay.balance)} owed once sales tax is added (the invoice will bill{' '}
+                  {formatCents(invoiceEstimate.total_cents)}:{' '}
+                  {formatCents(invoiceEstimate.total_cents - invoiceEstimate.tax_cents)} +{' '}
+                  {formatCents(invoiceEstimate.tax_cents)} sales tax). Record the extra{' '}
+                  {formatCents(overPay.amount - overPay.balance)} as a tip?
+                </>
+              ) : (
+                <>
+                  That&apos;s {formatCents(overPay.amount - overPay.balance)} more than the balance. Record the
+                  extra {formatCents(overPay.amount - overPay.balance)} as a tip?
+                </>
+              )}
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                className="btn btn-sm btn-primary"
+                disabled={payingBusy}
+                onClick={() =>
+                  recordPaymentAndTip(overPay.balance, overPay.method, overPay.date, overPay.amount - overPay.balance)
+                }
+              >
+                Record as tip
+              </button>
+              <button
+                className="btn btn-sm"
+                disabled={payingBusy}
+                onClick={() => recordPaymentAndTip(overPay.amount, overPay.method, overPay.date, 0)}
+              >
+                Keep it all as payment
+              </button>
+              <button className="btn btn-sm" disabled={payingBusy} onClick={() => setOverPay(null)}>
+                Cancel
+              </button>
+            </div>
+            <p className="text-xs">
+              As a tip: a {formatCents(overPay.balance)} payment settles the balance and{' '}
+              {formatCents(overPay.amount - overPay.balance)} is booked as a tip — income, no sales tax.
+            </p>
+          </div>
+        )}
+
+        {balanceDue > 0 && !overPay && (
           <div className="grid grid-cols-2 gap-2 border-t pt-2 sm:grid-cols-4" style={{ borderColor: 'var(--border)' }}>
             <input
               className="input"
@@ -1958,26 +2183,98 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                   alert('Enter a payment amount.')
                   return
                 }
-                setPayingBusy(true)
-                try {
-                  await ensureLegacyCredit()
-                  await recordPayment({
-                    jobId: id,
-                    invoiceId: openInvoice?.id ?? null,
-                    amountCents: amount,
-                    method: payMethod,
-                    date: payDate,
-                  })
-                  setPayAmount('')
-                  await load()
-                } catch (e) {
-                  alert(e instanceof Error ? e.message : String(e))
+                // More than is owed (tax included, even before the invoice
+                // exists): ask in the page whether the extra is a tip.
+                if (owedWithTax > 0 && amount > owedWithTax) {
+                  setOverPay({ amount, balance: owedWithTax, method: payMethod, date: payDate })
+                  return
                 }
-                setPayingBusy(false)
+                await recordPaymentAndTip(amount, payMethod, payDate, 0)
               }}
             >
               {payingBusy ? 'Recording…' : <>Record</>}
             </button>
+          </div>
+        )}
+
+        {/* A tip handed over on its own, any time — before or after the bill
+            is settled. */}
+        {!tipOpen ? (
+          <div className="flex justify-end">
+            <button
+              className="btn btn-sm"
+              onClick={() => {
+                setTipMsg(null)
+                setTipAmount('')
+                setTipOpen(true)
+              }}
+            >
+              + Add tip
+            </button>
+          </div>
+        ) : (
+          <div
+            className="panel-in grid grid-cols-2 gap-2 border-t pt-2 sm:grid-cols-4"
+            style={{ borderColor: 'var(--border)' }}
+          >
+            <input
+              className="input"
+              inputMode="decimal"
+              placeholder="Tip ($)"
+              aria-label="Tip amount"
+              value={tipAmount}
+              onChange={(e) => setTipAmount(e.target.value)}
+            />
+            <select
+              className="select"
+              aria-label="Tip method"
+              value={tipMethod}
+              onChange={(e) => setTipMethod(e.target.value as PaymentMethod)}
+            >
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+            <input
+              className="input"
+              type="date"
+              aria-label="Tip date"
+              value={tipDate}
+              onChange={(e) => setTipDate(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <button
+                className="btn btn-primary flex-1"
+                disabled={tipBusy || !(parseMoney(tipAmount) ?? 0)}
+                onClick={async () => {
+                  const cents = parseMoney(tipAmount) ?? 0
+                  if (cents <= 0) {
+                    setTipMsg('Enter the tip amount.')
+                    return
+                  }
+                  setTipBusy(true)
+                  setTipMsg(null)
+                  try {
+                    await recordTip({ jobId: id, amountCents: cents, method: tipMethod, date: tipDate })
+                    setTipOpen(false)
+                    setTipAmount('')
+                    await load()
+                  } catch (e) {
+                    setTipMsg(e instanceof Error ? e.message : String(e))
+                  }
+                  setTipBusy(false)
+                }}
+              >
+                {tipBusy ? 'Saving…' : 'Record tip'}
+              </button>
+              <button className="btn" onClick={() => setTipOpen(false)}>
+                Cancel
+              </button>
+            </div>
+            <p className="col-span-2 text-xs sm:col-span-4" style={{ color: 'var(--text3)' }}>
+              A tip is yours on top of the bill: it counts as cash and income, never as a payment on the
+              job, and carries no sales tax.
+            </p>
           </div>
         )}
       </div>
