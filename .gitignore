@@ -40,3 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .fonts/
+
+# Decision sheet: the owner's open questions and rulings. Kept out of git while the
+# repo is public (decision REPO-1); un-ignore once it is private.
+docs/decision-sheet/items.json
+docs/decision-sheet-open.md
+docs/DECISIONS.md
