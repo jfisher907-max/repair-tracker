@@ -285,9 +285,15 @@
     var mine = ITEMS.filter(isCurrent)
     var done = mine.filter(function (it) { return isAnswered(it.id) }).length
     var line = document.getElementById('progress-line')
-    if (line) line.textContent = done + ' of ' + mine.length + ' answered'
+    // An edition with no new questions has nothing to count: say so, and
+    // how many earlier ones are still open, instead of "0 of 0".
+    var open = ITEMS.filter(function (it) { return !it.sup && !it.answeredOn && !isAnswered(it.id) }).length
+    if (line) line.textContent = mine.length
+      ? done + ' of ' + mine.length + ' answered'
+      : 'No new questions this edition · ' + open + ' still open from earlier'
     var fill = document.getElementById('progress-fill')
     if (fill) fill.style.width = (mine.length ? Math.round((done / mine.length) * 100) : 0) + '%'
+    if (fill && fill.parentNode) fill.parentNode.hidden = !mine.length
   }
   // The filter is applied when it changes and when the saved answers load —
   // never on a tap, so a card doesn't vanish from under a finger.
