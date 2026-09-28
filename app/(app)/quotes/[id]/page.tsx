@@ -110,7 +110,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   }, [quote, customer])
 
   useDocumentTitle(
-    quote ? `${quote.quote_number} Quote — ${customer?.name ?? ''}`.replace(/—\s*$/, '').trim() : null,
+    // The print title is the saved PDF's filename, which goes to the
+    // customer: their paper says Estimate, so the file does too.
+    quote ? `${quote.quote_number} Estimate — ${customer?.name ?? ''}`.replace(/—\s*$/, '').trim() : null,
   )
 
   if (!quote) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
@@ -263,8 +265,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     try {
       if (navigator.share) {
         await navigator.share({
-          title: `${doc.business.name || 'Quote'} ${quote!.quote_number}`,
-          text: `Quote for ${quote!.title}`,
+          // The customer's words: an estimate, never a "quote" (AS 45.45).
+          title: `${doc.business.name || 'Estimate'} ${quote!.quote_number}`,
+          text: `Estimate for ${quote!.title}`,
           url: publicUrl,
         })
         setShareMsg('Shared ✓')

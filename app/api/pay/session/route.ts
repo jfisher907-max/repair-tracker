@@ -74,7 +74,7 @@ export async function POST(request: Request) {
 
   if (quoteToken) {
     const { data, error } = await supabase.rpc('get_public_quote', { token: quoteToken })
-    if (error || !data) return Response.json({ error: 'quote not found' }, { status: 404 })
+    if (error || !data) return Response.json({ error: 'estimate not found' }, { status: 404 })
     const quote = data as {
       quote_number: string
       status: string
@@ -85,11 +85,11 @@ export async function POST(request: Request) {
       approved_at: string | null
     }
     if (quote.status !== 'approved') {
-      return Response.json({ error: 'this quote has not been approved yet' }, { status: 409 })
+      return Response.json({ error: 'this estimate has not been approved yet' }, { status: 409 })
     }
     if (!quote.deposit_payable) {
       return Response.json(
-        { error: 'the shop needs to finish setting this quote up before a deposit can be taken' },
+        { error: 'the shop needs to finish setting this estimate up before a deposit can be taken' },
         { status: 409 },
       )
     }
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       return Response.json({ error: 'the remaining deposit is too small to pay by card' }, { status: 409 })
     }
     amount = outstanding
-    name = `Deposit — Quote ${quote.quote_number}`
+    name = `Deposit — Estimate ${quote.quote_number}`
     description = quote.title?.slice(0, 300) || undefined
     metadata = {
       quote_token: quoteToken,

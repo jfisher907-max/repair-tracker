@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   if (error) return Response.json({ error: error.message }, { status: 500 })
   if (!data) {
     // Already answered, expired, or not a live quote.
-    return Response.json({ error: 'This quote is no longer open.' }, { status: 409 })
+    return Response.json({ error: 'This estimate is no longer open.' }, { status: 409 })
   }
   return Response.json({ status: data })
 }

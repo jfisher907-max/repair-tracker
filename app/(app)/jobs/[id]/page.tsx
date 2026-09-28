@@ -796,14 +796,60 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     else router.push('/jobs')
   }
 
+  /** The header's invoice button. With ANY live (non-void) invoice — draft,
+   *  sent or PAID — it reads "Open INV-xxx" for the governing one and only
+   *  navigates: a job is billed once, and every invoice snapshots the whole
+   *  job. Only a job with no live invoice (none yet, or every one voided)
+   *  gets Create invoice. */
+  function invoiceAction() {
+    if (govInvoice) {
+      router.push(`/invoices/${govInvoice.id}`)
+      return
+    }
+    void createInvoice()
+  }
+
   async function createInvoice() {
-    // With an invoice already open the button reads "Open INV-xxx" and just
-    // navigates — no dialog whose Cancel secretly navigated anyway. Creating
-    // a second open invoice for the same job was never a good idea; drafts
-    // have "Update from job" instead.
-    const openInvoice = invoices.find((i) => i.status === 'draft' || i.status === 'sent')
-    if (openInvoice) {
-      router.push(`/invoices/${openInvoice.id}`)
+    // Re-read the job's live invoices first: this also runs from BillingCheck's
+    // proceed path, and from a render that may predate an invoice made in
+    // another tab. Never create against a list that could not be read.
+    setInvoicing(true)
+    const { data: liveRows, error: liveErr } = await supabase
+      .from('invoices')
+      .select('id, invoice_number, status, total_cents, created_at')
+      .eq('job_id', id)
+      .neq('status', 'void')
+    setInvoicing(false)
+    if (liveErr) {
+      setActionMsg({
+        text: `Couldn’t check this job’s invoices just now, so nothing was created. Reload and try again. (${liveErr.message})`,
+        ok: false,
+      })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    const live = (liveRows ?? []) as Pick<Invoice, 'id' | 'invoice_number' | 'status' | 'total_cents' | 'created_at'>[]
+    // A PAID invoice is the bill, settled. A second one would bill the same
+    // work twice — syncJobPayment would mark it paid at once, and Reports'
+    // sales-tax table (every sent/paid invoice) would count the sale and its
+    // tax twice (J014: INV-016 void, INV-017 paid). Refuse, in plain words.
+    // The Void button is hidden on a paid invoice, so say how to get there.
+    const paidInvoice = live.find((i) => i.status === 'paid')
+    if (paidInvoice) {
+      const n = paidInvoice.invoice_number
+      setActionMsg({
+        text: `${n} is already paid in full. A second invoice would bill this work twice, so nothing was created. If the bill truly needs replacing, void ${n} first — a paid invoice offers Void only after the payment on it is removed in the Payments card below.`,
+        ok: false,
+      })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+    // A draft or sent invoice already exists: open it — no dialog whose
+    // Cancel secretly navigated anyway. Drafts have "Update from job" instead
+    // of a second invoice.
+    const existing = governingInvoice(live)
+    if (existing) {
+      router.push(`/invoices/${existing.id}`)
       return
     }
     // A job settled before payment tracking (J001) is marked paid with no
@@ -1080,11 +1126,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           >
             + Add part manually
           </button>
-          <button className="btn btn-sm" disabled={invoicing || !customer} onClick={createInvoice}>
+          <button className="btn btn-sm" disabled={invoicing || !customer} onClick={invoiceAction}>
             {invoicing
               ? 'Creating…'
-              : openInvoice
-                ? `Open ${openInvoice.invoice_number}`
+              : govInvoice
+                ? `Open ${govInvoice.invoice_number}`
                 : notDone
                   ? 'Mark done, then invoice'
                   : 'Create invoice'}

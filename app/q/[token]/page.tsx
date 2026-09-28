@@ -109,16 +109,16 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
 
   const loaded = quote && quote !== 'missing' ? quote : null
   useDocumentTitle(
-    loaded ? `Quote ${loaded.quote_number} — ${loaded.business.name || BRAND_NAME}` : null,
+    loaded ? `Estimate ${loaded.quote_number} — ${loaded.business.name || BRAND_NAME}` : null,
   )
 
   if (quote === null) {
-    return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading quote…</div>
+    return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading estimate…</div>
   }
   if (quote === 'missing') {
     return (
       <div className="p-8 text-center" style={{ color: 'var(--text2)' }}>
-        This quote link isn&apos;t valid anymore. Please contact the shop.
+        This estimate link isn&apos;t valid anymore. Please contact the shop.
       </div>
     )
   }
@@ -191,7 +191,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
       response === 'approved' && depositDue > 0
         ? ` A ${formatCents(depositDue)} deposit is due on approval.`
         : ''
-    if (!confirm(`${verb} this quote${detail}?${deposit}`)) return
+    if (!confirm(`${verb} this estimate${detail}?${deposit}`)) return
     setResponding(true)
     // Through the server, so the IP and browser are observed rather than
     // self-reported by the page making the claim.
@@ -310,7 +310,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
                 ? 'Sending…'
                 : skippedCount > 0
                   ? `✓ Approve ${formatCents(keptTotal)}`
-                  : '✓ Approve quote'}
+                  : '✓ Approve estimate'}
             </button>
             <button className="btn" disabled={responding} onClick={() => respond('declined')}>
               Decline all
@@ -335,8 +335,8 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
           }}
         >
           {quote.status === 'approved'
-            ? '✓ You approved this quote — the shop has been notified.'
-            : 'This quote was declined.'}
+            ? '✓ You approved this estimate — the shop has been notified.'
+            : 'This estimate was declined.'}
           {quote.status === 'approved' && declinedAfterDecision.length > 0 && (
             <div className="mt-1 text-sm font-normal">
               Left out for now: {declinedAfterDecision.map((l) => l.description).join(', ')}

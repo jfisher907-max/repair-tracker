@@ -77,6 +77,11 @@ const REPAIR_ACT_NOTICE =
  */
 export default function DocView({ doc }: { doc: DocData }) {
   const isQuote = doc.docType === 'Quote'
+  /** The word the customer reads. Internally it is a quote (quotes table,
+   *  Q-numbers, "Jobs & Quotes"); on the customer's paper it is an ESTIMATE —
+   *  what AS 45.45 calls a written estimate, and what the footer below
+   *  already says it is. The number (Q008) is unchanged. */
+  const docLabel = isQuote ? 'Estimate' : 'Invoice'
   const showLinePrices = doc.lines.length > 1 || doc.lines.some((l) => Number(l.qty) !== 1)
 
   const paid = doc.paidCents ?? 0
@@ -117,7 +122,7 @@ export default function DocView({ doc }: { doc: DocData }) {
 
   return (
     <div className="doc-root">
-      <DocBrand business={doc.business} docType={doc.docType} docRef={doc.number} badge={doc.status} />
+      <DocBrand business={doc.business} docType={docLabel} docRef={doc.number} badge={doc.status} />
 
       <div className="doc-body">
         <dl className="doc-meta">
@@ -132,7 +137,7 @@ export default function DocView({ doc }: { doc: DocData }) {
             </div>
           )}
           <div>
-            <dt>{isQuote ? 'Quote date' : 'Issue date'}</dt>
+            <dt>{isQuote ? 'Estimate date' : 'Issue date'}</dt>
             <dd>{formatDate(doc.date)}</dd>
           </div>
           {doc.secondaryDate && (
