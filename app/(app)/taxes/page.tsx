@@ -444,7 +444,8 @@ export default function TaxesPage() {
               </details>
             )
           })}
-          {shown.map((b) => {
+          {/* One sentence when both bases agree; one per basis when they differ. */}
+          {(identical ? shown.slice(0, 1) : shown).map((b) => {
             const r = both[b]
             if (r.tax === 0) return null
             return (
@@ -455,8 +456,8 @@ export default function TaxesPage() {
                   <>
                     {' '}
                     + {money(r.taxIncluded)} you owe on {r.includedInvoices} invoice{r.includedInvoices === 1 ? '' : 's'}{' '}
-                    sent with no tax line (5% of the full price, which the city does not let you back out of it — confirm
-                    with your tax preparer)
+                    sent with no tax line (5% of the full price: the city doesn’t let you take the tax out of a price that billed
+                    none. Confirm with your tax preparer)
                   </>
                 )}
                 .{shown.length === 2 && identical && ' Both bases agree this quarter.'}
