@@ -42,6 +42,10 @@ const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
       { href: '/billing', label: 'Billing' },
       { href: '/reports', label: 'Reports' },
       { href: '/expenses', label: 'Expenses' },
+      // Juneau sales-tax returns: the figures, the due date, the record of
+      // what was filed and paid (0053). On the phone it is the dashboard's
+      // Taxes door (when a return is due) and the Taxes button at its foot.
+      { href: '/taxes', label: 'Taxes' },
     ],
   },
   { label: 'People', items: [{ href: '/customers', label: 'Customers' }] },

@@ -145,6 +145,37 @@ export interface Settings {
   /** Google review link shared after an invoice is paid; blank hides the button. */
   google_review_url: string | null
   store_suggestions: string[]
+  /** Basis for the Juneau sales-tax return (0053): must match the federal
+   *  return. Null = not chosen yet. Optional: a row read before 0053. */
+  sales_tax_basis?: TaxBasis | null
+  created_at: string
+  updated_at: string
+}
+
+/** Cash = by payment date; accrual = by invoice issue date. */
+export type TaxBasis = 'cash' | 'accrual'
+export type TaxObligation = 'cbj_sales_tax' | 'federal_estimate' | 'cbj_property' | 'other'
+export type TaxPaymentMethod = 'ach' | 'card' | 'check' | 'cash' | 'other'
+
+/**
+ * A tax return filed and/or tax paid, as the owner recorded it (0053). The app
+ * never files or pays; it reads these to turn the dashboard's Taxes door off
+ * and to net "sales tax held for the state" down by what was paid.
+ */
+export interface TaxFiling {
+  id: string
+  obligation: TaxObligation
+  period_start: string
+  period_end: string
+  due_date: string | null
+  filed_on: string | null
+  paid_on: string | null
+  amount_cents: number
+  /** The owner marked this payment as the full amount the city asked for (0053). */
+  settles_return: boolean
+  method: TaxPaymentMethod | null
+  confirmation: string | null
+  note: string | null
   created_at: string
   updated_at: string
 }

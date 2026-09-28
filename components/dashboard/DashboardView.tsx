@@ -6,6 +6,8 @@ import JobRow from '@/components/JobRow'
 import MonthlyChart, { type MonthlyJob } from '@/components/MonthlyChart'
 import type { BusinessDocument } from '@/components/BusinessDocuments'
 import type { CoreOut } from '@/lib/cores'
+import { salesTaxPaid, taxReminder } from '@/lib/sales-tax'
+import type { TaxBasis, TaxFiling } from '@/lib/types'
 import { computeFinances, financeYears, isBookedJob, type FinanceRows, type MonthFigures } from '@/lib/finances'
 import ActionLane, { type BillingCounts } from './ActionLane'
 import EarnedBar from './EarnedBar'
@@ -58,6 +60,8 @@ export default function DashboardView({
   newRequests,
   billing,
   businessName,
+  taxFilings,
+  taxBasis = null,
   now: nowProp,
 }: {
   rows: FinanceRows
@@ -66,6 +70,10 @@ export default function DashboardView({
   newRequests: number
   billing: BillingCounts
   businessName: string
+  /** Recorded tax filings (0053). undefined = still loading; null = could not be read. */
+  taxFilings?: TaxFiling[] | null
+  /** settings.sales_tax_basis; null = not chosen yet. */
+  taxBasis?: TaxBasis | null
   now?: Date
 }) {
   const [year, setYear] = useState<'all' | number>('all')
@@ -78,6 +86,14 @@ export default function DashboardView({
 
   const years = useMemo(() => financeYears(rows), [rows])
   const f = useMemo(() => computeFinances(rows, year, now), [rows, year, now])
+  // The Taxes door waits for the filings read to finish, so a return already
+  // recorded as filed never flashes up. A failed read (null) counts as
+  // nothing recorded: the reminder errs toward showing.
+  const taxes = useMemo(
+    () => (taxFilings === undefined ? null : taxReminder(rows, taxFilings, taxBasis, now)),
+    [rows, taxFilings, taxBasis, now],
+  )
+  const taxPaid = taxFilings === undefined ? undefined : taxFilings === null ? null : salesTaxPaid(taxFilings, year)
   const thisYear = now.getFullYear()
   const thisMonth = now.getMonth()
   // The strip and the tiles' "so far" lines are about NOW, whatever year the
@@ -247,7 +263,15 @@ export default function DashboardView({
         </div>
       </div>
 
-      <ActionLane f={f} cores={cores} docAlerts={docAlerts} newRequests={newRequests} billing={billing} now={now} />
+      <ActionLane
+        f={f}
+        cores={cores}
+        docAlerts={docAlerts}
+        newRequests={newRequests}
+        billing={billing}
+        taxes={taxes}
+        now={now}
+      />
 
       {/* The drop-off calendar (owner, 2026-09-12) sits right under the lane
           on both layouts; on the desktop board it is a full-width row, so the
@@ -320,7 +344,7 @@ export default function DashboardView({
         {/* Always in the DOM (hidden when closed) so aria-controls resolves, and
             right after the tile it expands so reading order matches the eye;
             .ledger-card's own grid-column and order keep it where it was. */}
-        <MoneyLedger f={f} year={year} id={LEDGER_ID} now={now} hidden={!ledgerOpen} />
+        <MoneyLedger f={f} year={year} id={LEDGER_ID} now={now} hidden={!ledgerOpen} taxPaid={taxPaid} />
         <TrendTile
           // f.unpaid is the books' figure, BEFORE tax on purpose (the ledger
           // and the monthly trend use it). The hint's per-job figure is the
@@ -386,6 +410,9 @@ export default function DashboardView({
         </Link>
         <Link href="/expenses" className="btn">
           Expenses
+        </Link>
+        <Link href="/taxes" className="btn">
+          Taxes
         </Link>
       </div>
     </div>

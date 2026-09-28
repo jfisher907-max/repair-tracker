@@ -5,6 +5,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { docState, type BusinessDocument } from '@/components/BusinessDocuments'
 import { coreState, watchCore, RETURN_WINDOW_DAYS, type CoreOut } from '@/lib/cores'
 import type { Finances } from '@/lib/finances'
+import { taxToPlanFor, type TaxReminder } from '@/lib/sales-tax'
 import { money, shortDate } from './format'
 
 type Edge = 'ok' | 'wait' | 'stop' | 'info' | 'idle'
@@ -43,6 +44,7 @@ export default function ActionLane({
   docAlerts,
   newRequests,
   billing,
+  taxes = null,
   now = new Date(),
 }: {
   f: Finances
@@ -50,6 +52,8 @@ export default function ActionLane({
   docAlerts: BusinessDocument[]
   newRequests: number
   billing: BillingCounts
+  /** The sales-tax return coming due, when one is inside 30 days or late (lib/sales-tax taxReminder). */
+  taxes?: TaxReminder | null
   now?: Date
 }) {
   // Cores: what is out of the shop and not yet back as a credit.
@@ -199,6 +203,47 @@ export default function ActionLane({
       title: 'Quotes',
       sub: 'waiting on a customer',
       edge: 'wait',
+    })
+  }
+  // Taxes (0053; the owner's TAX-7 answer): the Paperwork door's pattern for
+  // a return coming due. It counts to the OFFICIAL date — the city counts the
+  // day it receives a return, so the weekend grace day is named, never aimed
+  // at. Built by lib/sales-tax taxReminder: present from 30 days out ("wait"),
+  // "stop" from 7 days out and once the date has passed, gone once the
+  // quarter is recorded as filed and paid IN FULL (lib/sales-tax filingStatus).
+  if (taxes) {
+    const both = taxes.both
+    const differ = !taxes.basis && both.cash.tax !== both.accrual.tax
+    // What is still owed after the payments recorded for the quarter; a paid
+    // quarter that is not yet marked filed says so instead of a figure.
+    const paid = taxes.status.paidCents
+    const amount = paid > 0 ? taxes.status.balance : taxToPlanFor(both, taxes.basis)
+    const paidInFull = paid > 0 && amount === 0
+    const official = taxes.due.official
+    const effective = taxes.due.effective
+    const period = `${shortDate(taxes.quarter.start).slice(0, 3)}–${shortDate(taxes.quarter.end).slice(0, 3)} sales tax`
+    const when =
+      taxes.daysLeft > 0
+        ? `due ${shortDate(official)}${taxes.due.moved ? ` (city takes it to ${shortDate(effective)})` : ''}`
+        : taxes.daysLeft === 0
+          ? `due today${taxes.due.moved ? ` (city takes it to ${shortDate(effective)})` : ''}`
+          : `${-taxes.daysLeft} day${taxes.daysLeft === -1 ? '' : 's'} past ${shortDate(official)}${
+              taxes.due.moved && today <= effective ? ` · last day ${shortDate(effective)}` : ''
+            }`
+    doors.push({
+      href: '/taxes',
+      n: 1,
+      label: 'Taxes',
+      title: (
+        <>
+          Taxes{' '}
+          {!paidInFull && <span className="money">{differ ? `up to ${money(amount)}` : money(amount)}</span>}
+        </>
+      ),
+      sub: `${period} · ${
+        paidInFull ? 'paid, not marked filed · ' : paid > 0 ? `${money(paid)} paid, rest ` : ''
+      }${when}`,
+      edge: taxes.edge,
     })
   }
   if (docAlerts.length > 0) {

@@ -23,6 +23,7 @@ export default function MoneyLedger({
   card = true,
   now = new Date(),
   hidden = false,
+  taxPaid,
 }: {
   f: Finances
   year: 'all' | number
@@ -34,6 +35,13 @@ export default function MoneyLedger({
   now?: Date
   /** Kept in the DOM but not shown: the toggle's aria-controls still resolves. */
   hidden?: boolean
+  /**
+   * Sales tax recorded as PAID to the city in this scope (tax_filings, 0053;
+   * lib/sales-tax salesTaxPaid). undefined = not loaded yet; null = the
+   * filings could not be read, which the caption says rather than showing
+   * nothing paid.
+   */
+  taxPaid?: number | null
 }) {
   const thisYear = now.getFullYear()
   const scopeWords = year === 'all' ? 'all time' : year === thisYear ? 'this year' : `in ${year}`
@@ -79,6 +87,14 @@ export default function MoneyLedger({
   // beside a real amount.
   const taxChargedCollected = f.taxCollected - f.taxIncludedCollected
   const taxNotYetCollected = f.taxBilled - f.taxCollected
+  // What the owner has recorded paying the city (0053). Paying the state its
+  // own money moves cash but never profit, so it is its OWN row beside "held":
+  // held + paid = the tax that rode in with the payments, and the chain still
+  // lands on the same cash profit. When more is recorded paid than the
+  // payments in scope carry (a return filed on the accrual basis ahead of
+  // the cash), "held" goes below zero and says so rather than hiding it.
+  const paid = typeof taxPaid === 'number' ? taxPaid : 0
+  const taxStillHeld = f.taxCollected - paid
   // What earned takes off for the tax owed on untaxed invoices: by
   // construction earned = labor + parts margin − that amount (finances.ts), so
   // the row below makes the column add on screen without a second source.
@@ -195,11 +211,25 @@ export default function MoneyLedger({
         )}
         <Row op="−" label="Parts and counter tax you paid" cap={partsCap} amount={-f.partsSpend} />
         <Row
-          op="−"
+          op={taxStillHeld < 0 ? '+' : '−'}
           label="Sales tax held for the state"
-          cap={f.taxIncludedCollected > 0 ? 'the state’s money, never yours: charged on top, and owed by you on untaxed invoices' : 'the state’s money, never yours'}
-          amount={-f.taxCollected}
+          cap={
+            taxStillHeld < 0
+              ? 'you have recorded paying the city more than the payments here carry in tax; check the filings on the Taxes page'
+              : f.taxIncludedCollected > 0
+                ? `the state’s money, never yours: charged on top, and owed by you on untaxed invoices${paid > 0 ? '; not paid to the city yet' : ''}`
+                : `the state’s money, never yours${paid > 0 ? '; not paid to the city yet' : ''}`
+          }
+          amount={-taxStillHeld}
         />
+        {paid > 0 && (
+          <Row
+            op="−"
+            label="Sales tax paid to the city"
+            cap="recorded on the Taxes page; it was never yours, so paying it does not change profit"
+            amount={-paid}
+          />
+        )}
         <Row op="=" label="Cash profit, before overhead" amount={f.cashProfit} sum total tone={f.cashProfit >= 0 ? 'in' : 'owed'} />
         {f.overhead > 0 && (
           <>
@@ -321,14 +351,27 @@ export default function MoneyLedger({
           state" line above; Reports breaks it down by filing quarter. */}
       <div className="ledger-block" aria-label="Sales tax owed to the state">
         <span className="label">Owed to the state</span>
-        <Row
-          op=""
-          label="Sales tax collected, to remit"
-          cap="5% on the paid share of each invoice; it rode in with the payments and is the state's money"
-          amount={f.taxCollected}
-          sum
-          total
-        />
+        {paid > 0 ? (
+          <>
+            <Row
+              op=""
+              label="Sales tax collected"
+              cap="5% on the paid share of each invoice; it rode in with the payments and is the state's money"
+              amount={f.taxCollected}
+            />
+            <Row op="−" label="Paid to the city" cap="returns recorded as paid on the Taxes page" amount={-paid} />
+            <Row op="=" label="Still to remit" amount={taxStillHeld} sum total />
+          </>
+        ) : (
+          <Row
+            op=""
+            label="Sales tax collected, to remit"
+            cap="5% on the paid share of each invoice; it rode in with the payments and is the state's money"
+            amount={f.taxCollected}
+            sum
+            total
+          />
+        )}
         {taxNotYetCollected > 0 && (
           <Row
             op=""
@@ -338,8 +381,12 @@ export default function MoneyLedger({
           />
         )}
         <p className="ledger-bridge">
-          The gross figure for {year === 'all' ? 'all time' : year}, by payment date. Reports lists the tax BILLED by filing quarter (by invoice issue date); the two differ when an invoice is paid in a later quarter. Remittances are not
-          recorded here yet, so nothing is taken off for returns already filed.
+          The figure for {year === 'all' ? 'all time' : year}, by payment date. Reports lists the tax BILLED by filing quarter (by invoice issue date); the two differ when an invoice is paid in a later quarter.{' '}
+          {taxPaid === null
+            ? 'The filings you recorded could not be read just now, so nothing is taken off for returns already paid.'
+            : paid > 0
+              ? `Payments to the city come off as you record them on the Taxes page, counted in the year the return's period starts.`
+              : 'Nothing is recorded as paid to the city yet; record each return on the Taxes page once you file and pay, and it comes off here.'}
         </p>
       </div>
     </div>

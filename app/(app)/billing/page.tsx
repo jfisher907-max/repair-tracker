@@ -8,11 +8,12 @@ import { formatDate } from '@/lib/date'
 import { quoteStatusColors, statusChipClass } from '@/lib/billing'
 import { syncJobPayment } from '@/lib/payments'
 import { computeFinances, financeYears, jobsToInvoice, loadFinanceRows, type FinanceRows } from '@/lib/finances'
+import { loadTaxFilings, salesTaxPaid } from '@/lib/sales-tax'
 import JobRow from '@/components/JobRow'
 import MoneyLedger from '@/components/dashboard/MoneyLedger'
 import { SkeletonList } from '@/components/Skeleton'
 import SwipeableRow from '@/components/SwipeableRow'
-import type { Invoice } from '@/lib/types'
+import type { Invoice, TaxFiling } from '@/lib/types'
 
 function todayIso(): string {
   const d = new Date()
@@ -39,6 +40,8 @@ export default function BillingPage() {
   const [rows, setRows] = useState<FinanceRows | null>(null)
   const [year, setYear] = useState<'all' | number>('all')
   const [error, setError] = useState<string | null>(null)
+  /** Tax filings recorded (0053): undefined while loading, null when the read failed. */
+  const [taxFilings, setTaxFilings] = useState<TaxFiling[] | null | undefined>(undefined)
 
   useEffect(() => {
     supabase
@@ -51,6 +54,9 @@ export default function BillingPage() {
     loadFinanceRows()
       .then(setRows)
       .catch((e) => setError(e instanceof Error ? e.message : String(e)))
+    loadTaxFilings()
+      .then(setTaxFilings)
+      .catch(() => setTaxFilings(null))
   }, [])
 
   const years = useMemo(() => (rows ? financeYears(rows) : []), [rows])
@@ -113,7 +119,12 @@ export default function BillingPage() {
           <SkeletonList rows={3} />
         ) : (
           <section className="card" aria-label="The money ledger">
-            <MoneyLedger f={f} year={year} card={false} />
+            <MoneyLedger
+              f={f}
+              year={year}
+              card={false}
+              taxPaid={taxFilings === undefined ? undefined : taxFilings === null ? null : salesTaxPaid(taxFilings, year)}
+            />
           </section>
         )}
       </section>

@@ -134,6 +134,11 @@ export interface FinanceRows {
     /** ISO timestamp; breaks a tie between equal-total invoices (newest governs). */
     created_at: string
     due_date?: string | null
+    /** For the sales-tax return (lib/sales-tax.ts). Optional so a fixture without them still computes. */
+    issue_date?: string
+    invoice_number?: string
+    /** The customer's exemption when the invoice legitimately carries no tax (0047). */
+    tax_exempt_note?: string | null
   }[]
   expenses: { amount_cents: number; date: string }[]
   /** Jobs still carrying approved parts with no cost entered: their profit reads high. */
@@ -326,7 +331,9 @@ export async function loadFinanceRows(): Promise<FinanceRows> {
     supabase.from('receipts').select('job_id, tax_cents, purchase_date, job:jobs(date, deleted_at)'),
     supabase
       .from('invoices')
-      .select('id, job_id, tax_cents, included_tax_cents, total_cents, status, due_date, created_at')
+      .select(
+          'id, job_id, tax_cents, included_tax_cents, total_cents, status, due_date, created_at, issue_date, invoice_number, tax_exempt_note',
+        )
       .neq('status', 'void'),
     supabase.from('expenses').select('amount_cents, date'),
   ])
@@ -431,6 +438,83 @@ export function preLedgerCash(
     const cached = collectedForJob(it.job, it.totals.total_charged_cents, 0, false)
     if (cached === 0) continue
     out.push({ amount_cents: cached, date: it.job.date, job_id: it.job.id })
+  }
+  return out
+}
+
+/** A dated piece of cash on a job: a ledger payment, or pre-ledger cash on its job's date. */
+export interface CashIn {
+  amount_cents: number
+  date: string
+  job_id: string
+}
+
+/**
+ * Every piece of cash the sales-tax proration counts, all time: ledger
+ * payments plus the pre-ledger fallback (preLedgerCash). Tips are NOT in it —
+ * a voluntary tip is not taxable. computeFinances builds the same list scoped
+ * to its year; lib/sales-tax.ts reads this whole one and cuts it by quarter.
+ */
+export function cashInRows(rows: Pick<FinanceRows, 'jobs' | 'payments'>): CashIn[] {
+  const jobsWithLedger = new Set(rows.payments.map((p) => p.job_id))
+  return [
+    ...rows.payments.map((p) => ({ amount_cents: p.amount_cents, date: p.date, job_id: p.job_id })),
+    ...preLedgerCash(rows.jobs, jobsWithLedger),
+  ]
+}
+
+/** One payment's slice of an invoice's sale and sales tax (prorateInvoiceTax). */
+export interface TaxSlice extends CashIn {
+  /** Sales tax owed out of this payment: tax line + included, together. */
+  taxCents: number
+  /** The included part of taxCents (tax the shop owes on an untaxed invoice). */
+  includedCents: number
+  /** The sale (invoiced price before any tax line) this payment settled. */
+  saleCents: number
+}
+
+/**
+ * THE sales-tax proration, the one place it is written. Each payment on a job
+ * carries the share of its governing invoice that the running total paid
+ * implies: the cumulative share (capped at the whole invoice) is rounded once
+ * per payment and each slice is the step from the last one, so the slices
+ * telescope to round(x × paid ÷ total) and any grouping of them (a month, a
+ * quarter, a year) sums exactly. The tax line and the included tax are ONE
+ * amount to the state and are rounded together; the included share is
+ * tracked alongside. `cash` is the job's cash (any order; sorted by date here).
+ * computeFinances (the year) and lib/sales-tax (a quarter, cash basis) both
+ * call this; never fork it.
+ */
+export function prorateInvoiceTax(
+  inv: { tax_cents: number; included_tax_cents: number; total_cents: number },
+  cash: readonly CashIn[],
+): TaxSlice[] {
+  if (inv.total_cents <= 0) return []
+  const tax = inv.tax_cents + inv.included_tax_cents
+  const sale = inv.total_cents - inv.tax_cents
+  const sorted = [...cash].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  const out: TaxSlice[] = []
+  let paid = 0
+  let taxSoFar = 0
+  let includedSoFar = 0
+  let saleSoFar = 0
+  for (const p of sorted) {
+    paid += p.amount_cents
+    const share = Math.max(0, Math.min(1, paid / inv.total_cents))
+    const taxCum = Math.round(tax * share)
+    const includedCum = Math.round(inv.included_tax_cents * share)
+    const saleCum = Math.round(sale * share)
+    out.push({
+      amount_cents: p.amount_cents,
+      date: p.date,
+      job_id: p.job_id,
+      taxCents: taxCum - taxSoFar,
+      includedCents: includedCum - includedSoFar,
+      saleCents: saleCum - saleSoFar,
+    })
+    taxSoFar = taxCum
+    includedSoFar = includedCum
+    saleSoFar = saleCum
   }
   return out
 }
@@ -699,29 +783,19 @@ export function computeFinances(rows: FinanceRows, year: 'all' | number, now: Da
   // Each payment carries the slice of tax its share of the invoice implies,
   // so a month holds the tax on the payments that landed in it and the twelve
   // months sum to the year: the running total is rounded once per payment and
-  // the slices telescope to round(tax × paid ÷ total), the year figure.
+  // the slices telescope to round(tax × paid ÷ total), the year figure
+  // (prorateInvoiceTax — shared with the sales-tax return, lib/sales-tax.ts).
   let taxCollected = 0
   let taxIncludedCollected = 0
   const taxByMonth = Array<number>(12).fill(0)
   for (const [jobId, inv] of govByJob) {
     const tax = inv.tax_cents + inv.included_tax_cents
     if (tax <= 0 || inv.total_cents <= 0) continue
-    const onJob = cashIn
-      .filter((p) => p.job_id === jobId)
-      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-    let paid = 0
-    let taxSoFar = 0
-    let includedSoFar = 0
-    for (const p of onJob) {
-      paid += p.amount_cents
-      const share = Math.max(0, Math.min(1, paid / inv.total_cents))
-      const cum = Math.round(tax * share)
-      taxByMonth[monthOf(p.date)] += cum - taxSoFar
-      taxSoFar = cum
-      includedSoFar = Math.round(inv.included_tax_cents * share)
+    for (const s of prorateInvoiceTax(inv, cashIn.filter((p) => p.job_id === jobId))) {
+      taxByMonth[monthOf(s.date)] += s.taxCents
+      taxCollected += s.taxCents
+      taxIncludedCollected += s.includedCents
     }
-    taxCollected += taxSoFar
-    taxIncludedCollected += includedSoFar
   }
 
   // What the invoices of this year's done jobs carry in tax, paid or not: the

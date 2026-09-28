@@ -8,6 +8,8 @@ import { SkeletonDashboard } from '@/components/Skeleton'
 import { docState, listBusinessDocuments, type BusinessDocument } from '@/components/BusinessDocuments'
 import { listCores, type CoreOut } from '@/lib/cores'
 import { loadFinanceRows, type FinanceRows } from '@/lib/finances'
+import { loadTaxFilings } from '@/lib/sales-tax'
+import type { TaxBasis, TaxFiling } from '@/lib/types'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -26,6 +28,9 @@ export default function Dashboard() {
   const [newRequests, setNewRequests] = useState(0)
   const [billing, setBilling] = useState<BillingCounts>({ openQuotes: 0, unpaidInvoices: 0, overdue: 0 })
   const [businessName, setBusinessName] = useState('')
+  /** Tax filings recorded (0053): undefined while loading, null when the read failed. */
+  const [taxFilings, setTaxFilings] = useState<TaxFiling[] | null | undefined>(undefined)
+  const [taxBasis, setTaxBasis] = useState<TaxBasis | null>(null)
 
   useEffect(() => {
     loadFinanceRows()
@@ -42,11 +47,22 @@ export default function Dashboard() {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'new')
       .then(({ count }) => setNewRequests(count ?? 0))
+    // `*`, not a column list: sales_tax_basis (0053) is read when it exists,
+    // and a database without it still gives the business name.
     supabase
       .from('settings')
-      .select('business_name')
+      .select('*')
       .single()
-      .then(({ data }) => setBusinessName(data?.business_name ?? ''))
+      .then(({ data }) => {
+        setBusinessName(data?.business_name ?? '')
+        const b = data?.sales_tax_basis
+        setTaxBasis(b === 'cash' || b === 'accrual' ? b : null)
+      })
+    // A failed read is not "nothing filed": the ledger says it could not read
+    // them, and the Taxes door shows (it errs toward reminding).
+    loadTaxFilings()
+      .then(setTaxFilings)
+      .catch(() => setTaxFilings(null))
     const today = new Date()
     const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
     Promise.all([
@@ -95,6 +111,8 @@ export default function Dashboard() {
       newRequests={newRequests}
       billing={billing}
       businessName={businessName}
+      taxFilings={taxFilings}
+      taxBasis={taxBasis}
     />
   )
 }
