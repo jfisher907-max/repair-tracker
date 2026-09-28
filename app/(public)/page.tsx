@@ -60,7 +60,7 @@ const AUTOMOTIVE_SERVICES: ServiceCard[] = [
   },
   {
     title: 'Heating & Cooling',
-    body: 'Cooling & heating systems.',
+    body: 'Heater cores, blower motors, thermostats, radiators, and water pumps.',
   },
   {
     title: 'Pre-purchase Inspections',
@@ -72,20 +72,18 @@ const AUTOMOTIVE_SERVICES: ServiceCard[] = [
 // owner (2026-09-27): "advertise AOG maintenance services and pre-buys. My
 // response time is quick: less than 12 hours." Still open: which jet types to
 // name. Never name an operator (NetJets, Flexjet, ...) here — it implies an
-// affiliation and uses their marks. Keep the count even: the panel runs
-// two-up on a wide screen, and a card alone in a row reads as a leftover.
+// affiliation and uses their marks. Layout (owner, 2026-09-27): AOG
+// Maintenance is the lead card across the full row, with the rest paired two-up
+// under it — keep that pairing even, or a card is left alone in its row.
 const AVIATION_SERVICES: ServiceCard[] = [
   {
     title: 'AOG Maintenance',
+    wide: true,
     body: 'Stuck in Juneau? We respond in under 12 hours, come to the aircraft, find the fault, and give your maintenance control a plan.',
   },
   {
     title: 'Troubleshooting & Repair',
     body: 'Write-ups from the last leg diagnosed and fixed on the ramp, with a clear record of the work.',
-  },
-  {
-    title: 'Tires, Brakes & Servicing',
-    body: 'Wheel and brake changes, fluids, and the servicing that keeps a trip on schedule.',
   },
   {
     title: 'Pre-Buy Inspections',

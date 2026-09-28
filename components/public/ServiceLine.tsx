@@ -155,6 +155,9 @@ export function LineOnly({
 export interface ServiceCard {
   title: string
   body: string
+  /** The lead card: spans the whole row on a wide screen, with the rest
+   *  paired under it. On a phone every card is full width anyway. */
+  wide?: boolean
 }
 
 /**
@@ -234,24 +237,29 @@ export function ServiceTabs({
             className="pub-tabpanel mt-6 rounded-lg"
           >
             {/* Sized to its content: six cards run three-up on a wide
-                screen; four (or any count that doesn't fill rows of three)
-                run two-up, so no row strands a single card. */}
+                screen; a panel with a wide lead card, or any count that
+                doesn't fill rows of three, runs two-up, so no row strands a
+                single card. */}
             <div
               className={
-                cards.length % 3 === 0
+                cards.length % 3 === 0 && !cards.some((c) => c.wide)
                   ? 'grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-3'
                   : 'grid gap-x-8 gap-y-6 sm:grid-cols-2'
               }
             >
               {cards.map((s) => (
-                <div key={s.title}>
+                <div key={s.title} className={s.wide ? 'sm:col-span-2' : undefined}>
                   <h3
                     className="text-base font-semibold"
                     style={{ fontFamily: 'var(--font-doc-display), sans-serif' }}
                   >
                     {s.title}
                   </h3>
-                  <p className="mt-1 text-sm leading-relaxed" style={{ color: '#2a3040' }}>
+                  {/* A full-row card keeps a readable line length. */}
+                  <p
+                    className={`mt-1 text-sm leading-relaxed${s.wide ? ' max-w-2xl' : ''}`}
+                    style={{ color: '#2a3040' }}
+                  >
                     {s.body}
                   </p>
                 </div>
