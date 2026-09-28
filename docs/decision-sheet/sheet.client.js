@@ -41,7 +41,7 @@
     try {
       if (!window.claude || typeof window.claude.use !== 'function') return Promise.resolve(null)
       return Promise.resolve(window.claude.use('db')).catch(function () { return null })
-    } catch (e) {
+    } catch {
       return Promise.resolve(null)
     }
   })()
@@ -104,6 +104,9 @@
   function renderBanner(root) {
     var b = DATA.banner
     var kids = [el('h2', { text: b.heading }), el('p', { text: b.lead })]
+    ;(b.links || []).forEach(function (l) {
+      kids.push(el('p', null, [el('a', { href: l.href, target: '_blank', rel: 'noopener', text: l.text })]))
+    })
     b.sections.forEach(function (s) {
       if (!s.items || !s.items.length) return
       kids.push(s.collapsed

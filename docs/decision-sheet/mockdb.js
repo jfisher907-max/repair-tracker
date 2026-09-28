@@ -6,7 +6,7 @@
   if (window.claude) return
   var KEY = 'decision-sheet-mockdb:answers'
   var params = new URLSearchParams(location.search)
-  function load() { try { return JSON.parse(localStorage.getItem(KEY) || '{}') } catch (e) { return {} } }
+  function load() { try { return JSON.parse(localStorage.getItem(KEY) || '{}') } catch { return {} } }
   function store(all) { localStorage.setItem(KEY, JSON.stringify(all)) }
   function delay(ms) { return new Promise(function (r) { setTimeout(r, ms) }) }
   function snap(id, body) {
