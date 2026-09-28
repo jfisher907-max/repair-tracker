@@ -1,12 +1,7 @@
-import { createClient } from '@supabase/supabase-js'
+import { serviceClient } from '@/lib/payments-server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://kccmalbgfekapedgvhar.supabase.co'
-const SUPABASE_ANON =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_90jiDuHcej7FyYxnb-vP-w_DM8LYmzp'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -18,6 +13,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * tick come from the customer and are recorded as given; together with the
  * timestamp and the frozen copy of the document, that is what an authorization
  * record is supposed to contain.
+ *
+ * SERVER ONLY (2026-09-27, security review): respond_public_quote runs with
+ * the service-role key, and migration 0052 revokes it from anon — so the
+ * checks below (a real name, the consent tick, the observed IP) can no longer
+ * be skipped by calling the function straight from a browser with the public
+ * key. Deploy this route BEFORE applying 0052, or approvals stop working.
  */
 export async function POST(request: Request) {
   let body: {
@@ -60,9 +61,14 @@ export async function POST(request: Request) {
     null
   const userAgent = request.headers.get('user-agent')
 
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  })
+  const supabase = serviceClient()
+  if (!supabase) {
+    // The service-role key is not configured on this server.
+    return Response.json(
+      { error: 'Approvals are not available right now — please call the shop.' },
+      { status: 503 },
+    )
+  }
   const { data, error } = await supabase.rpc('respond_public_quote', {
     token,
     response,
@@ -73,7 +79,14 @@ export async function POST(request: Request) {
     p_declined_ids: declinedIds.length ? declinedIds : null,
   })
 
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // Never hand a database message to a public caller; the log keeps it.
+    console.error('respond_public_quote failed', error)
+    return Response.json(
+      { error: 'Something went wrong recording your answer — please try again.' },
+      { status: 500 },
+    )
+  }
   if (!data) {
     // Already answered, expired, or not a live quote.
     return Response.json({ error: 'This estimate is no longer open.' }, { status: 409 })
