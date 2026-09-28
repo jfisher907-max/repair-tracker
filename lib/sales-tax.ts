@@ -519,6 +519,15 @@ export interface ReadyItem {
 }
 
 /**
+ * Owner, 2026-09-28: "Currently not getting paid for the hangar tracking right
+ * now, that's a work in progress." Until Airlift Northwest has an invoice,
+ * Wings Hangar sessions in a quarter that began on or before this day are not
+ * missing income. Later quarters ask again (a reminder, not a to-do) until the
+ * first invoice goes out; from then on the unbilled-sessions check applies.
+ */
+export const HANGAR_UNPAID_AS_OF = '2026-09-28'
+
+/**
  * The quarter's readiness checklist, computed from the books wherever the
  * books can say. Items that only the owner can answer say so plainly.
  */
@@ -626,13 +635,14 @@ export function readiness(input: {
       detail: 'If they paid you for hangar work this quarter, that money may belong on this return.',
     })
   } else if (hangarSessions > 0) {
-    const alnwInvoices = alnwCustomerId
-      ? [...gov.values()].filter(
-          (inv) =>
-            rows.jobs.find((it) => it.job.id === inv.job_id)?.customer?.id === alnwCustomerId &&
-            (inReturn.has(inv.id) || inQuarter(inv.issue_date, qt)),
-        ).length
-      : 0
+    const alnwJob = (jobId: string) =>
+      !!alnwCustomerId && rows.jobs.find((it) => it.job.id === jobId)?.customer?.id === alnwCustomerId
+    /** Any live invoice to Airlift Northwest, any quarter: billing has begun. */
+    const billingStarted = [...gov.values()].some((inv) => alnwJob(inv.job_id))
+    const alnwInvoices = [...gov.values()].filter(
+      (inv) => alnwJob(inv.job_id) && (inReturn.has(inv.id) || inQuarter(inv.issue_date, qt)),
+    ).length
+    const sessionsWord = `${hangarSessions} Wings Hangar session${hangarSessions === 1 ? '' : 's'}`
     items.push(
       alnwInvoices > 0
         ? {
@@ -640,14 +650,30 @@ export function readiness(input: {
             ok: true,
             title: `Airlift Northwest is billed (${alnwInvoices} invoice${alnwInvoices === 1 ? '' : 's'} this quarter)`,
           }
-        : {
-            key: 'alnw',
-            ok: false,
-            title: `Airlift Northwest: ${hangarSessions} Wings Hangar session${hangarSessions === 1 ? '' : 's'} this quarter, no invoices`,
-            detail:
-              'If they paid you for hangar work in these months, that money is not in these figures and may belong on this return. Whether it is taxable is the city’s call — confirm with your tax preparer or the city before you file.',
-            refs: [{ label: 'Hangar reports', href: '/hangar/reports' }],
-          },
+        : !billingStarted && qt.start <= HANGAR_UNPAID_AS_OF
+          ? {
+              key: 'alnw',
+              ok: true,
+              title: 'Airlift Northwest: the hangar isn’t paid yet, so nothing from it goes on this return',
+              detail: `You said on September 28 that you aren’t being paid for the hangar tracking yet (${sessionsWord} this quarter). The first invoice to Airlift Northwest turns this check back on.`,
+            }
+          : !billingStarted
+            ? {
+                key: 'alnw',
+                ok: null,
+                title: `Airlift Northwest: ${sessionsWord} this quarter, still no invoices`,
+                detail:
+                  'On September 28 you said the hangar isn’t paid yet. If they have started paying you, bill them with an invoice so the money lands on this return.',
+                refs: [{ label: 'Hangar reports', href: '/hangar/reports' }],
+              }
+            : {
+                key: 'alnw',
+                ok: false,
+                title: `Airlift Northwest: ${sessionsWord} this quarter, no invoices`,
+                detail:
+                  'If they paid you for hangar work in these months, that money is not in these figures and may belong on this return. Whether it is taxable is the city’s call — confirm with your tax preparer or the city before you file.',
+                refs: [{ label: 'Hangar reports', href: '/hangar/reports' }],
+              },
     )
   }
 

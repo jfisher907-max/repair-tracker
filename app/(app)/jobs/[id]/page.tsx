@@ -16,6 +16,7 @@ import { buildInvoiceSnapshot, formatTaxRate, statusChipClass } from '@/lib/bill
 import { centsToInput, formatCents, formatMiles, parseMoney } from '@/lib/money'
 import { PAYMENT_METHODS, deletePayment, deleteTip, recordPayment, recordTip, syncJobPayment } from '@/lib/payments'
 import { formatDate, todayLocalIso } from '@/lib/date'
+import { dbErrorWords } from '@/lib/sales-tax'
 import { saveJobAsTemplate } from '@/lib/templates'
 import {
   coreDepositTotalCents,
@@ -92,6 +93,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
   const [payDate, setPayDate] = useState(todayIso())
   const [payingBusy, setPayingBusy] = useState(false)
+  /** A job marked paid before payments were tracked (J001): how and when the
+   *  customer paid, recorded after the fact. No date is guessed for him. */
+  const [legacyMethod, setLegacyMethod] = useState<PaymentMethod>('cash')
+  const [legacyDate, setLegacyDate] = useState('')
+  const [legacyBusy, setLegacyBusy] = useState(false)
+  const [legacyMsg, setLegacyMsg] = useState<string | null>(null)
   /** Tips on this job (0048): income, never payments toward it. */
   const [tips, setTips] = useState<Tip[]>([])
   /** The tips read failed (e.g. before 0048 is applied): said, not shown as "no tips". */
@@ -296,6 +303,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   /** Money actually collected on this job. It, and nothing else, pins the
    *  stage at done (owner, 2026-09-12). */
   const collectedCents = paidFromLedger + legacyPaid
+  /** Marked paid in full before payment tracking, nothing in the ledger (J001):
+   *  the bill was paid, but there is no date or method on record, and the
+   *  record-payment form below never shows on a paid job. */
+  const legacyUnrecorded = payments.length === 0 && job.payment_status === 'paid'
+  /** What such a customer paid: the whole bill — the governing invoice or the
+   *  job's charge, whichever is larger (the target syncJobPayment settles
+   *  against) — or more, if more was noted at the time. */
+  const legacyPaidCents = Math.max(
+    legacyPaid,
+    owedGrossCents(totals.total_charged_cents, govInvoice?.total_cents, 0),
+  )
   // What the customer actually owes (owedGrossCents): an issued invoice can
   // add sales tax on top of the job's charge math, so the balance targets the
   // larger figure. The GOVERNING invoice, never the sum — every invoice
@@ -357,6 +375,52 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       note: 'Balance recorded before payment tracking',
     })
     if (error) throw error
+  }
+
+  /**
+   * Put a job marked paid before payment tracking (J001) on the record: one
+   * payment for what was paid, on the day and by the method the owner gives.
+   * The paid invoice's paid date moves to that day, as it would have if the
+   * payment had been recorded then. Nothing on the bill changes.
+   */
+  async function recordLegacyPayment() {
+    if (!legacyDate) {
+      setLegacyMsg('Pick the day the customer paid.')
+      return
+    }
+    setLegacyBusy(true)
+    setLegacyMsg(null)
+    try {
+      await recordPayment({
+        jobId: id,
+        invoiceId: govInvoice?.id ?? null,
+        amountCents: legacyPaidCents,
+        method: legacyMethod,
+        date: legacyDate,
+      })
+    } catch (e) {
+      // The row may have landed before the job's figures failed to update:
+      // reload so the card shows what is really on record.
+      setLegacyMsg(dbErrorWords(e, 'record the payment'))
+      await load()
+      setLegacyBusy(false)
+      return
+    }
+    // The payment landed: a paid date that fails to move is said, never
+    // reported as the payment failing.
+    if (govInvoice?.status === 'paid') {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ paid_at: `${legacyDate}T00:00:00Z` })
+        .eq('id', govInvoice.id)
+      if (error) {
+        setLegacyMsg(
+          `The payment is recorded, but ${govInvoice.invoice_number} still shows its old paid date. ${dbErrorWords(error, 'move it')}`,
+        )
+      }
+    }
+    await load()
+    setLegacyBusy(false)
   }
 
   /**
@@ -2055,10 +2119,59 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             </span>
           </div>
         ))}
-        {payments.length === 0 && job.payment_status !== 'unpaid' && (
+        {payments.length === 0 && job.payment_status === 'partial' && (
           <p className="text-xs" style={{ color: 'var(--text3)' }}>
-            Marked {job.payment_status} before payment tracking existed — new payments recorded
-            here will take over the math.
+            Marked partial before payment tracking existed — new payments recorded here will take
+            over the math.
+          </p>
+        )}
+        {legacyUnrecorded && (
+          <div className="space-y-2 rounded-lg p-3" style={{ background: 'var(--bg2)' }}>
+            <p className="text-sm" style={{ color: 'var(--text2)' }}>
+              Marked paid before the app tracked payments, so there&apos;s no record of how or when
+              the customer paid. Add it for your tax records — the {formatCents(legacyPaidCents)}{' '}
+              bill doesn&apos;t change.
+            </p>
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              The job is dated {formatDate(job.date)}
+              {govInvoice?.paid_at ? `; the invoice was marked paid ${formatDate(govInvoice.paid_at.slice(0, 10))}` : ''}.
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <select
+                className="select"
+                aria-label="How the customer paid"
+                value={legacyMethod}
+                onChange={(e) => setLegacyMethod(e.target.value as PaymentMethod)}
+              >
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+              <input
+                className="input"
+                type="date"
+                aria-label="Day the customer paid"
+                value={legacyDate}
+                onChange={(e) => {
+                  setLegacyDate(e.target.value)
+                  setLegacyMsg(null)
+                }}
+              />
+              <button
+                className="btn btn-primary col-span-2 sm:col-span-1"
+                disabled={legacyBusy || !legacyDate}
+                onClick={recordLegacyPayment}
+              >
+                {legacyBusy ? 'Recording…' : <>Record {formatCents(legacyPaidCents)} paid</>}
+              </button>
+            </div>
+          </div>
+        )}
+        {/* Outside the panel: a payment that landed hides the panel, and what
+            went wrong after it must still be read. */}
+        {legacyMsg && (
+          <p className="text-sm" style={{ color: 'var(--red)' }} role="status">
+            {legacyMsg}
           </p>
         )}
         {govInvoice && overCollected > 0 && (
