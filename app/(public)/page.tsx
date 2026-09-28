@@ -68,15 +68,16 @@ const AUTOMOTIVE_SERVICES: ServiceCard[] = [
   },
 ]
 
-// AWAITING THE OWNER: repair services for private and business jets
-// transiting Juneau. This list still awaits Jake's confirmation — the
-// certificate scope and the jet types he'll take on are open — so add,
-// reword or drop cards here as that is settled. The panel sizes itself to
-// however many cards there are (four run two-up on a wide screen).
+// Repair services for private and business jets transiting Juneau. The
+// owner (2026-09-27): "advertise AOG maintenance services and pre-buys. My
+// response time is quick: less than 12 hours." Still open: which jet types to
+// name. Never name an operator (NetJets, Flexjet, ...) here — it implies an
+// affiliation and uses their marks. Keep the count even: the panel runs
+// two-up on a wide screen, and a card alone in a row reads as a leftover.
 const AVIATION_SERVICES: ServiceCard[] = [
   {
-    title: 'AOG Response',
-    body: 'Stuck in Juneau? We come to the aircraft, find the fault, and give your maintenance control a plan.',
+    title: 'AOG Maintenance',
+    body: 'Stuck in Juneau? We respond in under 12 hours, come to the aircraft, find the fault, and give your maintenance control a plan.',
   },
   {
     title: 'Troubleshooting & Repair',
@@ -87,8 +88,8 @@ const AVIATION_SERVICES: ServiceCard[] = [
     body: 'Wheel and brake changes, fluids, and the servicing that keeps a trip on schedule.',
   },
   {
-    title: 'Photo-Documented Records',
-    body: 'Every repair photographed and written up, with a digital invoice your operator can review before approving.',
+    title: 'Pre-Buy Inspections',
+    body: 'A thorough, independent inspection and records review before you buy, with every finding photographed and written up.',
   },
 ]
 
@@ -125,12 +126,12 @@ const STEPS: Record<ServiceLine, Step[]> = {
     {
       n: '1',
       title: 'Tell us about the aircraft',
-      body: 'Type and tail number, the discrepancy, where it’s parked, and who to reach — the crew or maintenance control.',
+      body: 'Type and tail number, the discrepancy or the inspection you need, where it’s parked, and who to reach — the crew or maintenance control.',
     },
     {
       n: '2',
       title: 'We come back with a plan',
-      body: 'A written estimate and a time at the aircraft.',
+      body: 'A reply in under 12 hours, with a written estimate and a time at the aircraft.',
     },
     {
       n: '3',
@@ -144,7 +145,7 @@ const REQUEST_INTRO: Record<ServiceLine, string> = {
   automotive:
     "Tell us about your vehicle and what it needs. We'll get back to you within one business day with an estimate and a plan for getting the vehicle in.",
   aviation:
-    'Tell us about the aircraft and the discrepancy. We’ll come back with an estimate and a plan to return it to service.',
+    'Tell us about the aircraft and what it needs — a discrepancy or a pre-buy. We’ll reply in under 12 hours with an estimate and a plan.',
 }
 
 // Runs at HTML parse time — before the first paint and before React loads —
