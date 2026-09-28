@@ -274,7 +274,7 @@ function Report() {
   }, [jobs, from, to])
 
   // Print-to-PDF names the file after document.title — make every saved PDF
-  // self-identifying ("J001 Service Record — Sam Steensland.pdf").
+  // self-identifying ("J001 Service Record — Jane Doe.pdf").
   useEffect(() => {
     if (!jobs) return
     let title = ''
