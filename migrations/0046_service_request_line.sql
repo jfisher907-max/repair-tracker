@@ -25,7 +25,9 @@
 -- if PostgREST reports the 11-argument function missing (PGRST202 — this file
 -- not yet applied), retries once without it, so the site keeps taking
 -- requests whichever lands first. RLS is unchanged: owner_all (0023) already
--- covers every column, and there are still no anon table grants.
+-- covers every column. (anon does hold table grants on service_requests —
+-- Supabase's defaults — but no policy admits anon, so RLS refuses every
+-- anon read and write; verified 2026-09-27.)
 
 alter table public.service_requests
   add column if not exists service_line text not null default 'automotive';
