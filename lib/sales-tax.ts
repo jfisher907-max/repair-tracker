@@ -4,7 +4,7 @@ import { formatDate } from './date'
 import { formatCents } from './money'
 import { supabase } from './supabase'
 import { reminderEdge, type ReminderEdge } from './tax-calendar'
-import type { TaxBasis, TaxFiling } from './types'
+import type { Settings, TaxBasis, TaxFiling } from './types'
 
 /**
  * The City and Borough of Juneau sales-tax return, computed from the books.
@@ -490,6 +490,89 @@ export function salesTaxPaid(filings: readonly TaxFiling[], year: 'all' | number
         (year === 'all' || Number(f.period_start.slice(0, 4)) === year),
     )
     .reduce((s, f) => s + f.amount_cents, 0)
+}
+
+/**
+ * The first Juneau return: July–September 2026, officially due Sat Oct 31 (the
+ * city takes it through Mon Nov 2). The resale-card reminder waits for it.
+ */
+export const FIRST_RETURN = quarterFor(2026, 3)
+
+/** The city's sales-tax forms, where the Resale of Goods Certificate Application is (checked 2026-09-29). */
+export const CBJ_SALES_TAX_FORMS_URL = 'https://juneau.org/finance/sales-tax-forms'
+/** The CBJ Sales Tax Office, as the city's exemption summary lists it; the comma dials the extension. */
+export const CBJ_SALES_TAX_OFFICE = { words: '(907) 586-5215 ext. 4901', tel: 'tel:+19075865215,4901' }
+
+/**
+ * TAX-3 (owner, 2026-09-29: "Ask once my first return is filed"). The one-time
+ * resale-card reminder is due once FIRST_RETURN is recorded as FILED — a
+ * cbj_sales_tax row for exactly Jul 1–Sep 30, 2026 with filed_on set (paid
+ * alone is not filed; a row for July alone is not the quarter) — and he has
+ * not answered it yet (settings.resale_card_prompt null, migration 0056).
+ *
+ * Errs toward NOT showing, the opposite of the Taxes door: settings that could
+ * not be read (null), or a row read before 0056 (the key is absent, so
+ * undefined), would give a card whose "Hide this" cannot save, back on every
+ * visit. Filings that could not be read (null) cannot say it was filed.
+ */
+export function resalePromptDue(
+  filings: readonly TaxFiling[] | null | undefined,
+  settings: Pick<Settings, 'resale_card_prompt'> | null | undefined,
+): boolean {
+  // Strictly null: undefined is "the column isn't there yet", not "not answered".
+  if (!settings || settings.resale_card_prompt !== null) return false
+  return (filings ?? []).some(
+    (f) =>
+      f.obligation === 'cbj_sales_tax' &&
+      f.period_start === FIRST_RETURN.start &&
+      f.period_end === FIRST_RETURN.end &&
+      !!f.filed_on,
+  )
+}
+
+/** One parts receipt as the counter-tax figure reads it: its tax, and the day it counts on. */
+export interface CounterTaxRow {
+  tax_cents: number
+  date: string
+}
+
+/** Sales tax paid at the parts counter, as the receipts record it (a cost, never a customer charge). */
+export interface CounterTax {
+  /** receipts.tax_cents summed. Short of the truth while some receipts record none. */
+  cents: number
+  /** Receipts that record their tax (tax_cents above 0). */
+  withTax: number
+  /** Every receipt in the span. */
+  receipts: number
+}
+
+/** The counter tax on the receipts dated on or after `since` (YYYY-MM-DD). */
+export function counterTaxSince(rows: readonly CounterTaxRow[], since: string): CounterTax {
+  const span = rows.filter((r) => r.date >= since)
+  return {
+    cents: span.reduce((s, r) => s + r.tax_cents, 0),
+    withTax: span.filter((r) => r.tax_cents > 0).length,
+    receipts: span.length,
+  }
+}
+
+/**
+ * Every receipt on a live job, dated the way Parts spend dates it (lib/finances
+ * loadFinanceRows): its purchase date, or its job's date when it has none. A
+ * binned job's receipts are out with it. Throws on a failed read.
+ */
+export async function loadCounterTaxRows(): Promise<CounterTaxRow[]> {
+  const { data, error } = await supabase.from('receipts').select('tax_cents, purchase_date, job:jobs(date, deleted_at)')
+  if (error) throw error
+  const rows =
+    (data as unknown as {
+      tax_cents: number
+      purchase_date: string | null
+      job: { date: string; deleted_at: string | null } | null
+    }[]) ?? []
+  return rows
+    .filter((r) => r.job && !r.job.deleted_at)
+    .map((r) => ({ tax_cents: r.tax_cents, date: r.purchase_date ?? r.job!.date }))
 }
 
 export interface ReadyRef {

@@ -6,8 +6,8 @@ import JobRow from '@/components/JobRow'
 import MonthlyChart, { type MonthlyJob } from '@/components/MonthlyChart'
 import type { BusinessDocument } from '@/components/BusinessDocuments'
 import type { CoreOut } from '@/lib/cores'
-import { salesTaxPaid, taxReminder } from '@/lib/sales-tax'
-import type { TaxBasis, TaxFiling } from '@/lib/types'
+import { resalePromptDue, salesTaxPaid, taxReminder } from '@/lib/sales-tax'
+import type { Settings, TaxBasis, TaxFiling } from '@/lib/types'
 import { computeFinances, financeYears, isBookedJob, type FinanceRows, type MonthFigures } from '@/lib/finances'
 import ActionLane, { type BillingCounts } from './ActionLane'
 import EarnedBar from './EarnedBar'
@@ -62,6 +62,7 @@ export default function DashboardView({
   businessName,
   taxFilings,
   taxBasis = null,
+  resaleCardPrompt,
   now: nowProp,
 }: {
   rows: FinanceRows
@@ -74,6 +75,8 @@ export default function DashboardView({
   taxFilings?: TaxFiling[] | null
   /** settings.sales_tax_basis; null = not chosen yet. */
   taxBasis?: TaxBasis | null
+  /** settings.resale_card_prompt (0056): null = not answered yet; undefined = not read, or the column isn't there. */
+  resaleCardPrompt?: Settings['resale_card_prompt']
   now?: Date
 }) {
   const [year, setYear] = useState<'all' | number>('all')
@@ -94,6 +97,11 @@ export default function DashboardView({
     [rows, taxFilings, taxBasis, now],
   )
   const taxPaid = taxFilings === undefined ? undefined : taxFilings === null ? null : salesTaxPaid(taxFilings, year)
+  // The resale-card door is the opposite: it errs toward staying away. Only a
+  // settings row that says "not answered" (null, not undefined) and filings
+  // that show the first return filed bring it up, so it never asks a question
+  // whose "Hide this" could not save.
+  const resaleCard = resalePromptDue(taxFilings, { resale_card_prompt: resaleCardPrompt })
   const thisYear = now.getFullYear()
   const thisMonth = now.getMonth()
   // The strip and the tiles' "so far" lines are about NOW, whatever year the
@@ -270,6 +278,7 @@ export default function DashboardView({
         newRequests={newRequests}
         billing={billing}
         taxes={taxes}
+        resaleCard={resaleCard}
         now={now}
       />
 

@@ -9,7 +9,7 @@ import { docState, listBusinessDocuments, type BusinessDocument } from '@/compon
 import { listCores, type CoreOut } from '@/lib/cores'
 import { loadFinanceRows, type FinanceRows } from '@/lib/finances'
 import { loadTaxFilings } from '@/lib/sales-tax'
-import type { TaxBasis, TaxFiling } from '@/lib/types'
+import type { Settings, TaxBasis, TaxFiling } from '@/lib/types'
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -31,6 +31,8 @@ export default function Dashboard() {
   /** Tax filings recorded (0053): undefined while loading, null when the read failed. */
   const [taxFilings, setTaxFilings] = useState<TaxFiling[] | null | undefined>(undefined)
   const [taxBasis, setTaxBasis] = useState<TaxBasis | null>(null)
+  /** The resale-card answer (TAX-3, 0056); undefined = the row or its column isn't there. */
+  const [resaleCardPrompt, setResaleCardPrompt] = useState<Settings['resale_card_prompt']>(undefined)
 
   useEffect(() => {
     loadFinanceRows()
@@ -57,6 +59,8 @@ export default function Dashboard() {
         setBusinessName(data?.business_name ?? '')
         const b = data?.sales_tax_basis
         setTaxBasis(b === 'cash' || b === 'accrual' ? b : null)
+        // Undefined before 0056 or on a failed read: its door stays away.
+        setResaleCardPrompt(data?.resale_card_prompt)
       })
     // A failed read is not "nothing filed": the ledger says it could not read
     // them, and the Taxes door shows (it errs toward reminding).
@@ -113,6 +117,7 @@ export default function Dashboard() {
       businessName={businessName}
       taxFilings={taxFilings}
       taxBasis={taxBasis}
+      resaleCardPrompt={resaleCardPrompt}
     />
   )
 }

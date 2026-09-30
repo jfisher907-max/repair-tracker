@@ -45,6 +45,7 @@ export default function ActionLane({
   newRequests,
   billing,
   taxes = null,
+  resaleCard = false,
   now = new Date(),
 }: {
   f: Finances
@@ -54,6 +55,8 @@ export default function ActionLane({
   billing: BillingCounts
   /** The sales-tax return coming due, when one is inside 30 days or late (lib/sales-tax taxReminder). */
   taxes?: TaxReminder | null
+  /** The one-time resale-card reminder is waiting for an answer (lib/sales-tax resalePromptDue). */
+  resaleCard?: boolean
   now?: Date
 }) {
   // Cores: what is out of the shop and not yet back as a credit.
@@ -244,6 +247,21 @@ export default function ActionLane({
         paidInFull ? 'paid, not marked filed · ' : paid > 0 ? `${money(paid)} paid, rest ` : ''
       }${when}`,
       edge: taxes.edge,
+    })
+  }
+  // Resale card (TAX-3; the owner's answer: "Ask once my first return is
+  // filed"): a question, not a deadline, so it is 'info'. It is here from the
+  // day the Jul–Sep 2026 return is recorded as filed until he answers it on
+  // the Taxes page, where the card and its two buttons are; either answer is
+  // kept on the settings row (0056), so the door never comes back.
+  if (resaleCard) {
+    doors.push({
+      href: '/taxes',
+      n: 1,
+      label: 'Resale card',
+      title: 'Resale card',
+      sub: 'first return filed · ask the city?',
+      edge: 'info',
     })
   }
   if (docAlerts.length > 0) {
