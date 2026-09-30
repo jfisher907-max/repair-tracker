@@ -43,8 +43,10 @@ import {
   formatAirframeHours,
   holdsToApproval,
   lineOf,
+  marksPayload,
   needsPartConditions,
   paperErrorWords,
+  serviceMarkText,
 } from '@/lib/service-line'
 import {
   vehicleLabel,
@@ -1024,6 +1026,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           // hours) — frozen with the rest once the invoice is issued (0055).
           service_line: serviceLine,
           aircraft: aircraftSnapshot(vehicle, job),
+          // AOG / Nights & weekends as marked on the job (0065), frozen the
+          // same way. A car's, or an unmarked aircraft's, sends nothing.
+          ...marksPayload(serviceLine, job),
           job_title: job!.title,
           work_performed: job!.work_performed,
           due_date: dueDate,
@@ -1101,6 +1106,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               {serviceLine === 'aviation' && (
                 <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--accent2)' }}>
                   Aircraft paperwork
+                </span>
+              )}
+              {/* AOG / Nights & weekends (0065): what the invoice will print. */}
+              {serviceLine === 'aviation' && serviceMarkText(job) && (
+                <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--accent2)' }}>
+                  {serviceMarkText(job)}
                 </span>
               )}
               {job.promised_date && job.payment_status !== 'paid' && (

@@ -5,6 +5,7 @@ import { Suspense, useEffect, useState } from 'react'
 import QuoteForm, { type AddOnJobContext, type QuoteSuggestion } from '@/components/QuoteForm'
 import { supabase } from '@/lib/supabase'
 import { isLive, listForVehicle } from '@/lib/recommendations'
+import { marksOf } from '@/lib/service-line'
 import { vehicleLabel, type Customer, type Job, type Vehicle } from '@/lib/types'
 
 /**
@@ -51,6 +52,8 @@ function NewQuoteInner() {
           customer_name: job.vehicle.customer.name,
           vehicle_id: job.vehicle.id,
           vehicle_label: vehicleLabel(job.vehicle),
+          // AOG / Nights & weekends carry over to the add-on's paper (0065).
+          marks: marksOf(job),
         })
         // Last visit's "not today" is this visit's one-tap upsell: open
         // recommendations for this vehicle prefill as quote lines.

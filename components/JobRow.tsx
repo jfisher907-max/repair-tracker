@@ -5,6 +5,7 @@ import type { JobWithContext } from '@/lib/data'
 import { isBookedJob } from '@/lib/finances'
 import { formatCents } from '@/lib/money'
 import { formatDateShort } from '@/lib/date'
+import { lineOf, serviceMarkText } from '@/lib/service-line'
 import { vehicleLabel } from '@/lib/types'
 
 /* The signature pattern: a status-colored 3px left edge on a neutral card.
@@ -28,6 +29,8 @@ export default function JobRow({ item }: { item: JobWithContext }) {
   const { job, vehicle, customer, totals } = item
   const booked = isBookedJob(job)
   const edgeKey = booked ? job.stage : job.payment_status
+  /** AOG / Nights & weekends on aircraft work (0065); null on everything else. */
+  const mark = lineOf(vehicle) === 'aviation' ? serviceMarkText(job) : null
   return (
     <Link
       href={`/jobs/${job.id}`}
@@ -35,7 +38,9 @@ export default function JobRow({ item }: { item: JobWithContext }) {
       style={{ borderLeft: `var(--edge-width) solid ${stripeColors[edgeKey] ?? 'var(--border)'}` }}
     >
       <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
+        {/* flex-wrap: a marker chip drops to its own line on a phone instead
+            of pushing the row sideways. A row without one lays out as before. */}
+        <div className="flex flex-wrap items-baseline gap-2">
           {/* Ids are gold, mono, always visible. */}
           <span className="wnt-id text-xs">{job.job_number}</span>
           <span className="text-xs" style={{ color: 'var(--text3)' }}>
@@ -43,6 +48,11 @@ export default function JobRow({ item }: { item: JobWithContext }) {
             {job.stage === 'scheduled' ? 'booked ' : ''}
             {formatDateShort(job.date)}
           </span>
+          {mark && (
+            <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--accent2)' }}>
+              {mark}
+            </span>
+          )}
         </div>
         <div className="truncate font-semibold">{job.title}</div>
         <div className="truncate text-sm" style={{ color: 'var(--text2)' }}>

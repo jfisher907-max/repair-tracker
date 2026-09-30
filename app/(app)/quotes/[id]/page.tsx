@@ -11,7 +11,7 @@ import { computeQuoteTotals, statusChipClass, depositForRule, depositRuleLabel, 
 import { syncJobPayment } from '@/lib/payments'
 import { formatCents } from '@/lib/money'
 import { todayLocalIso } from '@/lib/date'
-import { PAPER, lineOf, paperErrorWords } from '@/lib/service-line'
+import { PAPER, lineOf, marksOf, paperErrorWords, serviceMarkText } from '@/lib/service-line'
 import {
   vehicleLabel,
   type Customer,
@@ -187,6 +187,8 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     serviceLine: line,
     // The aircraft's serial number prints after the dates; its tail is in the label.
     aircraft: line === 'aviation' && vehicle ? { serial_number: vehicle.serial_number ?? null } : null,
+    // AOG / Nights & weekends (0065): the same words the customer's link prints.
+    marks: marksOf(quote),
   }
 
   /**
@@ -545,6 +547,12 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             {line === 'aviation' && (
               <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--accent2)' }}>
                 Aircraft paperwork
+              </span>
+            )}
+            {/* AOG / Nights & weekends (0065): carried onto the job it becomes. */}
+            {line === 'aviation' && serviceMarkText(quote) && (
+              <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--accent2)' }}>
+                {serviceMarkText(quote)}
               </span>
             )}
             <span className={statusChipClass(quote.status)}>{quote.status}</span>
