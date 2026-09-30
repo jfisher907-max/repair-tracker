@@ -9,20 +9,6 @@ export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'other', label: 'Other' },
 ]
 
-/** Schedule-C-friendly buckets; free text is still allowed in the form. */
-export const EXPENSE_CATEGORIES = [
-  'Parts & materials',
-  'Tools & equipment',
-  'Shop supplies',
-  'Insurance',
-  'Rent',
-  'Utilities',
-  'Advertising',
-  'Software & fees',
-  'Fuel & travel',
-  'Other',
-]
-
 /**
  * Record a payment, then re-derive the cached job payment fields and settle
  * any linked invoice. The payments ledger is the source of truth; the job's

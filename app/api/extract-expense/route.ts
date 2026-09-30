@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { clientForRequest, unauthorized } from '@/lib/server'
+import { EXPENSE_LINES, EXPENSE_LINE_KEYS, isExpenseLine } from '@/lib/schedule-c'
 
 // Same small-model approach as job receipts — expense receipts are simpler
 // (one total, a vendor, a date), so Haiku handles them easily.
@@ -8,11 +9,8 @@ const MODEL = 'claude-haiku-4-5'
 const SUPPORTED_MEDIA = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const
 type SupportedMedia = (typeof SUPPORTED_MEDIA)[number]
 
-const CATEGORIES = [
-  'Parts & materials', 'Tools & equipment', 'Shop supplies', 'Insurance', 'Rent',
-  'Utilities', 'Advertising', 'Software & fees', 'Fuel & travel', 'Other',
-]
-
+// The answer is a Schedule C line KEY (EXP-2), the same list the database
+// CHECK allows (0057), so a suggestion can always be saved as-is.
 const SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -21,16 +19,18 @@ const SCHEMA = {
     vendor: { type: ['string', 'null'], description: 'Store/vendor name as printed' },
     date: { type: ['string', 'null'], description: 'Purchase date as YYYY-MM-DD, null if unreadable' },
     total: { type: ['number', 'null'], description: 'Grand total in dollars as printed' },
-    category: { type: ['string', 'null'], enum: [...CATEGORIES, null], description: 'Best-fit expense category' },
+    category: { type: ['string', 'null'], enum: [...EXPENSE_LINE_KEYS, null], description: 'The tax-form line key it belongs on' },
     description: { type: ['string', 'null'], description: 'Short summary of what was bought, e.g. "impact sockets + zip ties"' },
   },
 } as const
 
-const PROMPT = `This is a business-expense receipt for a small auto repair shop. Extract:
+const PROMPT = `This is a business-expense receipt for a small aviation and auto repair shop. Extract:
 - vendor: the store name as printed (null if unreadable)
 - date: purchase date as YYYY-MM-DD (null if unreadable)
 - total: the grand total in dollars as printed
-- category: best fit from the allowed list (tools -> "Tools & equipment", consumables like gloves/cleaner -> "Shop supplies", gas -> "Fuel & travel", etc.)
+- category: the key of the federal Schedule C line it belongs on, from this list:
+${EXPENSE_LINE_KEYS.map((k) => `    ${k}: ${EXPENSE_LINES[k].label}`).join('\n')}
+  Tools -> "equipment_small" ("equipment_large" if a single item costs over $2,500); consumables like gloves or cleaner -> "supplies"; gas -> "car_truck"; subscriptions and web hosting -> "software"; licenses and permits -> "taxes_licenses". Parts for a customer's vehicle or aircraft -> null (they go on that job, not here).
 - description: a short human summary of what was purchased (a few words)
 Prefer null over guessing. Ignore marketing text and surveys.`
 
@@ -97,8 +97,7 @@ export async function POST(request: Request) {
       vendor: typeof raw.vendor === 'string' ? raw.vendor : null,
       date: typeof raw.date === 'string' ? raw.date : null,
       total: typeof raw.total === 'number' && Number.isFinite(raw.total) ? raw.total : null,
-      category:
-        typeof raw.category === 'string' && CATEGORIES.includes(raw.category) ? raw.category : null,
+      category: isExpenseLine(raw.category) ? raw.category : null,
       description: typeof raw.description === 'string' ? raw.description : null,
     })
   } catch (e) {
