@@ -47,6 +47,8 @@ export default function SettingsPage() {
   const [aiTest, setAiTest] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [exporting, setExporting] = useState(false)
+  /** What the backup is doing, then how it went. */
+  const [exportMsg, setExportMsg] = useState<{ tone: 'busy' | 'ok' | 'warn' | 'error'; text: string } | null>(null)
   const [deleted, setDeleted] = useState<DeletedItems>({
     customers: [],
     vehicles: [],
@@ -164,19 +166,33 @@ export default function SettingsPage() {
 
   async function exportAll() {
     setExporting(true)
+    setExportMsg(null)
     try {
-      const token = await getAccessToken()
-      const res = await fetch('/api/export', { headers: { Authorization: `Bearer ${token}` } })
-      if (!res.ok) throw new Error(`Export failed (${res.status})`)
-      const blob = await res.blob()
+      // Loaded on the click: the zip library only comes down for a backup.
+      // It fails in a dead zone (the service worker has no copy of a piece it
+      // has never fetched) as well as after a deploy, so the words cover both.
+      const { buildBackupZip } = await import('@/lib/backup-zip').catch(() => {
+        throw new Error('Couldn’t start the backup: check the signal, then reload the page and try again.')
+      })
+      const { blob, missing } = await buildBackupZip((text) => setExportMsg({ tone: 'busy', text }))
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
       a.download = `${BRAND_SLUG}-export-${new Date().toISOString().slice(0, 10)}.zip`
       a.click()
-      URL.revokeObjectURL(url)
+      // Revoked a minute later, not at once: a phone can still be starting a
+      // large download when click() returns.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      setExportMsg(
+        missing > 0
+          ? {
+              tone: 'warn',
+              text: `Backup ready, but ${missing} file${missing === 1 ? '' : 's'} couldn’t be downloaded — README.txt in the zip lists ${missing === 1 ? 'it' : 'them'}.`,
+            }
+          : { tone: 'ok', text: 'Backup ready ✓ — look for it in your downloads.' },
+      )
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e))
+      setExportMsg({ tone: 'error', text: e instanceof Error ? e.message : String(e) })
     }
     setExporting(false)
   }
@@ -488,6 +504,24 @@ export default function SettingsPage() {
         <button className="btn" onClick={exportAll} disabled={exporting}>
           {exporting ? 'Building zip…' : <>Export all data</>}
         </button>
+        {exportMsg && (
+          <p
+            className="text-sm"
+            role={exportMsg.tone === 'error' ? 'alert' : 'status'}
+            style={{
+              color:
+                exportMsg.tone === 'ok'
+                  ? 'var(--green)'
+                  : exportMsg.tone === 'warn'
+                    ? 'var(--orange)'
+                    : exportMsg.tone === 'error'
+                      ? 'var(--red)'
+                      : 'var(--text2)',
+            }}
+          >
+            {exportMsg.text}
+          </p>
+        )}
       </div>
 
       <BusinessDocuments />
