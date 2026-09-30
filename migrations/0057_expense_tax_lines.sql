@@ -41,6 +41,8 @@
 --   --   bd254d88… 2026-08-21 Licensing  10000
 --   --   c22df695… 2026-08-18 Other       1399
 --   --   c83452c3… 2026-08-21 Licensing  25000
+--   --   (a category that is already a line key also passes: the owner
+--   --   picked it in the new code, and step 2 leaves it as he set it)
 --   -- (b) rows no step below can place on a line: expect 0
 --   select count(*) from public.expenses
 --    where category <> all (array['advertising','car_truck','commissions_fees','contract_labor',
@@ -80,10 +82,17 @@ revoke all on function public.book_stripe_fee(text, integer, text) from authenti
 
 -- ------------------------------------------------------------------------
 -- 2. The four rows the ruling moves, by id (measured 2026-09-29). Refuse,
---    never guess: if any of them is missing, or its date, amount or category
---    is not what the owner approved, stop here and change nothing more. A row
---    already on its new key passes (a re-run, or the owner set it himself in
---    the new picker).
+--    never guess: if any of them is missing, or its date or amount is not
+--    what the owner approved, or it sits on a label that is neither its
+--    approved one nor a line key, stop here and change nothing more.
+--
+--    A row already on ANY line key passes, not only its approved one. The
+--    new code ships first and asks the owner to pick a line for these rows
+--    (the Expenses page will not save an edit to one until he does), so he
+--    may have put the $250 'LLC License' under start-up costs, or the domain
+--    under another line, before this runs. That later choice is his and it
+--    stands: the two UPDATEs below touch only a row still on its approved
+--    before-label, so a re-picked row (or a re-run) is left alone.
 --
 --    c22df695… 2026-08-18 Vercel      'Website domain'    $13.99  Other     -> software       (27b, Part V)
 --    86e4e827… 2026-08-18 Anthropic   'Claude sub'       $105.00  Other     -> software       (27b, Part V)
@@ -95,14 +104,19 @@ do $$
 declare
   r record;
   v record;
+  -- the 22 keys the CHECK in step 5 allows
+  line_keys constant text[] := array['advertising','car_truck','commissions_fees','contract_labor',
+    'equipment_large','insurance','interest','legal_professional','office','rent_equipment',
+    'rent_property','repairs','supplies','taxes_licenses','travel','meals','utilities',
+    'software','equipment_small','card_fees','startup','other'];
 begin
   for r in
     select * from (values
-      ('c22df695-7883-4c3c-b6b8-a7cc0b830012'::uuid, date '2026-08-18',  1399, 'Other',     'software'),
-      ('86e4e827-b614-4e49-8cd7-1905eb2cceb0'::uuid, date '2026-08-18', 10500, 'Other',     'software'),
-      ('c83452c3-f730-4855-b848-e35551a06522'::uuid, date '2026-08-21', 25000, 'Licensing', 'taxes_licenses'),
-      ('bd254d88-4264-4aa7-94c2-98ca2356a3be'::uuid, date '2026-08-21', 10000, 'Licensing', 'taxes_licenses')
-    ) as t(id, on_date, cents, before_cat, after_cat)
+      ('c22df695-7883-4c3c-b6b8-a7cc0b830012'::uuid, date '2026-08-18',  1399, 'Other'),
+      ('86e4e827-b614-4e49-8cd7-1905eb2cceb0'::uuid, date '2026-08-18', 10500, 'Other'),
+      ('c83452c3-f730-4855-b848-e35551a06522'::uuid, date '2026-08-21', 25000, 'Licensing'),
+      ('bd254d88-4264-4aa7-94c2-98ca2356a3be'::uuid, date '2026-08-21', 10000, 'Licensing')
+    ) as t(id, on_date, cents, before_cat)
   loop
     select e.date, e.amount_cents, e.category into v from public.expenses e where e.id = r.id;
     if not found then
@@ -112,9 +126,9 @@ begin
       raise exception 'EXP-2: expense % now reads % / % cents, not % / % cents as approved. Check it by hand, then re-run',
         r.id, v.date, v.amount_cents, r.on_date, r.cents;
     end if;
-    if v.category <> r.before_cat and v.category <> r.after_cat then
-      raise exception 'EXP-2: expense % has category %, neither % (approved before) nor % (approved after). Check it by hand, then re-run',
-        r.id, v.category, r.before_cat, r.after_cat;
+    if v.category <> r.before_cat and not (v.category = any (line_keys)) then
+      raise exception 'EXP-2: expense % has category %, neither % (approved before) nor a tax-form line key. Check it by hand, then re-run',
+        r.id, v.category, r.before_cat;
     end if;
   end loop;
 end $$;
@@ -195,7 +209,9 @@ comment on column public.expenses.category is
 --   select pg_get_constraintdef(oid) from pg_constraint
 --    where conrelid = 'public.expenses'::regclass and conname = 'expenses_category_check';
 --
---   -- the four rows: software x2, taxes_licenses x2
+--   -- the four rows: software x2, taxes_licenses x2 (a row the owner had
+--   -- already re-picked before the apply keeps his line instead, and the
+--   -- per-key figures below shift by its amount; the total never does)
 --   select id, date, category, amount_cents from public.expenses order by date, id;
 --
 --   -- per key: software 11899, taxes_licenses 35000; 46899 in all (unchanged)

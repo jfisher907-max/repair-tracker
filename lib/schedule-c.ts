@@ -38,8 +38,9 @@ export interface ExpenseLineInfo {
   label: string
   /** The compact name for chips and list rows. */
   short: string
-  /** The IRS's own words for a Part II line (the Reports page, for the
-   *  preparer). Part V items print under 27b with their label instead. */
+  /** What the Reports page prints for the preparer: the IRS's own words for
+   *  a Part II line, the Part V description for an item under 27b. Never a
+   *  note to Jake ('other' reads 'Other', not the picker's instruction). */
   formName: string
   /** The line on the 2025 (and earlier) form. */
   line2025: string
@@ -183,6 +184,11 @@ export const MORE_LINES: readonly ExpenseLine[] = EXPENSE_LINE_KEYS.filter((k) =
 /** The de minimis safe harbor: $2,500 per item or invoice. */
 export const DE_MINIMIS_CENTS = 250_000
 
+/** expenses.amount_cents is a Postgres integer, so it stops at
+ *  $21,474,836.47 either way. parseMoney has no ceiling, so the page checks
+ *  this before saving rather than letting the database refuse in its words. */
+export const EXPENSE_MAX_CENTS = 2_147_483_647
+
 /** True for a stored key; false for a label saved before 0057 ('Other',
  *  'Licensing', typed text…). */
 export function isExpenseLine(v: unknown): v is ExpenseLine {
@@ -294,11 +300,18 @@ export function totalsByLine(
 /**
  * An expenses write refused, in plain words. The only CHECK on expenses is
  * the line key (0057), so 23514 means the line is not one on the list: a
- * page saved before the migration, or an old label. Everything else goes
- * through the house helper; never a constraint name or a code.
+ * page saved before the migration, or an old label. The amount and the date
+ * are the only typed values in the payload, and the page checks both before
+ * saving; these codes catch whatever still gets past it (22003 out of range
+ * and 22P02 not a whole number can only be amount_cents; 22007 and 22008 can
+ * only be the date). Everything else goes through the house helper; never a
+ * constraint name or a code.
  */
 export function expenseErrorWords(e: unknown, what: string): string {
   const code = (e as { code?: string } | null)?.code
   if (code === '23514') return 'Pick a line from the list, then save.'
+  if (code === '22003') return 'That amount is too large. Check it, then save.'
+  if (code === '22P02') return 'Check the amount, then save.'
+  if (code === '22007' || code === '22008') return 'Check the date, then save.'
   return dbErrorWords(e, what, 'expenses')
 }

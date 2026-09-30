@@ -503,7 +503,7 @@ export default function ReportsPage() {
                     {report.byLine.partV.map(({ key, cents }) => (
                       <tr key={key}>
                         <td />
-                        <td style={{ paddingLeft: '1.25rem' }}>{EXPENSE_LINES[key].label}</td>
+                        <td style={{ paddingLeft: '1.25rem' }}>{EXPENSE_LINES[key].formName}</td>
                         <td className="num">{formatCents(cents)}</td>
                       </tr>
                     ))}

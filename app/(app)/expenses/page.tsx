@@ -7,6 +7,7 @@ import ReceiptPreview, { type ReceiptKind } from '@/components/ReceiptPreview'
 import {
   COMMON,
   DE_MINIMIS_CENTS,
+  EXPENSE_MAX_CENTS,
   MORE_LINES,
   expenseErrorWords,
   hintFor,
@@ -170,6 +171,19 @@ export default function ExpensesPage() {
     const amount = parseMoney(form.amount)
     if (!form.description.trim() || amount == null) {
       setFormMsg('Description and amount are required.')
+      return
+    }
+    // parseMoney has no ceiling ('25,000,000', '1e21' and 'Infinity' all
+    // parse); the column is a whole number of cents that stops at
+    // $21,474,836.47, and past it the database refuses in its own words.
+    if (!Number.isSafeInteger(amount) || Math.abs(amount) > EXPENSE_MAX_CENTS) {
+      setFormMsg('That amount is too large. Check it, then save.')
+      return
+    }
+    // A cleared date box, or a scanned date the box can't show, is not
+    // YYYY-MM-DD; the database would refuse it in its own words too.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.date)) {
+      setFormMsg(form.date ? 'Check the date, then save.' : 'Pick a date, then save.')
       return
     }
     // Only a key goes to the database: an old row still on a label from
