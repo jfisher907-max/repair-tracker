@@ -39,6 +39,8 @@ export default function SettingsPage() {
   const [quotePricing, setQuotePricing] = useState<QuotePricing>('walkin')
   const [quotePct, setQuotePct] = useState('0')
   const [cardPay, setCardPay] = useState<boolean | null>(null)
+  /** Stripe's test keys take no real money; the prefix says which (null = unknown). */
+  const [cardMode, setCardMode] = useState<'live' | 'test' | null>(null)
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
   const [aiTest, setAiTest] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -101,7 +103,10 @@ export default function SettingsPage() {
     })
     fetch('/api/pay/status')
       .then((r) => r.json())
-      .then((x) => setCardPay(!!x.enabled))
+      .then((x) => {
+        setCardPay(!!x.enabled)
+        setCardMode(x.mode === 'live' || x.mode === 'test' ? x.mode : null)
+      })
       .catch(() => setCardPay(false))
     loadDeleted()
   }, [])
@@ -448,9 +453,11 @@ export default function SettingsPage() {
         <p className="text-sm" style={{ color: 'var(--text2)' }}>
           {cardPay == null
             ? 'Checking…'
-            : cardPay
-              ? 'Live — invoices you send show a “Pay by card” button, and paid invoices land in the ledger automatically.'
-              : 'Not set up — invoices are paid by cash, check or Venmo and you record them yourself. To accept cards, add the Stripe keys in the Vercel project settings (see README).'}
+            : cardPay && cardMode === 'test'
+              ? 'Test mode — the site is on Stripe’s test keys, so a customer who taps “Pay by card” can’t really pay. To take real cards, Stripe’s live keys and a live webhook go in the Vercel project settings.'
+              : cardPay
+                ? 'Live — invoices you send show a “Pay by card” button, and paid invoices land in the ledger automatically.'
+                : 'Not set up — invoices are paid by cash, check or Venmo and you record them yourself. To accept cards, add the Stripe keys in the Vercel project settings (see README).'}
         </p>
       </div>
 

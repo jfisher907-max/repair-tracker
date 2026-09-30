@@ -14,6 +14,18 @@ export function cardPaymentsConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY)
 }
 
+/**
+ * Which Stripe keys the site runs on, read from the key's own prefix: 'test'
+ * keys take no real money. null = no key, or a prefix Stripe doesn't document.
+ * The key itself never leaves the server.
+ */
+export function cardPaymentsMode(): 'live' | 'test' | null {
+  const key = process.env.STRIPE_SECRET_KEY ?? ''
+  if (/^(sk|rk)_live_/.test(key)) return 'live'
+  if (/^(sk|rk)_test_/.test(key)) return 'test'
+  return null
+}
+
 export function stripeClient(): Stripe | null {
   const key = process.env.STRIPE_SECRET_KEY
   if (!key) return null
