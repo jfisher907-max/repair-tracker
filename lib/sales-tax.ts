@@ -3,6 +3,7 @@ import { cashInRows, isBookedJob, prorateInvoiceTax, type CashIn, type FinanceRo
 import { formatDate } from './date'
 import { formatCents } from './money'
 import { supabase } from './supabase'
+import { reminderEdge, type ReminderEdge } from './tax-calendar'
 import type { TaxBasis, TaxFiling } from './types'
 
 /**
@@ -383,27 +384,11 @@ export function filingStatus(filings: readonly TaxFiling[] | null, qt: Quarter, 
   }
 }
 
-/**
- * The database said the table or column is not there: migration 0053 is not
- * applied. Decided on the error CODE, never the message — an RLS refusal or a
- * check failure also names the table, and is a different problem.
- */
-export function isMissingSchema(e: unknown): boolean {
-  const code = (e as { code?: string } | null)?.code
-  return code === 'PGRST205' || code === 'PGRST204' || code === '42P01' || code === '42703'
-}
-
-/** A database refusal in plain words (never a constraint name or a code). */
-export function dbErrorWords(e: unknown, what: string): string {
-  const code = (e as { code?: string } | null)?.code
-  const message = (e as { message?: string } | null)?.message ?? String(e)
-  if (isMissingSchema(e)) return `Couldn’t ${what}: the database update for taxes (migration 0053) isn’t applied yet.`
-  if (code === '42501' || /row-level security/i.test(message))
-    return `Couldn’t ${what}: the database refused it for this sign-in. Sign out and back in, then try again.`
-  if (code === '23514') return `Couldn’t ${what}: one of the entries isn’t allowed. Check the dates and the amount.`
-  if (/failed to fetch|network/i.test(message)) return `Couldn’t ${what}: no connection. Check the signal and try again.`
-  return `Couldn’t ${what}. Try again; if it keeps failing, note this: ${message}`
-}
+// The plain-words error helpers live in lib/db-errors.ts (no imports, so a
+// server route can use them); re-exported here for the pages that import them
+// from this file. dbErrorWords takes an optional third argument naming the
+// database update a missing table or column belongs to.
+export { dbErrorWords, isMissingSchema } from './db-errors'
 
 /** The first date the books have anything on: a done job, a payment or an issued invoice. */
 export function firstActivity(rows: FinanceRows): string | null {
@@ -454,7 +439,7 @@ export interface TaxReminder {
   due: DueDates
   /** Days from today to the OFFICIAL date; negative once it has passed. */
   daysLeft: number
-  edge: 'wait' | 'stop'
+  edge: ReminderEdge
   both: Record<TaxBasis, SalesTaxReturn>
   basis: TaxBasis | null
   /** What is recorded for the quarter so far: the door shows the balance, not the whole tax. */
@@ -464,10 +449,11 @@ export interface TaxReminder {
 /**
  * The dashboard's Taxes door (owner's TAX-7 recommendation): "wait" from 30
  * days before the OFFICIAL due date, "stop" from 7 days before and once it has
- * passed; gone once that quarter is recorded as filed and paid. The earliest
- * such quarter wins, so an overdue return is never hidden by the next one.
- * `filings` null (the table could not be read) counts as nothing recorded:
- * the reminder errs toward showing.
+ * passed (lib/tax-calendar reminderEdge, the rule every tax door shares); gone
+ * once that quarter is recorded as filed and paid. The earliest such quarter
+ * wins, so an overdue return is never hidden by the next one. `filings` null
+ * (the table could not be read) counts as nothing recorded: the reminder errs
+ * toward showing.
  */
 export function taxReminder(
   rows: FinanceRows,
@@ -480,11 +466,13 @@ export function taxReminder(
     if (qt.end >= today) break
     const due = cbjDueDates(qt)
     const daysLeft = daysBetween(today, due.official)
-    if (daysLeft > 30) break
+    // Null = more than 30 days out; later quarters are further out still.
+    const edge = reminderEdge(daysLeft)
+    if (!edge) break
     const both = computeBothReturns(rows, qt)
     const status = filingStatus(filings, qt, taxToPlanFor(both, basis))
     if (status.done) continue
-    return { quarter: qt, due, daysLeft, edge: daysLeft <= 7 ? 'stop' : 'wait', both, basis: basis ?? null, status }
+    return { quarter: qt, due, daysLeft, edge, both, basis: basis ?? null, status }
   }
   return null
 }

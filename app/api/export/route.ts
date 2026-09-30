@@ -2,9 +2,12 @@ import JSZip from 'jszip'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { clientForRequest, unauthorized } from '@/lib/server'
 import { BRAND_NAME, BRAND_SLUG } from '@/lib/brand'
+import { isMissingSchema } from '@/lib/db-errors'
 
 // "Export all data" — Jake's insurance policy against vendor lock-in.
 // A zip of CSVs (money stays in integer cents, as stored) + every receipt image.
+
+type Row = Record<string, unknown>
 
 function csvEscape(value: unknown): string {
   if (value == null) return ''
@@ -16,20 +19,35 @@ function csvEscape(value: unknown): string {
   return s
 }
 
-function toCsv(rows: Record<string, unknown>[], columns: string[]): string {
+function toCsv(rows: Row[], columns: string[]): string {
   const header = columns.join(',')
   const body = rows.map((r) => columns.map((c) => csvEscape(r[c])).join(',')).join('\r\n')
   return `${header}\r\n${body}\r\n`
 }
 
+/**
+ * Never written to the backup: the bearer token behind a customer's /q, /i or
+ * /s link. A copied zip must not open those pages.
+ */
+const NEVER_EXPORTED = new Set(['public_token'])
+
+/**
+ * The columns each CSV leads with, in this order. Every read is select('*'),
+ * so a column a list doesn't name yet still lands in its CSV after these
+ * (columnsFor): a new column arrives on its own. A table whose migration isn't
+ * applied yet is skipped and named in README.txt — never a failed backup — so
+ * the tables the planned builds add are listed ahead of their migrations.
+ */
 const TABLES: Record<string, string[]> = {
   customers: ['id', 'name', 'phone', 'email', 'notes', 'created_at', 'updated_at', 'deleted_at'],
   vehicles: [
-    'id', 'customer_id', 'year', 'make', 'model', 'trim', 'engine', 'vin', 'license_plate', 'notes',
-    'created_at', 'updated_at', 'deleted_at',
+    'id', 'customer_id', 'year', 'make', 'model', 'trim', 'engine', 'vin', 'license_plate',
+    // Aircraft (AVN-3): which paper it gets, the tail number, the serial number.
+    'service_line', 'registration', 'serial_number',
+    'notes', 'created_at', 'updated_at', 'deleted_at',
   ],
   jobs: [
-    'id', 'job_number', 'vehicle_id', 'date', 'odometer_miles', 'title', 'work_performed',
+    'id', 'job_number', 'vehicle_id', 'date', 'odometer_miles', 'airframe_hours', 'title', 'work_performed',
     'labor_hours', 'labor_rate_cents', 'parts_charged_override_cents', 'payment_status',
     'amount_paid_cents', 'stage', 'stage_changed_at', 'warranty_months', 'warranty_miles',
     'promised_date', 'notes', 'created_at', 'updated_at', 'deleted_at',
@@ -50,12 +68,15 @@ const TABLES: Record<string, string[]> = {
     'id', 'business_name', 'business_phone', 'business_address', 'business_email',
     'default_labor_rate_cents', 'default_tax_rate_bp', 'default_invoice_terms_days',
     'invoice_payment_instructions', 'google_review_url', 'parts_markup_enabled',
-    'parts_markup_tiers', 'store_suggestions', 'created_at', 'updated_at',
+    'parts_markup_tiers', 'quote_pricing', 'quote_markup_pct', 'store_suggestions',
+    // The Juneau return's basis (0053) and the resale-card reminder's answer (TAX-3).
+    'sales_tax_basis', 'resale_card_prompt', 'resale_card_prompt_at',
+    'created_at', 'updated_at',
   ],
   quotes: [
-    'id', 'quote_number', 'customer_id', 'vehicle_id', 'title', 'description', 'labor_hours',
+    'id', 'quote_number', 'customer_id', 'vehicle_id', 'service_line', 'title', 'description', 'labor_hours',
     'labor_rate_cents', 'tax_rate_bp', 'status', 'valid_until', 'notes', 'job_id',
-    'sent_at', 'decided_at', 'applied_at', 'approved_by_name', 'approval_consent', 'approval_ip',
+    'sent_at', 'viewed_at', 'decided_at', 'applied_at', 'approved_by_name', 'approval_consent', 'approval_ip',
     'approval_user_agent', 'approved_snapshot', 'deposit_kind', 'deposit_value', 'deposit_cents',
     'source_path', 'created_at', 'updated_at', 'deleted_at',
   ],
@@ -72,11 +93,12 @@ const TABLES: Record<string, string[]> = {
   // it an export can't show why a job was billed past its estimate.
   job_authorizations: [
     'id', 'job_id', 'previous_ceiling_cents', 'new_total_cents', 'delta_cents', 'description',
-    'method', 'by_name', 'phone_called', 'authorized_at', 'recorded_at',
+    'method', 'by_name', 'phone_called', 'authorized_at', 'recorded_at', 'corrected_at',
   ],
   invoices: [
     'id', 'invoice_number', 'job_id', 'customer_id', 'issue_date', 'due_date', 'status',
-    'customer_name', 'vehicle_label', 'job_title', 'lines', 'labor_hours', 'labor_rate_cents',
+    'customer_name', 'vehicle_label', 'service_line', 'aircraft', 'job_title', 'work_performed',
+    'lines', 'labor_hours', 'labor_rate_cents',
     'labor_cents', 'parts_cents', 'tax_rate_bp', 'tax_cents', 'included_tax_cents', 'included_tax_rate_bp',
     'tax_exempt_note',
     'total_cents', 'memo', 'authorizations', 'sent_at', 'paid_at', 'created_at', 'updated_at',
@@ -84,6 +106,12 @@ const TABLES: Record<string, string[]> = {
   payments: [
     'id', 'job_id', 'invoice_id', 'quote_id', 'date', 'method', 'amount_cents', 'note',
     'external_ref', 'created_at', 'updated_at',
+  ],
+  // Online payments still on their way — a bank transfer takes days (ACH-1).
+  online_payments: [
+    'id', 'checkout_session_id', 'payment_intent_id', 'invoice_id', 'job_id', 'method',
+    'amount_cents', 'state', 'failure_reason', 'started_at', 'settled_at', 'payment_id',
+    'created_at', 'updated_at',
   ],
   // Tips (0048): income, never payments toward a job — a backup without them
   // would under-report cash by exactly the tips.
@@ -103,30 +131,141 @@ const TABLES: Record<string, string[]> = {
     'id', 'vehicle_id', 'name', 'interval_miles', 'interval_months',
     'last_done_date', 'last_done_miles', 'created_at', 'updated_at',
   ],
+  // category becomes a Schedule C line key with EXP-2; external_ref ties a
+  // Stripe fee to its payment (0022).
   expenses: [
     'id', 'date', 'category', 'vendor', 'description', 'amount_cents', 'storage_path',
-    'created_at', 'updated_at',
+    'external_ref', 'created_at', 'updated_at',
   ],
   business_documents: [
     'id', 'name', 'storage_path', 'mime_type', 'expires_at', 'notes', 'created_at', 'updated_at',
   ],
+  // Tax returns filed and tax paid, as recorded (0053). Federal estimated
+  // payments are rows here too.
+  tax_filings: [
+    'id', 'obligation', 'period_start', 'period_end', 'due_date', 'filed_on', 'paid_on',
+    'amount_cents', 'settles_return', 'method', 'confirmation', 'note', 'created_at', 'updated_at',
+  ],
+  // The amount planned for each federal estimated-tax installment (FED-1).
+  federal_estimate_plans: [
+    'tax_year', 'installment', 'planned_cents', 'set_by', 'note', 'created_at', 'updated_at',
+  ],
+  // Tools & equipment, for the city's property return and the preparer (ASSET-1).
+  business_assets: [
+    'id', 'name', 'cbj_class', 'make_model', 'serial_vin', 'origin', 'cost_cents', 'bought_on',
+    'bought_on_approx', 'in_service_on', 'value_at_start_cents', 'business_use_pct', 'disposed_on',
+    'disposed_price_cents', 'expense_id', 'storage_path', 'notes', 'created_at', 'updated_at',
+  ],
+  // The mileage log (MILE-1): the business's own vehicles (not customers'),
+  // their yearly odometer readings, and the trips.
+  business_vehicles: [
+    'id', 'name', 'year', 'make', 'model', 'owned_by', 'deduction_method', 'first_business_use_on',
+    'retired_on', 'notes', 'created_at', 'updated_at',
+  ],
+  vehicle_year_miles: ['vehicle_id', 'year', 'odometer_start', 'odometer_end', 'created_at', 'updated_at'],
+  mileage_trips: [
+    'id', 'vehicle_id', 'trip_date', 'purpose', 'from_place', 'to_place', 'odometer_start',
+    'odometer_end', 'miles_tenths', 'job_id', 'created_at', 'updated_at',
+  ],
+  // The bank check (BANK-1): uploaded statements, their lines, and the entry
+  // each line was matched to.
+  bank_accounts: [
+    'id', 'label', 'kind', 'last4', 'csv_money_in', 'csv_mapping', 'created_at', 'updated_at',
+  ],
+  bank_statements: [
+    'id', 'account_id', 'source', 'file_name', 'storage_path', 'file_sha256', 'period_start',
+    'period_end', 'opening_cents', 'closing_cents', 'created_at', 'updated_at',
+  ],
+  bank_statement_lines: [
+    'id', 'statement_id', 'account_id', 'posted_on', 'amount_cents', 'description', 'check_number',
+    'balance_cents', 'fingerprint', 'skip_reason', 'note', 'created_at', 'updated_at',
+  ],
+  bank_matches: [
+    'id', 'line_id', 'payment_id', 'tip_id', 'expense_id', 'receipt_id', 'core_part_line_id',
+    'tax_filing_id', 'amount_cents', 'how', 'stripe_payout_id', 'created_at',
+  ],
+  // Wings Hangar: which aircraft was assigned to which hangar when, and the
+  // times the hangar was unavailable.
+  hangar_sessions: [
+    'id', 'aircraft', 'hangar', 'entry', 'exit', 'reason', 'note', 'exit_reason', 'exit_note', 'created_at',
+  ],
+  hangar_unavailability: ['id', 'start_time', 'end_time', 'note', 'created_at'],
+  // Requests from the public site's form (0046).
+  service_requests: [
+    'id', 'name', 'phone', 'email', 'contact_pref', 'vehicle', 'service_line', 'message', 'status',
+    'source', 'ip', 'user_agent', 'created_at', 'updated_at',
+  ],
 }
 
-/** Supabase caps a single select at 1000 rows — page through so the backup is never silently partial. */
-async function fetchAllRows(
-  supabase: SupabaseClient,
-  table: string,
-): Promise<Record<string, unknown>[]> {
+/**
+ * The listed columns first, then every other column the rows carry. A listed
+ * column the table doesn't have yet (its migration isn't applied) is left out
+ * rather than written blank; with no rows to look at, the list stands as is.
+ */
+function columnsFor(listed: string[], rows: Row[]): string[] {
+  const keep = (c: string) => !NEVER_EXPORTED.has(c)
+  if (rows.length === 0) return listed.filter(keep)
+  const present = Object.keys(rows[0])
+  const has = new Set(present)
+  const lead = listed.filter((c) => has.has(c))
+  const leadSet = new Set(lead)
+  return [...lead, ...present.filter((c) => !leadSet.has(c))].filter(keep)
+}
+
+/**
+ * Supabase caps a single select at 1000 rows — page through so the backup is
+ * never silently partial. Throws the database's own error, so the caller can
+ * read its code (isMissingSchema).
+ */
+async function fetchAllRows(supabase: SupabaseClient, table: string): Promise<Row[]> {
   const PAGE = 1000
-  const rows: Record<string, unknown>[] = []
+  const rows: Row[] = []
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await supabase.from(table).select('*').range(offset, offset + PAGE - 1)
-    if (error) throw new Error(`${table}: ${error.message}`)
-    rows.push(...((data ?? []) as Record<string, unknown>[]))
+    if (error) throw error
+    rows.push(...((data ?? []) as Row[]))
     if (!data || data.length < PAGE) break
   }
   return rows
 }
+
+const safeName = (s: string) => s.replace(/[^a-zA-Z0-9._-]+/g, '_')
+const extOf = (path: string) => path.split('.').pop() ?? 'bin'
+
+/**
+ * The files in the private 'receipts' bucket that ride along with their rows,
+ * and where each lands in the zip. A skipped table has no rows, so it brings
+ * no files.
+ */
+const FILES: { table: string; folder: string; name: (row: Row, path: string) => string; readme: string }[] = [
+  {
+    table: 'receipts',
+    folder: 'receipts',
+    name: (_row, path) => path.replace(/[^a-zA-Z0-9/._-]/g, '_'),
+    readme: 'receipts/ contains the original receipt photos, organized by job id.',
+  },
+  // The shop's own paperwork — license, insurance — is the LAST thing a
+  // backup should leave behind.
+  {
+    table: 'business_documents',
+    folder: 'business-documents',
+    name: (row, path) => `${safeName(String(row.name ?? 'document'))}.${extOf(path)}`,
+    readme: 'business-documents/ contains the shop licensing and insurance files.',
+  },
+  {
+    table: 'business_assets',
+    folder: 'equipment',
+    // The id keeps two items with the same name apart.
+    name: (row, path) => `${safeName(String(row.name ?? 'item'))}-${String(row.id).slice(0, 8)}.${extOf(path)}`,
+    readme: 'equipment/ contains the receipt photos on the tools & equipment list (business_assets.csv).',
+  },
+  {
+    table: 'bank_statements',
+    folder: 'bank-statements',
+    name: (_row, path) => safeName(path.split('/').pop() ?? path),
+    readme: 'bank-statements/ contains the uploaded bank statements, named as in bank_statements.csv storage_path.',
+  },
+]
 
 export async function GET(request: Request) {
   const auth = await clientForRequest(request)
@@ -135,38 +274,46 @@ export async function GET(request: Request) {
 
   const zip = new JSZip()
 
-  let allReceiptRows: Record<string, unknown>[] = []
-  let allDocRows: Record<string, unknown>[] = []
+  const rowsByTable = new Map<string, Row[]>()
+  /** Tables whose migration isn't applied yet, named in README.txt. */
+  const skipped: string[] = []
   try {
-    for (const [table, columns] of Object.entries(TABLES)) {
-      const rows = await fetchAllRows(supabase, table)
-      if (table === 'receipts') allReceiptRows = rows
-      if (table === 'business_documents') allDocRows = rows
-      zip.file(`${table}.csv`, toCsv(rows, columns))
+    for (const [table, listed] of Object.entries(TABLES)) {
+      let rows: Row[]
+      try {
+        rows = await fetchAllRows(supabase, table)
+      } catch (e) {
+        // Not in the database yet: leave it out and say so. Anything else (a
+        // refusal, a dropped connection) still fails the whole backup — a
+        // silently partial one is worse than none.
+        if (isMissingSchema(e)) {
+          skipped.push(table)
+          continue
+        }
+        throw new Error(`${table}: ${(e as { message?: string } | null)?.message ?? String(e)}`)
+      }
+      rowsByTable.set(table, rows)
+      zip.file(`${table}.csv`, toCsv(rows, columnsFor(listed, rows)))
     }
   } catch (e) {
     return Response.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 
-  // Receipt images (from the already-fetched, fully-paginated receipt rows)
-  const paths = allReceiptRows.map((r) => r.storage_path as string)
-  for (const path of paths) {
-    const { data: blob } = await supabase.storage.from('receipts').download(path)
-    if (blob) {
-      zip.file(`receipts/${path.replace(/[^a-zA-Z0-9/._-]/g, '_')}`, await blob.arrayBuffer())
+  // The files, from the already-fetched, fully-paginated rows.
+  const folders: string[] = []
+  for (const f of FILES) {
+    let added = 0
+    for (const row of rowsByTable.get(f.table) ?? []) {
+      const path = row.storage_path
+      if (typeof path !== 'string' || !path) continue
+      const { data: blob } = await supabase.storage.from('receipts').download(path)
+      if (blob) {
+        zip.file(`${f.folder}/${f.name(row, path)}`, await blob.arrayBuffer())
+        added++
+      }
     }
-  }
-
-  // The shop's own paperwork — license, insurance — is the LAST thing a
-  // backup should leave behind.
-  for (const r of allDocRows) {
-    const path = r.storage_path as string
-    const { data: blob } = await supabase.storage.from('receipts').download(path)
-    if (blob) {
-      const safeName = String(r.name ?? 'document').replace(/[^a-zA-Z0-9._-]+/g, '_')
-      const ext = path.split('.').pop() ?? 'bin'
-      zip.file(`business-documents/${safeName}.${ext}`, await blob.arrayBuffer())
-    }
+    // The two folders every backup has always described stay described.
+    if (added > 0 || f.table === 'receipts' || f.table === 'business_documents') folders.push(f.readme)
   }
 
   zip.file(
@@ -176,8 +323,15 @@ export async function GET(request: Request) {
       `Generated: ${new Date().toISOString()}`,
       '',
       'All *_cents columns are money in integer US cents (divide by 100 for dollars).',
-      'receipts/ contains the original receipt photos, organized by job id.',
-      'business-documents/ contains the shop licensing and insurance files.',
+      ...(rowsByTable.has('mileage_trips') ? ['mileage_trips.miles_tenths is miles in tenths (divide by 10).'] : []),
+      ...folders,
+      ...(skipped.length > 0
+        ? [
+            '',
+            'Not in this backup: these tables come with database updates that aren’t applied yet, so nothing is stored in them.',
+            ...skipped.map((t) => `  ${t}`),
+          ]
+        : []),
     ].join('\r\n'),
   )
 
