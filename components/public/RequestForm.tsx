@@ -45,7 +45,8 @@ const LINE_COPY: Record<ServiceLine, { label: string; placeholder: string; hint:
   },
   aviation: {
     label: 'Aircraft (type & tail number) *',
-    placeholder: 'e.g. Challenger 350, N-number',
+    // No aircraft type is named anywhere on the site (owner, AVN-2, 2026-09-29).
+    placeholder: 'e.g. make & model, N-number',
     hint: 'The discrepancy or the inspection you need, where the aircraft is parked, and when it needs to fly — anything helps.',
   },
 }
