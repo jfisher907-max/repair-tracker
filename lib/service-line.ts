@@ -34,6 +34,24 @@ export function lineOf(row: { service_line?: string | null } | null | undefined)
   return row?.service_line === 'aviation' ? 'aviation' : 'automotive'
 }
 
+/** The shop's two starting labor rates, in cents per hour (Settings). */
+export interface ShopRates {
+  automotive: number
+  /** null = no separate aircraft rate: aircraft work starts at the car rate. */
+  aviation: number | null
+}
+
+/** The rates Settings holds (settings.default_labor_rate_cents / aviation_labor_rate_cents, 0064). */
+export function shopRates(s: { default_labor_rate_cents?: number | null; aviation_labor_rate_cents?: number | null }): ShopRates {
+  return { automotive: s.default_labor_rate_cents ?? 0, aviation: s.aviation_labor_rate_cents ?? null }
+}
+
+/** The labor rate a NEW job or quote starts at for this line (owner, 2026-09-30:
+ *  aircraft work at its own rate). An existing one keeps the rate it carries. */
+export function laborRateFor(line: ServiceLine, rates: ShopRates): number {
+  return line === 'aviation' && rates.aviation != null ? rates.aviation : rates.automotive
+}
+
 // ---------------------------------------------------------------------------
 // THE OWNER'S FIVE CHOICES (AVN-3, needsFromJake 1-5). Built with the spec's
 // own picks; each is one constant, so changing one later is a one-line edit.

@@ -9,10 +9,13 @@ import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/V
 import { syncJobPayment } from '@/lib/payments'
 import {
   AIRCRAFT_HOURS_LABEL,
+  laborRateFor,
   lineOf,
   paperErrorWords,
   parseAirframeHours,
+  shopRates,
   type ServiceLine,
+  type ShopRates,
 } from '@/lib/service-line'
 import { listTemplates, type JobTemplate, type JobTemplateLine } from '@/lib/templates'
 
@@ -67,6 +70,10 @@ export default function JobForm({ job }: { job?: Job }) {
   const [editLine, setEditLine] = useState<ServiceLine | null>(null)
   const [laborHours, setLaborHours] = useState(job ? String(job.labor_hours) : '')
   const [laborRate, setLaborRate] = useState(job ? centsToInput(job.labor_rate_cents) : '')
+  /** A rate the owner typed (or the job's own) wins; until then a new job
+   *  shows the shop's rate for its line, so picking an aircraft moves it. */
+  const [rateTouched, setRateTouched] = useState(!!job)
+  const [rates, setRates] = useState<ShopRates | null>(null)
   const [workPerformed, setWorkPerformed] = useState(job?.work_performed ?? '')
   const [notes, setNotes] = useState(job?.notes ?? '')
   const [promisedDate, setPromisedDate] = useState(job?.promised_date ?? '')
@@ -129,10 +136,11 @@ export default function JobForm({ job }: { job?: Job }) {
       listTemplates().then(setTemplates)
       supabase
         .from('settings')
-        .select('default_labor_rate_cents')
+        // '*': aviation_labor_rate_cents (0064) is read when it exists.
+        .select('*')
         .single()
         .then(({ data }) => {
-          if (data) setLaborRate(centsToInput(data.default_labor_rate_cents))
+          if (data) setRates(shopRates(data))
         })
     }
   }, [editing])
@@ -159,6 +167,7 @@ export default function JobForm({ job }: { job?: Job }) {
       ? newVehicle.service_line
       : lineOf(selectedVehicle)
   const isAircraft = serviceLine === 'aviation'
+  const laborRateShown = rateTouched || !rates ? laborRate : centsToInput(laborRateFor(serviceLine, rates))
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -256,7 +265,7 @@ export default function JobForm({ job }: { job?: Job }) {
         odometer_miles: odometerNum,
         airframe_hours: airframeHoursNum,
         labor_hours: laborHours ? Number(laborHours) : 0,
-        labor_rate_cents: parseMoney(laborRate) ?? 0,
+        labor_rate_cents: parseMoney(laborRateShown) ?? 0,
         work_performed: workPerformed.trim() || null,
         notes: notes.trim() || null,
         promised_date: promisedDate || null,
@@ -594,8 +603,11 @@ export default function JobForm({ job }: { job?: Job }) {
           <input
             className="input"
             inputMode="decimal"
-            value={laborRate}
-            onChange={(e) => setLaborRate(e.target.value)}
+            value={laborRateShown}
+            onChange={(e) => {
+              setLaborRate(e.target.value)
+              setRateTouched(true)
+            }}
           />
         </div>
         <div className="sm:col-span-2">

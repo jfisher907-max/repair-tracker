@@ -159,6 +159,9 @@ export interface Settings {
   business_address: string
   business_email: string
   default_labor_rate_cents: number
+  /** Aircraft work's starting labor rate (0064); null = the car rate above.
+   *  Optional: a row read before 0064. */
+  aviation_labor_rate_cents?: number | null
   default_tax_rate_bp: number
   /** 0 = due on receipt; otherwise Net N days stamped on new invoices. */
   default_invoice_terms_days: number

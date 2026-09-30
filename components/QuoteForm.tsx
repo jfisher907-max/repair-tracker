@@ -19,7 +19,7 @@ import VehicleFields, {
   vehicleDraftHasAnything,
   vehiclePayload,
 } from '@/components/VehicleFields'
-import { PAPER, lineOf, paperErrorWords, type ServiceLine } from '@/lib/service-line'
+import { PAPER, laborRateFor, lineOf, paperErrorWords, shopRates, type ServiceLine, type ShopRates } from '@/lib/service-line'
 import {
   vehicleLabel,
   type Customer,
@@ -186,6 +186,10 @@ export default function QuoteForm({
         ? centsToInput(addOnJob.labor_rate_cents)
         : '',
   )
+  /** A rate the owner typed (or the quote's / add-on job's own) wins; until
+   *  then a new quote shows the shop's rate for its line (0064). */
+  const [rateTouched, setRateTouched] = useState(!!quote || !!addOnJob)
+  const [rates, setRates] = useState<ShopRates | null>(null)
   // A new quote starts at Juneau's 5% until settings load (0041): never untaxed by accident.
   const [taxRate, setTaxRate] = useState(quote ? String(quote.tax_rate_bp / 100) : '5')
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? plusDays(30))
@@ -254,7 +258,8 @@ export default function QuoteForm({
       .then(({ data }) => setVehicles((data as Vehicle[]) ?? []))
     supabase
       .from('settings')
-      .select('default_labor_rate_cents, default_tax_rate_bp, quote_pricing, quote_markup_pct, parts_markup_tiers')
+      // '*': aviation_labor_rate_cents (0064) is read when it exists.
+      .select('*')
       .single()
       .then(({ data }) => {
         if (!data) return
@@ -266,7 +271,7 @@ export default function QuoteForm({
         if (!editing) {
           // An add-on bills at ITS JOB's rate, not the shop default — the
           // quoted total must match what lands on the job.
-          if (!addOnJob) setLaborRate(centsToInput(data.default_labor_rate_cents))
+          if (!addOnJob) setRates(shopRates(data))
           setTaxRate(String((data.default_tax_rate_bp ?? 500) / 100))
         }
       })
@@ -295,6 +300,7 @@ export default function QuoteForm({
     : !customerId
       ? newVehicle.service_line
       : paperChoice
+  const laborRateShown = rateTouched || !rates ? laborRate : centsToInput(laborRateFor(serviceLine, rates))
 
   const depositValue =
     depositKind === 'percent' ? 5000 : depositKind === 'fixed' ? (parseMoney(depositFixed) ?? 0) : null
@@ -305,7 +311,7 @@ export default function QuoteForm({
       computeQuoteTotals(
         {
           labor_hours: Number(laborHours) || 0,
-          labor_rate_cents: parseMoney(laborRate) ?? 0,
+          labor_rate_cents: parseMoney(laborRateShown) ?? 0,
           tax_rate_bp: taxRateBp,
         },
         lines
@@ -314,7 +320,7 @@ export default function QuoteForm({
             line_total_cents: Math.round((Number(l.qty) || 0) * (parseMoney(l.unit_charge) ?? 0)),
           })),
       ),
-    [laborHours, laborRate, taxRateBp, lines],
+    [laborHours, laborRateShown, taxRateBp, lines],
   )
 
   /** Owner-only: what the parts earn, before and after O'Reilly's counter tax. */
@@ -576,7 +582,7 @@ export default function QuoteForm({
         title: title.trim(),
         description: description.trim() || null,
         labor_hours: Number(laborHours) || 0,
-        labor_rate_cents: parseMoney(laborRate) ?? 0,
+        labor_rate_cents: parseMoney(laborRateShown) ?? 0,
         tax_rate_bp: taxRateBp,
         valid_until: validUntil || null,
         notes: notes.trim() || null,
@@ -804,7 +810,15 @@ export default function QuoteForm({
         </div>
         <div>
           <label className="label">Labor rate ($/hr)</label>
-          <input className="input" inputMode="decimal" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} />
+          <input
+            className="input"
+            inputMode="decimal"
+            value={laborRateShown}
+            onChange={(e) => {
+              setLaborRate(e.target.value)
+              setRateTouched(true)
+            }}
+          />
         </div>
         <div>
           <label className="label">Sales tax (%)</label>

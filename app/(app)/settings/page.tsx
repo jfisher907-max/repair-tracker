@@ -22,6 +22,8 @@ export default function SettingsPage() {
   const [bizAddress, setBizAddress] = useState('')
   const [bizEmail, setBizEmail] = useState('')
   const [laborRate, setLaborRate] = useState('')
+  /** Aircraft work's starting rate (0064); blank = the same as the car rate. */
+  const [aviationRate, setAviationRate] = useState('')
   const [taxRate, setTaxRate] = useState('')
   const [termsDays, setTermsDays] = useState('0')
   const [payInstructions, setPayInstructions] = useState('')
@@ -81,6 +83,7 @@ export default function SettingsPage() {
         setBizAddress(data.business_address ?? '')
         setBizEmail(data.business_email ?? '')
         setLaborRate(centsToInput(data.default_labor_rate_cents))
+        setAviationRate(data.aviation_labor_rate_cents != null ? centsToInput(data.aviation_labor_rate_cents) : '')
         setTaxRate(String((data.default_tax_rate_bp ?? 0) / 100))
         setTermsDays(String(data.default_invoice_terms_days ?? 0))
         setPayInstructions(data.invoice_payment_instructions ?? '')
@@ -121,6 +124,8 @@ export default function SettingsPage() {
         business_address: bizAddress.trim(),
         business_email: bizEmail.trim(),
         default_labor_rate_cents: parseMoney(laborRate) ?? 0,
+        // Blank means no separate rate: aircraft work starts at the car rate.
+        aviation_labor_rate_cents: aviationRate.trim() === '' ? null : (parseMoney(aviationRate) ?? null),
         default_tax_rate_bp: Math.round((Number(taxRate) || 0) * 100),
         default_invoice_terms_days: Number(termsDays) || 0,
         invoice_payment_instructions: payInstructions.trim(),
@@ -217,6 +222,19 @@ export default function SettingsPage() {
           <div>
             <label className="label">Default labor rate ($/hr)</label>
             <input className="input" inputMode="decimal" value={laborRate} onChange={(e) => setLaborRate(e.target.value)} />
+          </div>
+          <div>
+            <label className="label">Aircraft labor rate ($/hr)</label>
+            <input
+              className="input"
+              inputMode="decimal"
+              placeholder="Same as the default"
+              value={aviationRate}
+              onChange={(e) => setAviationRate(e.target.value)}
+            />
+            <p className="mt-1 text-xs" style={{ color: 'var(--text3)' }}>
+              New aircraft jobs and quotes start at this rate. Jobs already made keep theirs.
+            </p>
           </div>
           <div>
             <label className="label">Sales tax % (0 = no tax line)</label>
