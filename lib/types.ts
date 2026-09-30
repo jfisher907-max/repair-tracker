@@ -20,6 +20,13 @@ export interface Customer {
   deleted_at: string | null
 }
 
+/**
+ * Which paper a vehicle, quote or invoice gets: the same words as
+ * service_requests.service_line (0046). Local on purpose: AVN-3's
+ * lib/service-line.ts owns the exported ServiceLine name.
+ */
+type LineWord = 'automotive' | 'aviation'
+
 export interface Vehicle {
   id: string
   customer_id: string
@@ -31,6 +38,14 @@ export interface Vehicle {
   vin: string | null
   license_plate: string | null
   notes: string | null
+  /** automotive (every row before AVN-3's migration) or aviation; fixed once
+   *  the vehicle has a live job or quote. Optional: a row read before it —
+   *  a missing value reads as automotive. */
+  service_line?: LineWord
+  /** Aircraft tail number (registration mark), uppercase. Aviation only. */
+  registration?: string | null
+  /** Aircraft serial number. Aviation only. */
+  serial_number?: string | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -60,6 +75,9 @@ export interface Job {
   warranty_miles: number | null
   /** When the customer was told the vehicle would be ready. */
   promised_date: string | null
+  /** Airframe hours at this job (aircraft); the aviation counterpart of
+   *  odometer_miles. Optional: a row read before AVN-3's migration. */
+  airframe_hours?: number | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -148,6 +166,11 @@ export interface Settings {
   /** Basis for the Juneau sales-tax return (0053): must match the federal
    *  return. Null = not chosen yet. Optional: a row read before 0053. */
   sales_tax_basis?: TaxBasis | null
+  /** The owner's answer to the one-time resale-card reminder (TAX-3): null =
+   *  not answered yet. Optional: a row read before TAX-3's migration. */
+  resale_card_prompt?: 'asked' | 'hidden' | null
+  /** When he answered it. */
+  resale_card_prompt_at?: string | null
   created_at: string
   updated_at: string
 }
@@ -219,6 +242,10 @@ export interface Quote {
   viewed_at: string | null
   /** The supplier quote file (O'Reilly screenshot/PDF) this quote was read from. */
   source_path: string | null
+  /** Which paper the customer gets: automotive = Estimate, aviation = Quote.
+   *  Follows the quote's vehicle; fixed once sent. Optional: a row read before
+   *  AVN-3's migration — a missing value reads as automotive. */
+  service_line?: LineWord
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -320,6 +347,17 @@ export interface Invoice {
   memo: string | null
   /** The approvals behind this bill, frozen with it (AS 45.45.170(d)). */
   authorizations: AuthorizationEntry[]
+  /** Frozen at creation from the job's vehicle; frozen once issued. aviation =
+   *  no AS 45.45.210 notice and no part-condition tags. Optional: a row read
+   *  before AVN-3's migration — a missing value reads as automotive. */
+  service_line?: LineWord
+  /** Frozen aircraft identity on an aviation invoice (AVN-3's AircraftSnapshot);
+   *  null otherwise. Optional: a row read before AVN-3's migration. */
+  aircraft?: {
+    registration: string | null
+    serial_number: string | null
+    airframe_hours: number | null
+  } | null
   public_token: string
   sent_at: string | null
   paid_at: string | null
@@ -362,7 +400,9 @@ export interface ExtractionResult {
   lines: ExtractedLine[]
 }
 
-export type PaymentMethod = 'cash' | 'check' | 'venmo' | 'card' | 'other'
+/** 'ach' = bank transfer (ACH-1). No picker offers it until ACH-1 adds it to
+ *  PAYMENT_METHODS, after its migration widens the payments/tips CHECKs. */
+export type PaymentMethod = 'cash' | 'check' | 'venmo' | 'card' | 'ach' | 'other'
 
 export interface Payment {
   id: string
@@ -394,10 +434,41 @@ export interface Tip {
   created_at: string
 }
 
+/**
+ * The Schedule C line an expense belongs to (EXP-2): a stable key, stored in
+ * expenses.category. Line numbers and labels per tax year live in
+ * lib/schedule-c.ts. Part II lines first, then the Part V (line 27b) keys.
+ */
+export type ExpenseLine =
+  | 'advertising'
+  | 'car_truck'
+  | 'commissions_fees'
+  | 'contract_labor'
+  | 'equipment_large'
+  | 'insurance'
+  | 'interest'
+  | 'legal_professional'
+  | 'office'
+  | 'rent_equipment'
+  | 'rent_property'
+  | 'repairs'
+  | 'supplies'
+  | 'taxes_licenses'
+  | 'travel'
+  | 'meals'
+  | 'utilities'
+  | 'software'
+  | 'equipment_small'
+  | 'card_fees'
+  | 'startup'
+  | 'other'
+
 export interface Expense {
   id: string
   date: string
-  category: string
+  /** An ExpenseLine key. Still plain text on a row read before EXP-2's
+   *  migration moves the old labels ('Other', 'Licensing'…). */
+  category: ExpenseLine | (string & {})
   vendor: string | null
   description: string
   amount_cents: number
