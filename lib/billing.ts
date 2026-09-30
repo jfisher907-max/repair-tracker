@@ -1,3 +1,4 @@
+import { needsPartConditions, type ServiceLine } from './service-line'
 import type { DepositKind, DocLine, Job, PartCondition, PartLine, Quote, QuoteLine } from './types'
 
 // Client-side mirror of the quote_totals view — keep in sync with the SQL.
@@ -92,11 +93,17 @@ const CONDITION_WORD: Record<PartCondition, string> = {
  * never enter an invoice. With a job-level parts override, per-line prices
  * would expose markup, so the parts collapse to a single line (same rule as
  * the printed report) — carrying the part conditions with them.
+ *
+ * `line` is the paper (AVN-3), REQUIRED so tsc names every caller: aircraft
+ * paper carries no AS 45.45.190 part tags (needsPartConditions), so neither
+ * the per-line condition nor the collapsed line's summary goes on it. The car
+ * output is unchanged.
  */
 export function buildInvoiceSnapshot(
   job: Job,
   partLines: PartLine[],
   taxRateBp: number,
+  line: ServiceLine,
 ): {
   lines: DocLine[]
   labor_hours: number
@@ -108,6 +115,7 @@ export function buildInvoiceSnapshot(
   total_cents: number
 } {
   const labor = Math.round(Number(job.labor_hours) * job.labor_rate_cents)
+  const partTags = needsPartConditions(line)
   let lines: DocLine[]
   let parts: number
   if (job.parts_charged_override_cents != null) {
@@ -116,7 +124,7 @@ export function buildInvoiceSnapshot(
     // say which parts were new, used, rebuilt or reconditioned. Confirming the
     // conditions is demanded before invoicing, and this branch used to throw
     // every one of them away.
-    const named = conditionSummary(partLines)
+    const named = partTags ? conditionSummary(partLines) : ''
     lines = parts !== 0
       ? [
           {
@@ -141,7 +149,7 @@ export function buildInvoiceSnapshot(
         line_total_cents: l.line_charge_total_cents,
         // AS 45.45.190: each replaced part says new / used / rebuilt /
         // reconditioned. Fees, freight and the adjustment line carry none.
-        ...(l.condition && l.condition !== 'not_part' ? { condition: l.condition } : {}),
+        ...(partTags && l.condition && l.condition !== 'not_part' ? { condition: l.condition } : {}),
       }))
     parts = lines.reduce((s, l) => s + l.line_total_cents, 0)
   }

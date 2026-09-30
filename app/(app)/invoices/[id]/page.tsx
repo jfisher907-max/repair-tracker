@@ -13,7 +13,14 @@ import { buildAuthorizationTrail, isOverApproval, loadJobAuthorization } from '@
 import { PAYMENT_METHODS, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
-import type { Invoice, Job, PartLine, Payment, PaymentMethod, Settings } from '@/lib/types'
+import {
+  aircraftSnapshot,
+  holdsToApproval,
+  lineOf,
+  needsPartConditions,
+  paperErrorWords,
+} from '@/lib/service-line'
+import type { Invoice, Job, PartLine, Payment, PaymentMethod, Settings, Vehicle } from '@/lib/types'
 
 function todayIso(): string {
   const d = new Date()
@@ -88,30 +95,42 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
    * Re-snapshot the job into this same invoice. A draft has not been sent, so
    * there is nothing to preserve by voiding and reissuing — this keeps the
    * number and just brings the figures up to date after a parts change.
+   *
+   * The gates follow the paper this invoice was created on (AVN-3): an
+   * aircraft invoice is held to the approved quote as a shop rule and asks for
+   * no part conditions. Its aircraft block (tail, serial, airframe hours) is
+   * re-frozen with the figures; its service_line never changes.
    */
   async function refreshFromJob(taxRateBpOverride?: number) {
     if (!invoice) return
     setRefreshing(true)
+    const line = lineOf(invoice)
     try {
-      const [{ data: job }, { data: partLines }, auth] = await Promise.all([
-        supabase.from('jobs').select('*').eq('id', invoice.job_id).single(),
+      const [{ data: jobRow }, { data: partLines }, auth] = await Promise.all([
+        // vehicles(*): a car's refresh still reads before migration 0055.
+        supabase.from('jobs').select('*, vehicle:vehicles(*)').eq('id', invoice.job_id).single(),
         supabase.from('part_lines').select('*').eq('job_id', invoice.job_id).order('created_at'),
         loadJobAuthorization(invoice.job_id),
       ])
-      if (!job) throw new Error('The job behind this invoice is gone.')
+      if (!jobRow) throw new Error('The job behind this invoice is gone.')
+      const { vehicle, ...job } = jobRow as Job & { vehicle: Vehicle | null }
       // The same two checks Create invoice runs on the job page: never past
       // what the customer approved (AS 45.45.140/.170), and every part
       // identified new / used / rebuilt / reconditioned (AS 45.45.190).
-      if (isOverApproval(auth)) {
+      if (holdsToApproval(line) && isOverApproval(auth)) {
         alert(
-          `The job now comes to ${formatCents(auth!.current_cents)} before tax, over the ${formatCents(auth!.authorized_cents)} the customer approved. Open the job to bill the approved amount or record their OK, then update this draft.`,
+          line === 'aviation'
+            ? `The job now comes to ${formatCents(auth!.current_cents)} before tax, over the approved quote of ${formatCents(auth!.authorized_cents)} — a shop rule: no charge over it without the customer’s OK. Open the job to bill the approved amount or record their OK, then update this draft.`
+            : `The job now comes to ${formatCents(auth!.current_cents)} before tax, over the ${formatCents(auth!.authorized_cents)} the customer approved. Open the job to bill the approved amount or record their OK, then update this draft.`,
         )
         setRefreshing(false)
         return
       }
-      const unconfirmed = ((partLines as PartLine[]) ?? []).filter(
-        (l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null,
-      )
+      const unconfirmed = needsPartConditions(line)
+        ? ((partLines as PartLine[]) ?? []).filter(
+            (l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null,
+          )
+        : []
       if (unconfirmed.length) {
         alert(
           `Confirm the condition of ${unconfirmed.length} part${unconfirmed.length === 1 ? '' : 's'} on the job page first (new, used, rebuilt or reconditioned) — Alaska law wants it on the invoice.`,
@@ -122,18 +141,20 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       // The invoice owns its tax rate once created — re-deriving it from the
       // source quote here would silently undo a rate set on this invoice.
       const taxRateBp = taxRateBpOverride ?? invoice.tax_rate_bp ?? 0
-      const snapshot = buildInvoiceSnapshot(job as Job, (partLines as PartLine[]) ?? [], taxRateBp)
+      const snapshot = buildInvoiceSnapshot(job as Job, (partLines as PartLine[]) ?? [], taxRateBp, line)
       const { error } = await supabase
         .from('invoices')
         .update({
-          job_title: (job as Job).title,
-          work_performed: (job as Job).work_performed,
+          job_title: job.title,
+          work_performed: job.work_performed,
           // Only seed notes that were never written here — a memo typed on
           // this invoice is the owner's, and a refresh must not eat it.
           // From the live recommendation items, not the superseded column.
           ...(invoice.memo ? {} : { memo: toMemo(await listForJob(invoice.job_id)) }),
           // Re-freeze the approvals behind the bill with the figures.
-          authorizations: await buildAuthorizationTrail(invoice.job_id),
+          authorizations: await buildAuthorizationTrail(invoice.job_id, line),
+          // A draft only: the tail, serial and hours as they stand now.
+          ...(line === 'aviation' ? { aircraft: aircraftSnapshot(vehicle, job) } : {}),
           ...snapshot,
         })
         .eq('id', invoice.id)
@@ -142,7 +163,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       await load()
       setTimeout(() => setRefreshMsg(''), 3000)
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e))
+      alert(paperErrorWords(e) ?? (e instanceof Error ? e.message : String(e)))
     }
     setRefreshing(false)
   }
@@ -222,12 +243,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       address: settings?.business_address ?? '',
       email: settings?.business_email ?? '',
     },
+    // The paper it was created on, and its frozen aircraft block (AVN-3).
+    serviceLine: lineOf(invoice),
+    aircraft: invoice.aircraft ?? null,
   }
 
   async function patch(fields: Partial<Invoice>, alsoJob?: 'paid') {
     const { error } = await supabase.from('invoices').update(fields).eq('id', id)
     if (error) {
-      alert(error.message)
+      alert(paperErrorWords(error) ?? error.message)
       return
     }
     if (alsoJob === 'paid') {

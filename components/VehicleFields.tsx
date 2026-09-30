@@ -2,8 +2,13 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { getAccessToken } from '@/lib/supabase'
+import { lineOf, normalizeRegistration, type ServiceLine } from '@/lib/service-line'
+import type { Vehicle } from '@/lib/types'
 
 export interface VehicleDraft {
+  /** Vehicle or Aircraft (AVN-3): which fields show, and which paper its
+   *  quotes and invoices get. */
+  service_line: ServiceLine
   year: string
   make: string
   model: string
@@ -11,10 +16,45 @@ export interface VehicleDraft {
   engine: string
   vin: string
   license_plate: string
+  /** Aircraft only: the tail number and the serial number. */
+  registration: string
+  serial_number: string
 }
 
 export const emptyVehicleDraft: VehicleDraft = {
+  service_line: 'automotive',
   year: '', make: '', model: '', trim: '', engine: '', vin: '', license_plate: '',
+  registration: '', serial_number: '',
+}
+
+/** A saved vehicle as an editable draft (the vehicle page's Edit). */
+export function vehicleDraftFrom(v: Vehicle): VehicleDraft {
+  return {
+    service_line: lineOf(v),
+    year: v.year != null ? String(v.year) : '',
+    make: v.make ?? '',
+    model: v.model ?? '',
+    trim: v.trim ?? '',
+    engine: v.engine ?? '',
+    vin: v.vin ?? '',
+    license_plate: v.license_plate ?? '',
+    registration: v.registration ?? '',
+    serial_number: v.serial_number ?? '',
+  }
+}
+
+/**
+ * Anything typed for the chosen kind — the Vehicle / Aircraft choice itself is
+ * not an entry, and neither is a car field left behind after switching to
+ * Aircraft (vehiclePayload drops those). The "only create one if something
+ * was filled in" test every add form uses.
+ */
+export function vehicleDraftHasAnything(d: VehicleDraft): boolean {
+  const fields =
+    d.service_line === 'aviation'
+      ? [d.registration, d.year, d.make, d.model, d.serial_number]
+      : [d.year, d.make, d.model, d.trim, d.engine, d.vin, d.license_plate]
+  return fields.some((v) => v.trim() !== '')
 }
 
 async function fetchData(params: Record<string, string>): Promise<Record<string, unknown>> {
@@ -39,15 +79,25 @@ const YEARS = Array.from({ length: new Date().getFullYear() + 2 - 1950 }, (_, i)
  * - "Decode VIN" fills year/make/model/trim/engine from the official NHTSA
  *   decoder (the accurate path — it reads the exact vehicle's build data)
  * Suggestion fetches degrade silently; only the explicit VIN decode reports errors.
+ *
+ * Aircraft (AVN-3): a Vehicle / Aircraft pair at the top. Aircraft asks for
+ * tail number, year, make, model and serial number — no VIN, no plate, and no
+ * NHTSA lookups (they are road-vehicle data). The placeholders name no
+ * aircraft type (AVN-2). Once the vehicle has a job or quote the kind is fixed
+ * (kindLocked; migration 0055 refuses the change too).
  */
 export default function VehicleFields({
   value,
   onChange,
+  kindLocked = false,
 }: {
   value: VehicleDraft
   onChange: (v: VehicleDraft) => void
+  /** The vehicle already has work on it: the choice shows, read-only. */
+  kindLocked?: boolean
 }) {
   const uid = useId()
+  const isAircraft = value.service_line === 'aviation'
   const [makes, setMakes] = useState<string[]>([])
   const [models, setModels] = useState<string[]>([])
   const [engines, setEngines] = useState<string[]>([])
@@ -58,7 +108,11 @@ export default function VehicleFields({
     latest.current = value
   })
 
+  // Road-vehicle makes: fetched when the form shows a vehicle, never for an
+  // aircraft (and once only — a list already here is kept).
+  const haveMakes = makes.length > 0
   useEffect(() => {
+    if (isAircraft || haveMakes) return
     let cancelled = false
     fetchData({ op: 'makes' })
       .then((d) => {
@@ -68,12 +122,12 @@ export default function VehicleFields({
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [isAircraft, haveMakes])
 
   const { year, make, model } = value
   useEffect(() => {
     setModels([])
-    if (!/^\d{4}$/.test(year) || make.trim().length < 2) return
+    if (isAircraft || !/^\d{4}$/.test(year) || make.trim().length < 2) return
     let cancelled = false
     const t = setTimeout(() => {
       fetchData({ op: 'models', year, make: make.trim() })
@@ -88,11 +142,11 @@ export default function VehicleFields({
       cancelled = true
       clearTimeout(t)
     }
-  }, [year, make])
+  }, [isAircraft, year, make])
 
   useEffect(() => {
     setEngines([])
-    if (!/^\d{4}$/.test(year) || make.trim().length < 2 || model.trim().length < 2) return
+    if (isAircraft || !/^\d{4}$/.test(year) || make.trim().length < 2 || model.trim().length < 2) return
     let cancelled = false
     const t = setTimeout(() => {
       fetchData({ op: 'engines', year, make: make.trim(), model: model.trim() })
@@ -105,7 +159,7 @@ export default function VehicleFields({
       cancelled = true
       clearTimeout(t)
     }
-  }, [year, make, model])
+  }, [isAircraft, year, make, model])
 
   async function decodeVin() {
     const vin = latest.current.vin.trim().toUpperCase()
@@ -155,8 +209,105 @@ export default function VehicleFields({
     onChange({ ...value, ...patch })
   }
 
+  /** Vehicle | Aircraft — two 44px buttons. Read-only once the vehicle has work. */
+  const kindPicker = (
+    <div role="group" aria-label="Vehicle or aircraft" className="grid grid-cols-2 gap-2">
+      {(['automotive', 'aviation'] as const).map((k) => {
+        const on = value.service_line === k
+        return (
+          <button
+            key={k}
+            type="button"
+            className="btn btn-sm !min-h-[44px]"
+            aria-pressed={on}
+            disabled={kindLocked && !on}
+            style={on ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
+            onClick={() => {
+              if (kindLocked || on) return
+              setVinStatus(null)
+              set({ service_line: k })
+            }}
+          >
+            {k === 'aviation' ? 'Aircraft' : 'Vehicle'}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  if (isAircraft) {
+    return (
+      <div className="space-y-2">
+        {kindPicker}
+        {kindLocked && (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            It already has work on it, so it stays an aircraft. Entered as the wrong kind? Add it
+            again as a vehicle.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <input
+            className="input col-span-2 uppercase sm:col-span-1"
+            placeholder="Tail number"
+            aria-label="Tail number"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            value={value.registration}
+            // Stored uppercase, no spaces (normalizeRegistration) — shown that way as typed.
+            onChange={(e) => set({ registration: normalizeRegistration(e.target.value) })}
+          />
+          <input
+            className="input"
+            inputMode="numeric"
+            placeholder="Year"
+            aria-label="Year"
+            list={`${uid}-years`}
+            value={value.year}
+            onChange={(e) => set({ year: e.target.value })}
+          />
+          <input
+            className="input"
+            placeholder="Make"
+            aria-label="Make"
+            value={value.make}
+            onChange={(e) => set({ make: e.target.value })}
+          />
+          <input
+            className="input"
+            placeholder="Model"
+            aria-label="Model"
+            value={value.model}
+            onChange={(e) => set({ model: e.target.value })}
+          />
+          <input
+            className="input"
+            placeholder="Serial number"
+            aria-label="Serial number"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            value={value.serial_number}
+            onChange={(e) => set({ serial_number: e.target.value })}
+          />
+        </div>
+        <datalist id={`${uid}-years`}>
+          {YEARS.map((y) => <option key={y} value={y} />)}
+        </datalist>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-2">
+      {kindPicker}
+      {kindLocked && (
+        <p className="text-xs" style={{ color: 'var(--text3)' }}>
+          It already has work on it, so it stays a vehicle. Entered as the wrong kind? Add it again
+          as an aircraft.
+        </p>
+      )}
       <div className="flex gap-2">
         <input
           className="input flex-1 uppercase"
@@ -253,15 +404,24 @@ export default function VehicleFields({
   )
 }
 
-/** Shared insert/update payload builder so every call site persists identically. */
+/**
+ * Shared insert/update payload builder so every call site persists identically.
+ * The other kind's fields go as null — a car field left in the draft after
+ * switching to Aircraft (or the reverse) never reaches the database, so its
+ * CHECK (vehicles_line_fields_check, 0055) never fires from a form.
+ */
 export function vehiclePayload(draft: VehicleDraft) {
+  const aircraft = draft.service_line === 'aviation'
   return {
+    service_line: draft.service_line,
     year: draft.year.trim() ? Number(draft.year.trim()) : null,
     make: draft.make.trim() || null,
     model: draft.model.trim() || null,
-    trim: draft.trim.trim() || null,
-    engine: draft.engine.trim() || null,
-    vin: draft.vin.trim().toUpperCase() || null,
-    license_plate: draft.license_plate.trim() || null,
+    trim: aircraft ? null : draft.trim.trim() || null,
+    engine: aircraft ? null : draft.engine.trim() || null,
+    vin: aircraft ? null : draft.vin.trim().toUpperCase() || null,
+    license_plate: aircraft ? null : draft.license_plate.trim() || null,
+    registration: aircraft ? normalizeRegistration(draft.registration) || null : null,
+    serial_number: aircraft ? draft.serial_number.trim() || null : null,
   }
 }

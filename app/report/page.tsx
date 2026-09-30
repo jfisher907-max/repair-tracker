@@ -13,6 +13,13 @@ import { formatTaxRate } from '@/lib/billing'
 import { formatCents, formatMiles } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import {
+  AIRCRAFT_HOURS_LABEL,
+  PAPER,
+  formatAirframeHours,
+  lineOf,
+  needsPartConditions,
+} from '@/lib/service-line'
+import {
   vehicleLabel,
   type Customer,
   type Invoice,
@@ -39,6 +46,11 @@ import {
  * its charge, labelled before tax. The Grand total is the sum of those
  * per-job figures. Nothing here is stored: every print re-reads the rows.
  * included_tax_cents is books-only and is never selected here.
+ *
+ * An aircraft (AVN-3) prints as one: "Aircraft Repair History", its tail and
+ * serial number instead of VIN and plate, airframe hours instead of miles —
+ * the invoice's frozen hours when it was invoiced, else the job's — and no
+ * New / Used part tags. Car output is unchanged.
  */
 export default function ReportPage() {
   return (
@@ -66,10 +78,14 @@ type ReportInvoice = Pick<
   | 'tax_cents'
   | 'total_cents'
   | 'created_at'
+  | 'service_line'
+  | 'aircraft'
 >
 
+// service_line and aircraft (0055): the paper it went out on, and its frozen
+// airframe hours — both customer-facing.
 const INVOICE_FIELDS =
-  'id, job_id, invoice_number, status, lines, labor_hours, labor_rate_cents, labor_cents, parts_cents, tax_rate_bp, tax_cents, total_cents, created_at'
+  'id, job_id, invoice_number, status, lines, labor_hours, labor_rate_cents, labor_cents, parts_cents, tax_rate_bp, tax_cents, total_cents, created_at, service_line, aircraft'
 
 interface ReportJob {
   job: Job
@@ -112,6 +128,14 @@ function billedTotal(j: ReportJob): number {
 /** A job's labor hours as its history entry prints them: the invoice's, or the job's when not invoiced. */
 function billedHours(j: Pick<ReportJob, 'job' | 'invoice'>): number {
   return Number(j.invoice ? j.invoice.labor_hours : j.job.labor_hours)
+}
+
+/** An aircraft job's airframe hours as its entry prints them: frozen on the
+ *  invoice when it was invoiced, else the job's own. */
+function airframeHoursOf(j: Pick<ReportJob, 'job' | 'invoice'>): number | null {
+  const frozen = j.invoice?.aircraft?.airframe_hours
+  const hours = j.invoice ? (frozen ?? null) : (j.job.airframe_hours ?? null)
+  return hours == null || Number.isNaN(Number(hours)) ? null : Number(hours)
 }
 
 const CONDITION_LABEL: Record<PartCondition, string> = {
@@ -334,6 +358,13 @@ function Report() {
         : max,
     null,
   )
+  /** Scoped to one aircraft (AVN-3): its words, its identity, its hours. */
+  const scopeIsAircraft = lineOf(scopeVehicle) === 'aviation'
+  const scopeAsset = PAPER[lineOf(scopeVehicle)].asset
+  const lastAirframeHours = filtered.reduce<number | null>((max, j) => {
+    const h = airframeHoursOf(j)
+    return h != null && (max == null || h > max) ? h : max
+  }, null)
   const generated = new Date().toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   })
@@ -341,7 +372,13 @@ function Report() {
   // The document title matches what's actually being printed: one job is a
   // service record, one vehicle is that vehicle's history, a whole customer
   // (possibly several vehicles) is their repair history.
-  const docTitle = jobId ? 'Service Record' : vehicleId ? 'Vehicle Repair History' : 'Repair History'
+  const docTitle = jobId
+    ? 'Service Record'
+    : vehicleId
+      ? scopeIsAircraft
+        ? 'Aircraft Repair History'
+        : 'Vehicle Repair History'
+      : 'Repair History'
   const singleJob = filtered.length === 1 ? filtered[0] : null
   const backHref = jobId
     ? `/jobs/${jobId}`
@@ -405,7 +442,7 @@ function Report() {
               {jobId ? (
                 <>
                   <div>
-                    <dt>Vehicle</dt>
+                    <dt>{scopeAsset}</dt>
                     <dd>{vehicleLabel(scopeVehicle)}</dd>
                   </div>
                   <div>
@@ -417,7 +454,7 @@ function Report() {
                 <>
                   {vehicleId && (
                     <div>
-                      <dt>Vehicle</dt>
+                      <dt>{scopeAsset}</dt>
                       <dd>{vehicleLabel(scopeVehicle)}</dd>
                     </div>
                   )}
@@ -448,10 +485,23 @@ function Report() {
                   <dd>{scopeVehicle.license_plate}</dd>
                 </div>
               )}
-              {vehicleId && lastMiles != null && (
+              {vehicleId && !scopeIsAircraft && lastMiles != null && (
                 <div>
                   <dt>Last recorded mileage</dt>
                   <dd>{formatMiles(lastMiles)} mi</dd>
+                </div>
+              )}
+              {/* The aircraft's identity, where a car prints VIN and plate. */}
+              {(jobId || vehicleId) && scopeIsAircraft && scopeVehicle?.serial_number && (
+                <div>
+                  <dt>Serial number</dt>
+                  <dd>{scopeVehicle.serial_number}</dd>
+                </div>
+              )}
+              {vehicleId && scopeIsAircraft && lastAirframeHours != null && (
+                <div>
+                  <dt>Last recorded {AIRCRAFT_HOURS_LABEL.toLowerCase()}</dt>
+                  <dd>{formatAirframeHours(lastAirframeHours)}</dd>
                 </div>
               )}
             </dl>
@@ -475,6 +525,10 @@ function Report() {
               // with their prices exactly as the customer received them.
               const showLinePrices = showPrices && (invoice ? true : job.parts_charged_override_cents == null)
               const invoiceLines = invoice?.lines ?? []
+              // Each job by its own paper: the invoice's when invoiced, else its vehicle's.
+              const jobLine = invoice ? lineOf(invoice) : lineOf(vehicle)
+              const partTags = needsPartConditions(jobLine)
+              const jobHours = jobLine === 'aviation' ? airframeHoursOf({ job, invoice }) : null
               return (
                 <section key={job.id} className="doc-section">
                   <h2>
@@ -482,7 +536,9 @@ function Report() {
                   </h2>
                   <div className="doc-section-sub">
                     {vehicleLabel(vehicle)}
-                    {job.odometer_miles != null && <> · {formatMiles(job.odometer_miles)} miles</>}
+                    {jobLine === 'aviation'
+                      ? jobHours != null && <> · {formatAirframeHours(jobHours)} airframe hrs</>
+                      : job.odometer_miles != null && <> · {formatMiles(job.odometer_miles)} miles</>}
                     {laborHours > 0 && <> · {laborHours} labor hours</>}
                     {' · '}{job.job_number}
                   </div>
@@ -519,7 +575,7 @@ function Report() {
                           <tr key={i}>
                             <td className="doc-desc" colSpan={2}>
                               {l.description}
-                              {l.condition && <span className="doc-cond">{CONDITION_LABEL[l.condition]}</span>}
+                              {partTags && l.condition && <span className="doc-cond">{CONDITION_LABEL[l.condition]}</span>}
                             </td>
                             <td className="doc-n doc-dim">{Number(l.qty)}</td>
                             {showLinePrices && (

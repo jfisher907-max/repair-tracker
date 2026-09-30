@@ -7,9 +7,10 @@ import JobRow from '@/components/JobRow'
 import { fetchJobsWithContext, type JobWithContext } from '@/lib/data'
 import { supabase } from '@/lib/supabase'
 import { formatMiles } from '@/lib/money'
+import { formatAirframeHours, lineOf, paperErrorWords } from '@/lib/service-line'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
 import { listForVehicle, statusColors, type Recommendation } from '@/lib/recommendations'
-import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
+import VehicleFields, { emptyVehicleDraft, vehicleDraftFrom, vehiclePayload } from '@/components/VehicleFields'
 import ServiceReminders from '@/components/ServiceReminders'
 import type { OdometerReading } from '@/lib/reminders'
 
@@ -26,29 +27,31 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
   const [notes, setNotes] = useState('')
   const [search, setSearch] = useState('')
   const [recs, setRecs] = useState<Recommendation[]>([])
+  /** Live quotes on this vehicle: with its jobs, what fixes Vehicle / Aircraft. */
+  const [liveQuotes, setLiveQuotes] = useState(0)
 
   const load = useCallback(async () => {
-    const [{ data: v }, { data: cs }, all] = await Promise.all([
+    const [{ data: v }, { data: cs }, all, quotesRes] = await Promise.all([
       supabase.from('vehicles').select('*, customer:customers(*)').eq('id', id).single(),
       supabase.from('customers').select('*').is('deleted_at', null).order('name'),
       fetchJobsWithContext(),
+      supabase
+        .from('quotes')
+        .select('id', { count: 'exact', head: true })
+        .eq('vehicle_id', id)
+        .is('deleted_at', null),
     ])
     const row = v as Vehicle & { customer: Customer | null }
     if (row) {
       const { customer, ...veh } = row
       setVehicle(veh as Vehicle)
       setOwner(customer)
-      setForm({
-        year: veh.year != null ? String(veh.year) : '',
-        make: veh.make ?? '',
-        model: veh.model ?? '',
-        trim: veh.trim ?? '',
-        engine: veh.engine ?? '',
-        vin: veh.vin ?? '',
-        license_plate: veh.license_plate ?? '',
-      })
+      setForm(vehicleDraftFrom(veh as Vehicle))
       setNotes(veh.notes ?? '')
     }
+    // A failed count locks the choice rather than guess it free: the database
+    // refuses the change anyway once there is work (0055).
+    setLiveQuotes(quotesRes.error ? 1 : (quotesRes.count ?? 0))
     setCustomers((cs as Customer[]) ?? [])
     setRecs(await listForVehicle(id))
     setJobs(all.filter((j) => j.vehicle?.id === id))
@@ -60,12 +63,19 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
 
   if (!vehicle) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
+  /** An aircraft (AVN-3): tail and serial instead of VIN and plate, airframe
+   *  hours instead of miles, and no mileage-based service reminders. */
+  const isAircraft = lineOf(vehicle) === 'aviation'
+  const kind = isAircraft ? 'aircraft' : 'vehicle'
+  /** Vehicle / Aircraft is fixed once there is a live job or quote on it. */
+  const kindLocked = jobs.length > 0 || liveQuotes > 0
+
   async function saveEdit() {
     const { error } = await supabase
       .from('vehicles')
       .update({ ...vehiclePayload(form), notes: notes.trim() || null })
       .eq('id', id)
-    if (error) alert(error.message)
+    if (error) alert(paperErrorWords(error) ?? error.message)
     else {
       setEditing(false)
       await load()
@@ -161,6 +171,9 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
         )}
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3" style={{ color: 'var(--text2)' }}>
+          {isAircraft && <div>Aircraft paperwork</div>}
+          {isAircraft && vehicle.registration && <div>Tail number: {vehicle.registration}</div>}
+          {isAircraft && vehicle.serial_number && <div>Serial number: {vehicle.serial_number}</div>}
           {vehicle.engine && <div>Engine: {vehicle.engine}</div>}
           {vehicle.vin && <div>VIN: {vehicle.vin}</div>}
           {vehicle.license_plate && <div>Plate: {vehicle.license_plate}</div>}
@@ -169,11 +182,11 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
 
         {editing && (
           <div className="space-y-2 border-t pt-2" style={{ borderColor: 'var(--border)' }}>
-            <VehicleFields value={form} onChange={setForm} />
+            <VehicleFields value={form} onChange={setForm} kindLocked={kindLocked} />
             <input className="input" placeholder="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
             <div className="flex gap-2">
               <button className="btn btn-primary btn-sm" onClick={saveEdit}>Save</button>
-              <button className="btn btn-sm btn-danger" onClick={softDelete}>Delete vehicle</button>
+              <button className="btn btn-sm btn-danger" onClick={softDelete}>Delete {kind}</button>
             </div>
           </div>
         )}
@@ -181,13 +194,14 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
         {owner && (
           <div className="border-t pt-2" style={{ borderColor: 'var(--border)' }}>
             <Link href={`/report?vehicle=${id}`} className="btn btn-sm btn-primary">
-              Print history for this vehicle
+              Print history for this {kind}
             </Link>
           </div>
         )}
       </div>
 
-      <ServiceReminders vehicleId={id} readings={readings} />
+      {/* Mileage-based reminders are road-vehicle upkeep. */}
+      {!isAircraft && <ServiceReminders vehicleId={id} readings={readings} />}
 
       <section className="space-y-2">
         <h2 className="text-lg" style={{ color: 'var(--text2)' }}>
@@ -195,6 +209,14 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
           {jobs.length > 0 && (
             <span className="ml-2 text-sm" style={{ color: 'var(--text3)' }}>
               {(() => {
+                if (isAircraft) {
+                  const hours = jobs
+                    .map((j) => j.job.airframe_hours)
+                    .filter((h): h is number => h != null)
+                    .map(Number)
+                  if (hours.length < 2) return ''
+                  return `${formatAirframeHours(Math.min(...hours))} → ${formatAirframeHours(Math.max(...hours))} airframe hrs`
+                }
                 const miles = jobs
                   .map((j) => j.job.odometer_miles)
                   .filter((m): m is number => m != null)
@@ -207,7 +229,7 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
         {jobs.length > 0 && (
           <input
             className="input"
-            placeholder="Search this vehicle's history — work, parts, recommendations…"
+            placeholder={`Search this ${kind}'s history — work, parts, recommendations…`}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search service history"
@@ -217,7 +239,7 @@ export default function VehiclePage({ params }: { params: Promise<{ id: string }
           <p className="text-sm" style={{ color: 'var(--text3)' }}>No jobs yet.</p>
         ) : shownJobs.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--text3)' }}>
-            Nothing on this vehicle matches “{search}”.
+            Nothing on this {kind} matches “{search}”.
           </p>
         ) : (
           shownJobs.map((it) => (

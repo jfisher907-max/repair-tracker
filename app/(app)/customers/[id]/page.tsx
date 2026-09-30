@@ -10,7 +10,12 @@ import { formatCents } from '@/lib/money'
 import { collectedForJob, governingInvoice, statementTotalCents } from '@/lib/calc'
 import { isBookedJob } from '@/lib/finances'
 import { vehicleLabel, type Customer, type Vehicle } from '@/lib/types'
-import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
+import VehicleFields, {
+  emptyVehicleDraft,
+  vehicleDraftHasAnything,
+  vehiclePayload,
+} from '@/components/VehicleFields'
+import { lineOf, paperErrorWords } from '@/lib/service-line'
 
 export default function CustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -164,9 +169,9 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
   }
 
   async function saveVehicle() {
-    const hasAnything = Object.values(veh).some((v) => v.trim() !== '')
-    if (!hasAnything) {
-      alert('Fill in at least one vehicle field.')
+    // The Vehicle / Aircraft choice on its own isn't an entry.
+    if (!vehicleDraftHasAnything(veh)) {
+      alert(veh.service_line === 'aviation' ? 'Fill in at least one aircraft field.' : 'Fill in at least one vehicle field.')
       return
     }
     setSavingVehicle(true)
@@ -175,7 +180,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
       ...vehiclePayload(veh),
     })
     setSavingVehicle(false)
-    if (error) alert(error.message)
+    if (error) alert(paperErrorWords(error) ?? error.message)
     else {
       setAddingVehicle(false)
       setVeh(emptyVehicleDraft)
@@ -285,7 +290,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
           <div className="panel-in space-y-2 rounded-lg border p-3" style={{ borderColor: 'var(--border2)' }}>
             <VehicleFields value={veh} onChange={setVeh} />
             <button className="btn btn-primary btn-sm" onClick={saveVehicle} disabled={savingVehicle}>
-              {savingVehicle ? 'Saving…' : 'Save vehicle'}
+              {savingVehicle ? 'Saving…' : 'Save'}
             </button>
           </div>
         )}
@@ -301,7 +306,7 @@ export default function CustomerPage({ params }: { params: Promise<{ id: string 
           >
             <span className="font-semibold">{vehicleLabel(v)}</span>
             <span className="text-sm" style={{ color: 'var(--text3)' }}>
-              {v.license_plate ?? ''}
+              {lineOf(v) === 'aviation' ? 'aircraft' : (v.license_plate ?? '')}
             </span>
           </Link>
         ))}

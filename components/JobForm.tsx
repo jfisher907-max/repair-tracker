@@ -7,6 +7,13 @@ import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type JobStage, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
 import { syncJobPayment } from '@/lib/payments'
+import {
+  AIRCRAFT_HOURS_LABEL,
+  lineOf,
+  paperErrorWords,
+  parseAirframeHours,
+  type ServiceLine,
+} from '@/lib/service-line'
 import { listTemplates, type JobTemplate, type JobTemplateLine } from '@/lib/templates'
 
 interface VehicleOption extends Vehicle {
@@ -50,6 +57,14 @@ export default function JobForm({ job }: { job?: Job }) {
   const [date, setDate] = useState(job?.date ?? todayLocal())
   const [title, setTitle] = useState(job?.title ?? '')
   const [odometer, setOdometer] = useState(job?.odometer_miles != null ? String(job.odometer_miles) : '')
+  /** Aircraft (AVN-3): airframe hours instead of the odometer. */
+  const [airframeHours, setAirframeHours] = useState(
+    job?.airframe_hours != null ? String(Number(job.airframe_hours)) : '',
+  )
+  /** Editing: the line of the job's OWN vehicle, read by id (so a vehicle
+   *  deleted since still answers). Null until read; the save waits for it,
+   *  so an aircraft job can never be saved as a car and lose its hours. */
+  const [editLine, setEditLine] = useState<ServiceLine | null>(null)
   const [laborHours, setLaborHours] = useState(job ? String(job.labor_hours) : '')
   const [laborRate, setLaborRate] = useState(job ? centsToInput(job.labor_rate_cents) : '')
   const [workPerformed, setWorkPerformed] = useState(job?.work_performed ?? '')
@@ -81,6 +96,22 @@ export default function JobForm({ job }: { job?: Job }) {
   const createdCustomerId = useRef<string | null>(null)
   const createdVehicleId = useRef<string | null>(null)
   const createdJobId = useRef<string | null>(null)
+
+  const editVehicleId = job?.vehicle_id ?? null
+  const editHadHours = job?.airframe_hours != null
+  useEffect(() => {
+    if (!editVehicleId) return
+    supabase
+      .from('vehicles')
+      .select('*')
+      .eq('id', editVehicleId)
+      .maybeSingle()
+      .then(({ data, error }) =>
+        // A failed read falls back on what the job itself shows: hours on
+        // record means an aircraft.
+        setEditLine(error ? (editHadHours ? 'aviation' : 'automotive') : lineOf(data as Vehicle | null)),
+      )
+  }, [editVehicleId, editHadHours])
 
   useEffect(() => {
     supabase
@@ -120,6 +151,14 @@ export default function JobForm({ job }: { job?: Job }) {
   }, [vehicles, vehicleQuery])
 
   const selectedVehicle = vehicles.find((v) => v.id === vehicleId) ?? null
+  /** Which paper this job gets, and so which fields it asks for: the job's own
+   *  vehicle when editing, the new-vehicle draft, or the one picked. */
+  const serviceLine: ServiceLine = editing
+    ? (editLine ?? (job.airframe_hours != null ? 'aviation' : 'automotive'))
+    : creatingVehicle
+      ? newVehicle.service_line
+      : lineOf(selectedVehicle)
+  const isAircraft = serviceLine === 'aviation'
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -140,9 +179,16 @@ export default function JobForm({ job }: { job?: Job }) {
     // wire — the save would succeed with the value silently gone. Reject it
     // here instead; these three all feed later decisions (warranty disputes,
     // mileage projections).
-    const odometerNum = odometer.trim() ? Number(odometer.replace(/[,\s]/g, '')) : null
+    if (editing && editLine == null) {
+      setError('Still reading this job’s vehicle — try again in a moment.')
+      return
+    }
+    // An aircraft job records airframe hours, never miles (AVN-3): the car
+    // fields go as null, and a car's hours do too.
+    const odometerNum = !isAircraft && odometer.trim() ? Number(odometer.replace(/[,\s]/g, '')) : null
+    const airframeHoursNum = isAircraft ? parseAirframeHours(airframeHours) : null
     const warrantyMonthsNum = warrantyMonths.trim() ? Number(warrantyMonths.trim()) : null
-    const warrantyMilesNum = warrantyMiles.trim()
+    const warrantyMilesNum = !isAircraft && warrantyMiles.trim()
       ? Number(warrantyMiles.replace(/[,\s]/g, ''))
       : null
     const badNumber = (n: number | null) => n != null && (!Number.isInteger(n) || n < 0)
@@ -150,8 +196,16 @@ export default function JobForm({ job }: { job?: Job }) {
       setError('Odometer needs a plain number of miles.')
       return
     }
+    if (airframeHoursNum != null && Number.isNaN(airframeHoursNum)) {
+      setError('Airframe hours need a plain number with at most one decimal place — e.g. 1234.5.')
+      return
+    }
     if (badNumber(warrantyMonthsNum) || badNumber(warrantyMilesNum)) {
-      setError('Warranty needs plain whole numbers — e.g. 12 months, 12,000 miles.')
+      setError(
+        isAircraft
+          ? 'Warranty needs a plain whole number of months — e.g. 12.'
+          : 'Warranty needs plain whole numbers — e.g. 12 months, 12,000 miles.',
+      )
       return
     }
 
@@ -200,6 +254,7 @@ export default function JobForm({ job }: { job?: Job }) {
         date,
         title: title.trim(),
         odometer_miles: odometerNum,
+        airframe_hours: airframeHoursNum,
         labor_hours: laborHours ? Number(laborHours) : 0,
         labor_rate_cents: parseMoney(laborRate) ?? 0,
         work_performed: workPerformed.trim() || null,
@@ -249,7 +304,7 @@ export default function JobForm({ job }: { job?: Job }) {
         router.push(`/jobs/${jobId}`)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(paperErrorWords(e) ?? (e instanceof Error ? e.message : String(e)))
       setBusy(false)
     }
   }
@@ -326,6 +381,7 @@ export default function JobForm({ job }: { job?: Job }) {
                   <div className="text-sm" style={{ color: 'var(--text2)' }}>
                     {selectedVehicle.customer?.name}
                     {selectedVehicle.license_plate ? ` · ${selectedVehicle.license_plate}` : ''}
+                    {isAircraft && ' · aircraft paperwork'}
                   </div>
                 </div>
                 <button type="button" className="btn btn-sm" onClick={() => setVehicleId(null)}>
@@ -446,16 +502,30 @@ export default function JobForm({ job }: { job?: Job }) {
           <label className="label">{stage === 'scheduled' ? 'Booked for *' : 'Date *'}</label>
           <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </div>
-        <div>
-          <label className="label">Odometer (miles)</label>
-          <input
-            className="input"
-            inputMode="numeric"
-            placeholder="123,456"
-            value={odometer}
-            onChange={(e) => setOdometer(e.target.value)}
-          />
-        </div>
+        {isAircraft ? (
+          <div>
+            <label className="label" htmlFor="job-airframe-hours">{AIRCRAFT_HOURS_LABEL}</label>
+            <input
+              id="job-airframe-hours"
+              className="input"
+              inputMode="decimal"
+              placeholder="1234.5"
+              value={airframeHours}
+              onChange={(e) => setAirframeHours(e.target.value)}
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="label">Odometer (miles)</label>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="123,456"
+              value={odometer}
+              onChange={(e) => setOdometer(e.target.value)}
+            />
+          </div>
+        )}
         <div>
           <label className="label">Promised back</label>
           <input
@@ -465,7 +535,8 @@ export default function JobForm({ job }: { job?: Job }) {
             onChange={(e) => setPromisedDate(e.target.value)}
           />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        {/* An aircraft's warranty runs in months only. */}
+        <div className={isAircraft ? undefined : 'grid grid-cols-2 gap-2'}>
           <div>
             <label className="label">Warranty (months)</label>
             <input
@@ -476,16 +547,18 @@ export default function JobForm({ job }: { job?: Job }) {
               onChange={(e) => setWarrantyMonths(e.target.value)}
             />
           </div>
-          <div>
-            <label className="label">…or miles</label>
-            <input
-              className="input"
-              inputMode="numeric"
-              placeholder="12,000"
-              value={warrantyMiles}
-              onChange={(e) => setWarrantyMiles(e.target.value)}
-            />
-          </div>
+          {!isAircraft && (
+            <div>
+              <label className="label">…or miles</label>
+              <input
+                className="input"
+                inputMode="numeric"
+                placeholder="12,000"
+                value={warrantyMiles}
+                onChange={(e) => setWarrantyMiles(e.target.value)}
+              />
+            </div>
+          )}
         </div>
         <div className="sm:col-span-2">
           <label className="label">Title *</label>

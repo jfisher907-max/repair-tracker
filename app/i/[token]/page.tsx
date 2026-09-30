@@ -8,6 +8,7 @@ import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { useCheckoutReturn } from '@/lib/checkout-return'
 import SharedPhotos from '@/components/public/SharedPhotos'
+import { lineOf, type AircraftSnapshot, type ServiceLine } from '@/lib/service-line'
 import type { AuthorizationEntry, DocLine } from '@/lib/types'
 
 interface PublicInvoice {
@@ -33,6 +34,10 @@ interface PublicInvoice {
   /** The approvals behind the bill; the number called arrives masked to its
    *  last four digits (get_public_invoice, migration 0032). */
   authorizations?: AuthorizationEntry[]
+  /** Which paper (0055). Absent before that migration: automotive. */
+  service_line?: ServiceLine
+  /** Aviation only: the three frozen aircraft keys, never the whole column. */
+  aircraft?: AircraftSnapshot | null
   business: {
     name: string
     phone: string
@@ -140,6 +145,8 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
     paidCents: invoice.amount_paid_cents,
     authorizations: invoice.authorizations ?? [],
     business: invoice.business,
+    serviceLine: lineOf(invoice),
+    aircraft: invoice.aircraft ?? null,
   }
 
   return (
