@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { depositForRule } from '@/lib/billing'
 import { useCheckoutReturn } from '@/lib/checkout-return'
 import SharedPhotos from '@/components/public/SharedPhotos'
+import { PAPER, lineOf, type ServiceLine } from '@/lib/service-line'
 import type { DepositKind, DocLine } from '@/lib/types'
 
 type PublicQuoteLine = DocLine & { id: string; declined: boolean }
@@ -37,6 +38,11 @@ interface PublicQuote {
   deposit_payable: boolean
   approved_at: string | null
   business: { name: string; phone: string; address: string; email: string }
+  /** Which paper (0055): Estimate for a car, Quote for an aircraft. Absent
+   *  before that migration: automotive. */
+  service_line?: ServiceLine
+  /** Aviation with an aircraft attached: its tail and serial number. */
+  aircraft?: { registration: string | null; serial_number: string | null } | null
 }
 
 /**
@@ -108,17 +114,21 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
   }
 
   const loaded = quote && quote !== 'missing' ? quote : null
+  /** The paper's own word — Estimate (car) or Quote (aircraft) — everywhere
+   *  on this page, from the tab title to the approval banner. */
+  const paper = PAPER[lineOf(loaded)]
   useDocumentTitle(
-    loaded ? `Estimate ${loaded.quote_number} — ${loaded.business.name || BRAND_NAME}` : null,
+    loaded ? `${paper.quote} ${loaded.quote_number} — ${loaded.business.name || BRAND_NAME}` : null,
   )
 
+  // Neutral on purpose: which paper this is isn't known until it loads.
   if (quote === null) {
-    return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading estimate…</div>
+    return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading…</div>
   }
   if (quote === 'missing') {
     return (
       <div className="p-8 text-center" style={{ color: 'var(--text2)' }}>
-        This estimate link isn&apos;t valid anymore. Please contact the shop.
+        This link isn&apos;t valid anymore. Please contact the shop.
       </div>
     )
   }
@@ -179,6 +189,8 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
     paymentInstructions: null,
     paidDate: null,
     business: quote.business,
+    serviceLine: lineOf(quote),
+    aircraft: quote.aircraft ?? null,
   }
 
   async function respond(response: 'approved' | 'declined') {
@@ -191,7 +203,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
       response === 'approved' && depositDue > 0
         ? ` A ${formatCents(depositDue)} deposit is due on approval.`
         : ''
-    if (!confirm(`${verb} this estimate${detail}?${deposit}`)) return
+    if (!confirm(`${verb} this ${paper.quoteLower}${detail}?${deposit}`)) return
     setResponding(true)
     // Through the server, so the IP and browser are observed rather than
     // self-reported by the page making the claim.
@@ -209,6 +221,9 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
         }),
       })
       const body = await res.json()
+      // Already answered or expired. The route says "estimate"; this page
+      // says its own word.
+      if (res.status === 409) throw new Error(`This ${paper.quoteLower} is no longer open.`)
       if (!res.ok) throw new Error(body.error || 'Something went wrong')
       await load()
     } catch (e) {
@@ -310,7 +325,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
                 ? 'Sending…'
                 : skippedCount > 0
                   ? `✓ Approve ${formatCents(keptTotal)}`
-                  : '✓ Approve estimate'}
+                  : `✓ Approve ${paper.quoteLower}`}
             </button>
             <button className="btn" disabled={responding} onClick={() => respond('declined')}>
               Decline all
@@ -335,8 +350,8 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
           }}
         >
           {quote.status === 'approved'
-            ? '✓ You approved this estimate — the shop has been notified.'
-            : 'This estimate was declined.'}
+            ? `✓ You approved this ${paper.quoteLower} — the shop has been notified.`
+            : `This ${paper.quoteLower} was declined.`}
           {quote.status === 'approved' && declinedAfterDecision.length > 0 && (
             <div className="mt-1 text-sm font-normal">
               Left out for now: {declinedAfterDecision.map((l) => l.description).join(', ')}

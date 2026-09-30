@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { isPassThrough, isSalesTaxLine } from './markup'
 import { quotedPartNumber, samePart } from './receipt-match'
+import { PAPER, type ServiceLine } from './service-line'
 import type { AuthorizationEntry, PartLine } from './types'
 
 /**
@@ -65,8 +66,13 @@ const METHOD_FALLBACK = 'online'
  * (online or recorded) and job_authorizations. Never synthesized from
  * quotes.decided_at: on Q001/Q003/Q004 that is just the moment of conversion,
  * and printing it as "approved" would put a false date on the invoice.
+ *
+ * `line` is the invoice's paper (AVN-3), REQUIRED so tsc names every caller:
+ * "Estimate Q008 approved" on a car, "Quote Q012 approved" on an aircraft.
+ * A label is frozen text once written — the ones already on issued invoices
+ * are never rewritten.
  */
-export async function buildAuthorizationTrail(jobId: string): Promise<AuthorizationEntry[]> {
+export async function buildAuthorizationTrail(jobId: string, line: ServiceLine): Promise<AuthorizationEntry[]> {
   const entries: AuthorizationEntry[] = []
   const { data: qs } = await supabase
     .from('quotes')
@@ -91,7 +97,7 @@ export async function buildAuthorizationTrail(jobId: string): Promise<Authorizat
     }[]) {
       entries.push({
         kind: 'quote',
-        label: `Estimate ${numberById.get(a.quote_id) ?? ''} approved`.replace('  ', ' '),
+        label: `${PAPER[line].quote} ${numberById.get(a.quote_id) ?? ''} approved`.replace('  ', ' '),
         by_name: a.by_name,
         method: a.method ?? METHOD_FALLBACK,
         phone_called: null,
@@ -159,7 +165,8 @@ interface ApprovedLine {
  *   - a store discount stays Jake's saving unless he passes it on;
  *   - anything else not on the quote becomes shop cost.
  * Whatever is still over after that (extra labor, say) the database takes off
- * as one "Adjustment to approved estimate" line.
+ * as one "Adjustment to approved estimate" line ("…approved quote" on an
+ * aircraft job, 0055).
  */
 export async function buildBillingPlan(
   jobId: string,

@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import { flushSync } from 'react-dom'
+import { SERVICE_LINES, type ServiceLine } from '@/lib/service-line'
 
 /**
  * Automotive / Aviation — the one choice that tailors the public page.
@@ -40,9 +41,10 @@ import { flushSync } from 'react-dom'
  * other hash — #request above all — leaves the chosen side alone.
  */
 
-export type ServiceLine = 'automotive' | 'aviation'
-
-export const SERVICE_LINES: readonly ServiceLine[] = ['automotive', 'aviation']
+// Defined once, in lib/service-line.ts (the paperwork reads the same words),
+// and re-exported so the public page and the request form import it from here
+// as before.
+export { SERVICE_LINES, type ServiceLine }
 
 const LINE_LABEL: Record<ServiceLine, string> = {
   automotive: 'Automotive',

@@ -14,7 +14,12 @@ import {
   type QuotePricing,
   type WalkInSample,
 } from '@/lib/quote-pricing'
-import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
+import VehicleFields, {
+  emptyVehicleDraft,
+  vehicleDraftHasAnything,
+  vehiclePayload,
+} from '@/components/VehicleFields'
+import { PAPER, lineOf, paperErrorWords, type ServiceLine } from '@/lib/service-line'
 import {
   vehicleLabel,
   type Customer,
@@ -167,6 +172,9 @@ export default function QuoteForm({
   const [newCustomerPhone, setNewCustomerPhone] = useState('')
   const [newVehicle, setNewVehicle] = useState(emptyVehicleDraft)
   const [vehicleId, setVehicleId] = useState<string>(quote?.vehicle_id ?? addOnJob?.vehicle_id ?? '')
+  /** Which paper a quote with no vehicle gets (AVN-3): "This quote is for:
+   *  Vehicle | Aircraft". With a vehicle, the paper follows the vehicle. */
+  const [paperChoice, setPaperChoice] = useState<ServiceLine>(lineOf(quote))
 
   const [title, setTitle] = useState(quote?.title ?? '')
   const [description, setDescription] = useState(quote?.description ?? '')
@@ -270,7 +278,23 @@ export default function QuoteForm({
       .then(({ data }) => setSamples((data as WalkInSample[]) ?? []))
   }, [editing, addOnJob])
 
-  const customerVehicles = vehicles.filter((v) => v.customer_id === customerId)
+  /** The customer already has this quote (sent, or decided): its paper is
+   *  fixed — the database refuses a change (0055) — so the form keeps to it. */
+  const paperLocked = !!quote && (quote.sent_at != null || quote.status !== 'draft')
+  const lockedLine: ServiceLine | null = paperLocked ? lineOf(quote) : null
+  const customerVehicles = vehicles.filter(
+    (v) => v.customer_id === customerId && (lockedLine == null || lineOf(v) === lockedLine),
+  )
+  const pickedVehicle = vehicles.find((v) => v.id === vehicleId) ?? null
+  /** Which paper this quote gets: its vehicle's line (the database enforces
+   *  that too), a new customer's vehicle draft, or the choice below. */
+  const serviceLine: ServiceLine = vehicleId
+    ? pickedVehicle
+      ? lineOf(pickedVehicle)
+      : lineOf(quote)
+    : !customerId
+      ? newVehicle.service_line
+      : paperChoice
 
   const depositValue =
     depositKind === 'percent' ? 5000 : depositKind === 'fixed' ? (parseMoney(depositFixed) ?? 0) : null
@@ -483,6 +507,24 @@ export default function QuoteForm({
       )
       return
     }
+    // The paper the customer already has can't change (0055), and an aircraft
+    // quote the customer has must keep its aircraft on it. Said here, in
+    // words, rather than as the database's refusal.
+    const newVehicleTyped = !customerId && vehicleDraftHasAnything(newVehicle)
+    if (lockedLine != null && serviceLine !== lockedLine) {
+      setError(
+        `This quote already went to the customer as ${
+          lockedLine === 'aviation' ? 'aircraft' : 'vehicle'
+        } paperwork, so it stays that way. Pick ${
+          lockedLine === 'aviation' ? 'an aircraft' : 'a vehicle'
+        } or make a new quote.`,
+      )
+      return
+    }
+    if (quote?.sent_at && serviceLine === 'aviation' && !vehicleId && !newVehicleTyped) {
+      setError(paperErrorWords('quote_needs_aircraft'))
+      return
+    }
     setBusy(true)
     try {
       let cid = customerId
@@ -506,7 +548,7 @@ export default function QuoteForm({
         // A quote without a vehicle can never convert to a job, and editing
         // later to add one resets an approved quote to draft — so a new
         // customer's vehicle comes along right here, like the job form does.
-        if (Object.values(newVehicle).some((v) => v.trim() !== '')) {
+        if (newVehicleTyped) {
           if (createdVehicleId.current) {
             vid = createdVehicleId.current
           } else {
@@ -525,6 +567,9 @@ export default function QuoteForm({
       const payload = {
         customer_id: cid,
         vehicle_id: vid,
+        // Estimate or Quote paper. With a vehicle the database sets it from
+        // the vehicle anyway (quotes_paper_follows_vehicle, 0055).
+        service_line: serviceLine,
         // Born linked: an add-on quote carries its job from creation, which is
         // what makes "convert" become "apply to that job" on approval.
         ...(addOnJob && !editing ? { job_id: addOnJob.id } : {}),
@@ -624,7 +669,7 @@ export default function QuoteForm({
         router.refresh()
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(paperErrorWords(e) ?? (e instanceof Error ? e.message : String(e)))
       setBusy(false)
     }
   }
@@ -687,6 +732,37 @@ export default function QuoteForm({
               ))}
             </select>
           </div>
+          {/* No vehicle picked yet: which paper goes out — an estimate for a
+              car, a quote for an aircraft. Fixed once the customer has it. */}
+          {customerId && !vehicleId && (
+            <div className="sm:col-span-2">
+              <span className="label" id="quote-paper-label">This quote is for</span>
+              <div role="group" aria-labelledby="quote-paper-label" className="grid grid-cols-2 gap-2">
+                {(['automotive', 'aviation'] as const).map((k) => {
+                  const on = serviceLine === k
+                  return (
+                    <button
+                      key={k}
+                      type="button"
+                      className="btn btn-sm !min-h-[44px]"
+                      aria-pressed={on}
+                      disabled={lockedLine != null && !on}
+                      style={on ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
+                      onClick={() => lockedLine == null && setPaperChoice(k)}
+                    >
+                      {k === 'aviation' ? 'Aircraft' : 'Vehicle'}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mt-1 text-xs" style={{ color: 'var(--text3)' }}>
+                {serviceLine === 'aviation'
+                  ? `The customer gets a ${PAPER.aviation.quoteLower}, with no motor-vehicle wording. Pick the aircraft above before you send it — its paper prints the tail and serial number.`
+                  : `The customer gets an ${PAPER.automotive.quoteLower}.`}
+                {lockedLine != null && ' It already went out, so this stays as it is.'}
+              </p>
+            </div>
+          )}
           {!customerId && (
             <>
               <div>
@@ -699,6 +775,7 @@ export default function QuoteForm({
               </div>
               <div className="sm:col-span-2">
                 <div className="label">Vehicle (optional, but a quote needs one to become a job)</div>
+                {/* Its Vehicle / Aircraft choice is also this quote's paper. */}
                 <VehicleFields value={newVehicle} onChange={setNewVehicle} />
               </div>
             </>

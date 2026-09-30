@@ -11,6 +11,7 @@ import { computeQuoteTotals, statusChipClass, depositForRule, depositRuleLabel, 
 import { syncJobPayment } from '@/lib/payments'
 import { formatCents } from '@/lib/money'
 import { todayLocalIso } from '@/lib/date'
+import { PAPER, lineOf, paperErrorWords } from '@/lib/service-line'
 import {
   vehicleLabel,
   type Customer,
@@ -109,10 +110,15 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     setDepName(customer?.name ?? '')
   }, [quote, customer])
 
+  /** Which paper the customer gets (AVN-3): the quote's own line, which the
+   *  database keeps equal to its vehicle's. */
+  const line = lineOf(quote)
+  const paper = PAPER[line]
   useDocumentTitle(
     // The print title is the saved PDF's filename, which goes to the
-    // customer: their paper says Estimate, so the file does too.
-    quote ? `${quote.quote_number} Estimate — ${customer?.name ?? ''}`.replace(/—\s*$/, '').trim() : null,
+    // customer: their paper says Estimate (Quote, for an aircraft), so the
+    // file does too.
+    quote ? `${quote.quote_number} ${paper.quote} — ${customer?.name ?? ''}`.replace(/—\s*$/, '').trim() : null,
   )
 
   if (!quote) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
@@ -178,6 +184,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       address: settings?.business_address ?? '',
       email: settings?.business_email ?? '',
     },
+    serviceLine: line,
+    // The aircraft's serial number prints after the dates; its tail is in the label.
+    aircraft: line === 'aviation' && vehicle ? { serial_number: vehicle.serial_number ?? null } : null,
   }
 
   /**
@@ -255,19 +264,28 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     if (status === 'sent' && !quote!.sent_at) patch.sent_at = new Date().toISOString()
     if (status === 'approved' || status === 'declined') patch.decided_at = new Date().toISOString()
     const { error } = await supabase.from('quotes').update(patch).eq('id', id)
-    if (error) alert(error.message)
+    if (error) alert(paperErrorWords(error) ?? error.message)
     else await load()
   }
 
+  /** An aircraft quote goes out only with its aircraft on it (0055 refuses
+   *  the send otherwise): said before the link is shared, not after. */
+  const needsAircraft = line === 'aviation' && !quote.vehicle_id
+
   async function shareLink() {
+    if (needsAircraft) {
+      alert(paperErrorWords('quote_needs_aircraft'))
+      return
+    }
     // Sharing implies sending — but only a share that actually HAPPENED.
     // Cancelling the share sheet used to leave a draft marked "sent".
     try {
       if (navigator.share) {
         await navigator.share({
-          // The customer's words: an estimate, never a "quote" (AS 45.45).
-          title: `${doc.business.name || 'Estimate'} ${quote!.quote_number}`,
-          text: `Estimate for ${quote!.title}`,
+          // The customer's words: an estimate, never a "quote" (AS 45.45) —
+          // except on aircraft paper, which is a quote (AVN-3).
+          title: `${doc.business.name || paper.quote} ${quote!.quote_number}`,
+          text: `${paper.quote} for ${quote!.title}`,
           url: publicUrl,
         })
         setShareMsg('Shared ✓')
@@ -359,7 +377,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         .eq('customer_id', quote!.customer_id)
         .is('deleted_at', null)
         .order('year', { ascending: false })
-      setCustVehicles((data as Vehicle[]) ?? [])
+      // Only the quote's own kind: its paper follows the vehicle, and a quote
+      // the customer already has can't change paper (0055 would refuse it).
+      setCustVehicles(((data as Vehicle[]) ?? []).filter((v) => lineOf(v) === line))
       return
     }
     if (quote!.job_id) {
@@ -413,7 +433,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       if (error) throw error
       await runConvert()
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e))
+      alert(paperErrorWords(e) ?? (e instanceof Error ? e.message : String(e)))
     } finally {
       setAttachBusy(false)
     }
@@ -520,6 +540,12 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
               >
                 PO {quote.quote_number}
               </button>
+            )}
+            {/* Which paper the customer gets — Quote, no motor-vehicle wording. */}
+            {line === 'aviation' && (
+              <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--accent2)' }}>
+                Aircraft paperwork
+              </span>
             )}
             <span className={statusChipClass(quote.status)}>{quote.status}</span>
           </span>
@@ -648,7 +674,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         )}
         {attaching && (
           <div className="card space-y-2">
-            <span className="label !mb-0">Which vehicle is this job for?</span>
+            <span className="label !mb-0">Which {line === 'aviation' ? 'aircraft' : 'vehicle'} is this job for?</span>
             <p className="text-xs" style={{ color: 'var(--text3)' }}>
               This quote has no vehicle yet, and a job needs one. Picking it here keeps the
               customer&apos;s approval intact — it doesn&apos;t reset the quote.
@@ -660,7 +686,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                   value={attachId}
                   onChange={(e) => setAttachId(e.target.value)}
                 >
-                  <option value="">Choose a vehicle…</option>
+                  <option value="">{line === 'aviation' ? 'Choose the aircraft…' : 'Choose a vehicle…'}</option>
                   {custVehicles.map((v) => (
                     <option key={v.id} value={v.id}>
                       {vehicleLabel(v)}
@@ -685,8 +711,17 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             ) : (
               <>
                 <p className="text-sm" style={{ color: 'var(--text2)' }}>
-                  {customer?.name ?? 'This customer'} has no vehicles on file. Add one from their
-                  customer page, then come back and convert.
+                  {line === 'aviation' ? (
+                    <>
+                      {customer?.name ?? 'This customer'} has no aircraft on file. Add it from their
+                      customer page (Aircraft), then come back and convert.
+                    </>
+                  ) : (
+                    <>
+                      {customer?.name ?? 'This customer'} has no vehicles on file. Add one from their
+                      customer page, then come back and convert.
+                    </>
+                  )}
                 </p>
                 <div className="flex gap-2">
                   {customer && (

@@ -129,12 +129,12 @@ const STEPS: Record<ServiceLine, Step[]> = {
     {
       n: '2',
       title: 'We come back with a plan',
-      body: 'A reply in under 12 hours, with a written estimate and a time at the aircraft.',
+      body: 'A reply in under 12 hours, with a written quote and a time at the aircraft.',
     },
     {
       n: '3',
       title: 'Approve from your phone',
-      body: 'The crew or maintenance control approves the estimate online. Work is photo-documented, and the invoice is digital.',
+      body: 'The crew or maintenance control approves the quote online. Work is photo-documented, and the invoice is digital.',
     },
   ],
 }
@@ -143,7 +143,7 @@ const REQUEST_INTRO: Record<ServiceLine, string> = {
   automotive:
     "Tell us about your vehicle and what it needs. We'll get back to you within one business day with an estimate and a plan for getting the vehicle in.",
   aviation:
-    'Tell us about the aircraft and what it needs — a discrepancy or a pre-buy. We’ll reply in under 12 hours with an estimate and a plan.',
+    'Tell us about the aircraft and what it needs — a discrepancy or a pre-buy. We’ll reply in under 12 hours with a quote and a plan.',
 }
 
 // Runs at HTML parse time — before the first paint and before React loads —

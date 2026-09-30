@@ -3,7 +3,8 @@ import { buildInvoiceSnapshot } from './billing'
 import { buildAuthorizationTrail, isOverApproval, loadJobAuthorization } from './authorization'
 import { syncJobPayment } from './payments'
 import { formatCents } from './money'
-import type { Invoice, Job, PartLine } from './types'
+import { aircraftSnapshot, holdsToApproval, lineOf, needsPartConditions } from './service-line'
+import type { Invoice, Job, PartLine, Vehicle } from './types'
 
 export interface DraftRefresh {
   /** The draft invoice brought back in step, if there was one. */
@@ -28,6 +29,11 @@ export interface DraftRefresh {
  *
  * Sent and paid invoices are never touched — those are corrected by voiding and
  * reissuing. A blocked refresh is reported, never swallowed.
+ *
+ * Aircraft paper (AVN-3) runs the gates its line keeps (lib/service-line: the
+ * approval limit as a shop rule; no part conditions), and its frozen aircraft
+ * block is re-frozen here — airframe hours often arrive after the draft. The
+ * draft's service_line itself never changes.
  */
 export async function refreshDraftInvoice(jobId: string): Promise<DraftRefresh> {
   const { data: drafts, error } = await supabase
@@ -41,13 +47,24 @@ export async function refreshDraftInvoice(jobId: string): Promise<DraftRefresh> 
   if (!draft) return { invoiceNumber: null, blocked: null }
 
   const [{ data: job }, { data: partLines }, auth] = await Promise.all([
-    supabase.from('jobs').select('*').eq('id', jobId).single(),
+    supabase
+      .from('jobs')
+      // vehicles(*), not the 0055 columns by name: a car's refresh still reads
+      // before that migration (a missing service_line is automotive).
+      .select('*, vehicle:vehicles(*)')
+      .eq('id', jobId)
+      .single(),
     supabase.from('part_lines').select('*').eq('job_id', jobId).order('created_at'),
     loadJobAuthorization(jobId),
   ])
   if (!job) throw new Error('The job behind the draft invoice is gone.')
+  const { vehicle, ...jobRow } = job as Job & {
+    vehicle: Pick<Vehicle, 'service_line' | 'registration' | 'serial_number'> | null
+  }
+  /** The paper this draft was created on — the gates follow it. */
+  const line = lineOf(draft)
 
-  if (isOverApproval(auth)) {
+  if (holdsToApproval(line) && isOverApproval(auth)) {
     return {
       invoiceNumber: null,
       blocked: `${draft.invoice_number} still shows the old total: the job now comes to ${formatCents(
@@ -59,9 +76,9 @@ export async function refreshDraftInvoice(jobId: string): Promise<DraftRefresh> 
   }
 
   const lines = (partLines as PartLine[]) ?? []
-  const unconfirmed = lines.filter(
-    (l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null,
-  )
+  const unconfirmed = needsPartConditions(line)
+    ? lines.filter((l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null)
+    : []
   if (unconfirmed.length) {
     return {
       invoiceNumber: null,
@@ -72,13 +89,15 @@ export async function refreshDraftInvoice(jobId: string): Promise<DraftRefresh> 
   }
 
   // The invoice owns its tax rate once created — same rule as "Update from job".
-  const snapshot = buildInvoiceSnapshot(job as Job, lines, draft.tax_rate_bp ?? 0)
+  const snapshot = buildInvoiceSnapshot(jobRow as Job, lines, draft.tax_rate_bp ?? 0, line)
   const { error: upErr } = await supabase
     .from('invoices')
     .update({
-      job_title: (job as Job).title,
-      work_performed: (job as Job).work_performed,
-      authorizations: await buildAuthorizationTrail(jobId),
+      job_title: jobRow.title,
+      work_performed: jobRow.work_performed,
+      authorizations: await buildAuthorizationTrail(jobId, line),
+      // A draft only (sent ones never reach here): the tail, serial and hours as they stand now.
+      ...(line === 'aviation' ? { aircraft: aircraftSnapshot(vehicle, jobRow) } : {}),
       ...snapshot,
     })
     .eq('id', draft.id)

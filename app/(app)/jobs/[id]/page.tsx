@@ -37,6 +37,16 @@ import {
 import { listForJob, toMemo, type Recommendation } from '@/lib/recommendations'
 import { markedUpCharge, type MarkupConfig } from '@/lib/markup'
 import {
+  AIRCRAFT_SHOP_RULE,
+  PAPER,
+  aircraftSnapshot,
+  formatAirframeHours,
+  holdsToApproval,
+  lineOf,
+  needsPartConditions,
+  paperErrorWords,
+} from '@/lib/service-line'
+import {
   vehicleLabel,
   type Customer,
   type Invoice,
@@ -279,6 +289,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   if (error) return <p style={{ color: 'var(--red)' }}>{error}</p>
   if (!job) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
+  /** Which paper this job's customer gets (AVN-3): its vehicle's line, fixed
+   *  once the vehicle has work. Every aircraft branch on this page reads it. */
+  const serviceLine = lineOf(vehicle)
+  const paper = PAPER[serviceLine]
+
   /** Sales tax paid at the parts counter, across this job's receipts — a cost,
    *  never a customer charge. Folded into parts cost the same way job_totals
    *  does it, and broken out below the cost line so the figure can be
@@ -333,7 +348,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  the same snapshot function, never total_charged × rate. An estimate:
    *  the rate on the draft can change. */
   const estimateRateBp = billedTaxRateBp(defaultTaxRateBp)
-  const invoiceEstimate = govInvoice ? null : buildInvoiceSnapshot(job, lines, estimateRateBp)
+  const invoiceEstimate = govInvoice ? null : buildInvoiceSnapshot(job, lines, estimateRateBp, serviceLine)
   /** What an incoming payment is measured against before asking whether the
    *  extra is a tip: owedGrossCents against the governing invoice — or, with
    *  no invoice yet, against the invoice Create invoice would build (tax
@@ -726,7 +741,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     if (busyLineId === l.id) return
     if (l.is_adjustment) {
       alert(
-        'This line is the record of billing the approved estimate. Change it through “Bill the approved amount”, not by taking it off the bill.',
+        `This line is the record of billing the approved ${paper.quoteLower}. Change it through “Bill the approved amount”, not by taking it off the bill.`,
       )
       return
     }
@@ -776,7 +791,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           )
         } else if (r.approvalUnknown) {
           alert(
-            'The core was billed, but the approved-estimate check couldn’t be read just now. Reload and check this job before you invoice it.',
+            `The core was billed, but the approved-${paper.quoteLower} check couldn’t be read just now. Reload and check this job before you invoice it.`,
           )
         }
         if (r.draftBlocked) alert(r.draftBlocked)
@@ -798,7 +813,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     if (on) {
       const priceNote = `It goes back on at ${formatCents(nextCharge)} — your markup on what it cost, not any price it carried before.`
       const ask = quotedJob
-        ? `“${l.description}” isn’t on what the customer approved. Only bill it if they've OK'd the extra — Alaska law allows no charge over the approved estimate without it. ${priceNote}`
+        ? serviceLine === 'aviation'
+          ? `“${l.description}” isn’t on what the customer approved. Only bill it if they've OK'd the extra. ${AIRCRAFT_SHOP_RULE} ${priceNote}`
+          : `“${l.description}” isn’t on what the customer approved. Only bill it if they've OK'd the extra — Alaska law allows no charge over the approved estimate without it. ${priceNote}`
         : `Bill “${l.description}” to the customer? ${priceNote}`
       if (!confirm(ask)) return
     } else if ((l.unit_charge_cents ?? 0) > 0) {
@@ -953,19 +970,34 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       const current = (freshLines as PartLine[]) ?? []
       setAuth(freshAuth)
       // AS 45.45.140 / .170: never bill past what the customer approved. The
-      // panel offers the two lawful ways out.
-      if (isOverApproval(freshAuth)) {
+      // panel offers the two lawful ways out. (An aircraft job keeps the same
+      // limit as a shop rule — lib/service-line, the owner's CHOICE 4.)
+      if (holdsToApproval(serviceLine) && isOverApproval(freshAuth)) {
         setBillingSheet('over')
         setInvoicing(false)
         window.scrollTo({ top: 0, behavior: 'smooth' })
         return
       }
       // AS 45.45.190: every replaced part identified new / used / rebuilt /
-      // reconditioned before it goes on the invoice.
-      if (current.some((l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null)) {
+      // reconditioned before it goes on the invoice. Car paper only: aircraft
+      // paper carries no such tags (the owner's CHOICE 2).
+      if (
+        needsPartConditions(serviceLine) &&
+        current.some((l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null)
+      ) {
         setBillingSheet('conditions')
         setInvoicing(false)
         window.scrollTo({ top: 0, behavior: 'smooth' })
+        return
+      }
+      // Aircraft paper prints the airframe hours. Going without is allowed —
+      // they often arrive later, and the draft picks them up — but asked.
+      if (
+        serviceLine === 'aviation' &&
+        job!.airframe_hours == null &&
+        !confirm('No airframe hours on this job. Create the invoice without them?')
+      ) {
+        setInvoicing(false)
         return
       }
       // Settings is the rate the shop actually charges, and it is the control
@@ -975,7 +1007,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       // by accident. billedTaxRateBp: the same rule the statement (0049) uses
       // for a finished job not yet invoiced, so the two never disagree.
       const taxRateBp = billedTaxRateBp(settings?.default_tax_rate_bp)
-      const snapshot = buildInvoiceSnapshot(job!, current, taxRateBp)
+      const snapshot = buildInvoiceSnapshot(job!, current, taxRateBp, serviceLine)
       // Terms from Settings: 0 = due on receipt (due date = issue date).
       const termsDays = settings?.default_invoice_terms_days ?? 0
       const due = new Date()
@@ -988,6 +1020,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           customer_id: customer!.id,
           customer_name: customer!.name,
           vehicle_label: vehicleLabel(vehicle),
+          // Which paper, and the aircraft as it stands (tail, serial, airframe
+          // hours) — frozen with the rest once the invoice is issued (0055).
+          service_line: serviceLine,
+          aircraft: aircraftSnapshot(vehicle, job),
           job_title: job!.title,
           work_performed: job!.work_performed,
           due_date: dueDate,
@@ -995,7 +1031,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           // freezes with the rest of the invoice.
           memo: toMemo(recs),
           // The approvals behind this bill, frozen with it (AS 45.45.170(d)).
-          authorizations: await buildAuthorizationTrail(id),
+          authorizations: await buildAuthorizationTrail(id, serviceLine),
           ...snapshot,
         })
         .select('id')
@@ -1008,7 +1044,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       } catch {}
       router.push(`/invoices/${data.id}`)
     } catch (e) {
-      alert(e instanceof Error ? e.message : String(e))
+      alert(paperErrorWords(e) ?? (e instanceof Error ? e.message : String(e)))
       setInvoicing(false)
     }
   }
@@ -1061,6 +1097,12 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               ) : (
                 <span className={`chip chip-${job.payment_status}`}>{job.payment_status}</span>
               )}
+              {/* Which paper the customer gets — Quote, no motor-vehicle wording. */}
+              {serviceLine === 'aviation' && (
+                <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--accent2)' }}>
+                  Aircraft paperwork
+                </span>
+              )}
               {job.promised_date && job.payment_status !== 'paid' && (
                 <span
                   className="chip"
@@ -1098,7 +1140,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 </Link>
               )}
               {' · '}{stage === 'scheduled' ? `booked ${formatDate(job.date)}` : formatDate(job.date)}
-              {job.odometer_miles != null && ` · ${formatMiles(job.odometer_miles)} mi`}
+              {serviceLine === 'aviation'
+                ? job.airframe_hours != null && ` · ${formatAirframeHours(job.airframe_hours)} airframe hrs`
+                : job.odometer_miles != null && ` · ${formatMiles(job.odometer_miles)} mi`}
             </div>
           </div>
           <Link href={`/jobs/${id}/edit`} className="btn btn-sm">Edit</Link>
@@ -1210,7 +1254,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 // lawful ways out instead. Once an invoice is sent or paid,
                 // though, THAT invoice is what's owed and nothing here can
                 // change it, so holding the payment only dead-ends the screen.
-                if (!lockedByInvoice && isOverApproval(auth)) {
+                if (!lockedByInvoice && holdsToApproval(serviceLine) && isOverApproval(auth)) {
                   setBillingSheet('over')
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                   return
@@ -1361,13 +1405,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       {authFailed && (
         <div className="card" style={{ borderLeft: '3px solid var(--status-wait-solid)' }}>
           <p className="text-sm" style={{ color: 'var(--status-wait-fg)' }}>
-            Couldn&apos;t check this job against the approved estimate just now. Reload before you
+            Couldn&apos;t check this job against the approved {paper.quoteLower} just now. Reload before you
             invoice — billing and &ldquo;Mark paid&rdquo; will refuse until the check reads again.
           </p>
         </div>
       )}
       <BillingCheck
         jobId={id}
+        serviceLine={serviceLine}
         customer={customer}
         lines={lines}
         partsOverrideCents={job.parts_charged_override_cents}
@@ -1431,6 +1476,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           carries the facts of the approval, never this app's edit history. */}
       <RecordedOks
         jobId={id}
+        serviceLine={serviceLine}
         oks={oks}
         lines={lines}
         locked={lockedByInvoice}

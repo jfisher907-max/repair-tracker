@@ -13,6 +13,14 @@ import {
 } from '@/lib/authorization'
 import { refreshDraftInvoice } from '@/lib/invoice-refresh'
 import { CONDITION_CHOICES, suggestCondition, type ConditionChoice } from '@/lib/conditions'
+import {
+  AIRCRAFT_SHOP_RULE,
+  PAPER,
+  holdsToApproval,
+  needsPartConditions,
+  phoneOkNeedsNumber,
+  type ServiceLine,
+} from '@/lib/service-line'
 import type { Customer, PartLine } from '@/lib/types'
 
 /**
@@ -100,17 +108,27 @@ const METHOD_WORDS: Record<OkMethod, string> = {
 const OK_FUTURE_GRACE_MS = 2 * 60 * 1000
 
 /**
+ * The number called on a phone OK, in the job's own terms: the law for a car,
+ * the shop's record for an aircraft (AVN-3). Required on both — the owner's
+ * CHOICE 5, and the database's CHECK either way.
+ */
+function phoneNumberWords(line: ServiceLine): string {
+  return line === 'aviation'
+    ? 'For a phone OK, put the number you called on record — it prints on the invoice.'
+    : 'For a phone OK, Alaska law wants the number you called on record.'
+}
+
+/**
  * A database constraint is the last line of defence, not a message. These are
  * the ones this form can reach; anything else is passed through rather than
  * guessed at.
  */
-function plainDbError(message: string): string {
+function plainDbError(message: string, line: ServiceLine): string {
   if (message.includes('job_authorizations_not_in_future'))
     return `That time hasn’t happened yet — it is ${whenWords(nowLocalInput())} now. Record when they actually said yes.`
   if (message.includes('job_authorizations_never_lowers'))
     return 'An OK can’t lower the approved total — bill less instead.'
-  if (message.includes('job_authorizations_phone_needs_number'))
-    return 'For a phone OK, Alaska law wants the number you called on record.'
+  if (message.includes('job_authorizations_phone_needs_number')) return phoneNumberWords(line)
   if (message.includes('job_authorizations_description_check'))
     return 'What did they OK? Put it in words — it prints on the invoice.'
   // Correcting and deleting an OK (migration 0044). update_job_ok and
@@ -163,10 +181,9 @@ interface OkDraft {
  * constraint name off the screen. Called from a save handler, never from
  * render, so reading the clock is safe.
  */
-function okProblem(d: OkDraft, limit: OkLimit): string | null {
+function okProblem(d: OkDraft, limit: OkLimit, line: ServiceLine): string | null {
   if (!d.name.trim()) return 'Who OK’d it?'
-  if (d.method === 'phone' && !d.phone.trim())
-    return 'For a phone OK, Alaska law wants the number you called on record.'
+  if (d.method === 'phone' && phoneOkNeedsNumber(line) && !d.phone.trim()) return phoneNumberWords(line)
   if (!d.what.trim()) return 'What did they OK? For example: “the extra hour freeing the seized bolts”.'
   const cents = parseMoney(d.total)
   // parseMoney('-5') is -500, not null, so a typed minus sign gets past the
@@ -212,6 +229,7 @@ function OkFields({
   setLimit,
   latestPurchase,
   callPhone,
+  line,
 }: {
   draft: OkDraft
   setDraft: (d: OkDraft) => void
@@ -222,6 +240,8 @@ function OkFields({
   latestPurchase: string | undefined
   /** A one-tap call, while there is still a call to make. */
   callPhone: string | null
+  /** The job's paper (AVN-3): whose rule the notes cite. */
+  line: ServiceLine
 }) {
   // The record sheet and a correction sheet can be open at the same time, so a
   // fixed id would give two inputs the same one and point both labels at the
@@ -229,7 +249,9 @@ function OkFields({
   const whenId = `${useId()}-when`
   const lateNote =
     latestPurchase && draft.when && draft.when.slice(0, 10) > latestPurchase
-      ? `This OK is after the parts were bought (${formatDate(latestPurchase)}). Alaska wants the call before the extra work — record the real time you got it; it prints as given.`
+      ? line === 'aviation'
+        ? `This OK is after the parts were bought (${formatDate(latestPurchase)}). The call belongs before the extra work — record the real time you got it; it prints as given.`
+        : `This OK is after the parts were bought (${formatDate(latestPurchase)}). Alaska wants the call before the extra work — record the real time you got it; it prints as given.`
       : null
   // Said as it is typed, not after the save fails. Both sides are local
   // "YYYY-MM-DDTHH:mm" strings, so a plain comparison is the right one.
@@ -375,12 +397,15 @@ function OkFields({
  */
 export function RecordedOks({
   jobId,
+  serviceLine,
   oks,
   lines,
   locked,
   onChanged,
 }: {
   jobId: string
+  /** The job's paper (AVN-3). Required, so the job page can't forget it. */
+  serviceLine: ServiceLine
   oks: JobOk[]
   lines: PartLine[]
   /** A sent or paid invoice froze the bill — and this trail with it. */
@@ -442,7 +467,7 @@ export function RecordedOks({
 
   async function saveEdit() {
     if (!editing || !draft || !limit || busy) return
-    const problem = okProblem(draft, limit)
+    const problem = okProblem(draft, limit, serviceLine)
     if (problem) return setMsg(problem)
     const total = parseMoney(draft.total)
     if (total == null) return setMsg('Type the new total before tax, like 2075.03.')
@@ -459,7 +484,7 @@ export function RecordedOks({
     })
     if (error) {
       setBusy(false)
-      setMsg(plainDbError(error.message))
+      setMsg(plainDbError(error.message, serviceLine))
       return
     }
     const authorized = (data as { authorized_cents?: number } | null)?.authorized_cents
@@ -485,7 +510,7 @@ export function RecordedOks({
     const { data, error } = await supabase.rpc('delete_job_ok', { p_id: ok.id })
     if (error) {
       setBusy(false)
-      setMsg(plainDbError(error.message))
+      setMsg(plainDbError(error.message, serviceLine))
       return
     }
     const authorized = (data as { authorized_cents?: number } | null)?.authorized_cents
@@ -501,12 +526,18 @@ export function RecordedOks({
   return (
     <div className="card space-y-2">
       <span className="label !mb-0">Extra work the customer OK’d</span>
-      {oks.length > 0 && (
-        <p className="text-xs" style={{ color: 'var(--text3)' }}>
-          Alaska law (AS 45.45.170) wants each OK over the estimate on record with the new total,
-          who said yes, when, and for a call the number you called. These print on the invoice.
-        </p>
-      )}
+      {oks.length > 0 &&
+        (serviceLine === 'aviation' ? (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            {AIRCRAFT_SHOP_RULE} Each OK over the quote is on record with the new total, who said
+            yes, when, and for a call the number you called. These print on the invoice.
+          </p>
+        ) : (
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            Alaska law (AS 45.45.170) wants each OK over the estimate on record with the new total,
+            who said yes, when, and for a call the number you called. These print on the invoice.
+          </p>
+        ))}
 
       {oks.map((ok, i) => {
         const delta = ok.delta_cents ?? ok.new_total_cents - ok.previous_ceiling_cents
@@ -520,6 +551,7 @@ export function RecordedOks({
                 limit={limit}
                 latestPurchase={latestPurchase}
                 callPhone={null}
+                line={serviceLine}
               />
               {msg && <p className="text-sm" style={{ color: 'var(--status-stop-fg)' }}>{msg}</p>}
               <div className="flex flex-wrap gap-2">
@@ -615,9 +647,15 @@ export function RecordedOks({
  *     total (AS 45.45.170(d)) — it prints on the invoice;
  *   - the part-condition check before an invoice (AS 45.45.190).
  * Research, not legal advice — the Alaska Department of Law administers the Act.
+ *
+ * An aircraft job (AVN-3) is not a motor vehicle under the Act (AS 45.45.240):
+ * it keeps the approval limit as a SHOP rule, with no statute cited, and has
+ * no part-condition step (lib/service-line: the owner's CHOICES 2 and 4). The
+ * car path is untouched.
  */
 export default function BillingCheck({
   jobId,
+  serviceLine,
   customer,
   lines,
   auth,
@@ -630,6 +668,8 @@ export default function BillingCheck({
   onProceed,
 }: {
   jobId: string
+  /** The job's paper (AVN-3). Required, so the job page can't forget it. */
+  serviceLine: ServiceLine
   customer: Customer | null
   lines: PartLine[]
   auth: JobAuthorization | null
@@ -645,7 +685,7 @@ export default function BillingCheck({
   /** Run once the checks pass: create the invoice. */
   onProceed: () => Promise<void>
 }) {
-  const over = isOverApproval(auth)
+  const over = holdsToApproval(serviceLine) && isOverApproval(auth)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
@@ -668,9 +708,15 @@ export default function BillingCheck({
 
   const [choices, setChoices] = useState<Record<string, ConditionChoice>>({})
 
+  // Car paper only (AS 45.45.190): an aircraft job has no condition step and
+  // no "needs its condition" nudge.
+  const partTags = needsPartConditions(serviceLine)
   const unconfirmed = useMemo(
-    () => lines.filter((l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null),
-    [lines],
+    () =>
+      partTags
+        ? lines.filter((l) => l.on_invoice !== false && !l.is_adjustment && l.condition == null)
+        : [],
+    [lines, partTags],
   )
   // What the plan itself takes off, and what the database would then have to
   // take off as one adjustment. On a job whose parts total was set by hand, the
@@ -767,7 +813,7 @@ export default function BillingCheck({
 
   async function saveOk() {
     if (busy) return
-    const problem = okProblem(okDraft, okLimit)
+    const problem = okProblem(okDraft, okLimit, serviceLine)
     if (problem) return setMsg(problem)
     const total = parseMoney(okDraft.total)
     if (total == null) return setMsg('Type the new total before tax, like 2075.03.')
@@ -784,7 +830,7 @@ export default function BillingCheck({
     })
     setBusy(false)
     if (error) {
-      setMsg(plainDbError(error.message))
+      setMsg(plainDbError(error.message, serviceLine))
       return
     }
     setSheet(null)
@@ -807,7 +853,7 @@ export default function BillingCheck({
     setBusy(false)
     const failed = results.find((r) => r.error)
     if (failed?.error) {
-      setMsg(plainDbError(failed.error.message))
+      setMsg(plainDbError(failed.error.message, serviceLine))
       return
     }
     setSheet(null)
@@ -859,10 +905,16 @@ export default function BillingCheck({
               No approval record on file for this quote, so the approved total is rebuilt from its lines.
             </p>
           )}
-          <p className="text-xs" style={{ color: 'var(--text3)' }}>
-            Alaska law allows no charge over an approved estimate without the customer’s OK, given
-            before the extra work and written down. Without one, the job bills at the approved price.
-          </p>
+          {serviceLine === 'aviation' ? (
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              {AIRCRAFT_SHOP_RULE} Without one, the job bills at the approved price.
+            </p>
+          ) : (
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              Alaska law allows no charge over an approved estimate without the customer’s OK, given
+              before the extra work and written down. Without one, the job bills at the approved price.
+            </p>
+          )}
           {locked && (
             <p className="text-xs" style={{ color: 'var(--status-wait-fg)' }}>
               An invoice is already sent or paid, so its bill can’t change from here. If the customer
@@ -900,7 +952,7 @@ export default function BillingCheck({
               {plan.length === 0 && (
                 <p className="text-sm" style={{ color: 'var(--text2)' }}>
                   No part prices to bring down. The difference (extra labor, say) comes off as one
-                  “Adjustment to approved estimate” line on the invoice.
+                  “{PAPER[serviceLine].adjustment}” line on the invoice.
                 </p>
               )}
               {plan.map((s) => (
@@ -956,10 +1008,17 @@ export default function BillingCheck({
       {sheet === 'ok' && (
         <div className="card panel-in space-y-2">
           <div className="label !mb-0">Record the customer’s OK</div>
-          <p className="text-xs" style={{ color: 'var(--text3)' }}>
-            Alaska law (AS 45.45.170) wants the new total, who said yes, when, and for a call the number
-            you called. It prints on the invoice.
-          </p>
+          {serviceLine === 'aviation' ? (
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              {AIRCRAFT_SHOP_RULE} Record the new total, who said yes, when, and for a call the
+              number you called. It prints on the invoice.
+            </p>
+          ) : (
+            <p className="text-xs" style={{ color: 'var(--text3)' }}>
+              Alaska law (AS 45.45.170) wants the new total, who said yes, when, and for a call the number
+              you called. It prints on the invoice.
+            </p>
+          )}
           <OkFields
             draft={okDraft}
             setDraft={setOkDraft}
@@ -967,6 +1026,7 @@ export default function BillingCheck({
             setLimit={setOkLimit}
             latestPurchase={latestPurchase}
             callPhone={customer?.phone ?? null}
+            line={serviceLine}
           />
           {msg && <p className="text-sm" style={{ color: 'var(--status-stop-fg)' }}>{msg}</p>}
           <div className="flex gap-2">

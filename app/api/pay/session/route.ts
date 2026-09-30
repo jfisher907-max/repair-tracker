@@ -6,6 +6,7 @@ import {
   publicBaseUrl,
   stripeClient,
 } from '@/lib/payments-server'
+import { PAPER, lineOf } from '@/lib/service-line'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -83,13 +84,17 @@ export async function POST(request: Request) {
       deposit_outstanding_cents: number
       deposit_payable: boolean
       approved_at: string | null
+      /** 0055: an aircraft's paper says Quote, and so does its checkout. */
+      service_line?: string | null
     }
+    // The customer's own word for the document, read from the document itself.
+    const paper = PAPER[lineOf(quote)]
     if (quote.status !== 'approved') {
-      return Response.json({ error: 'this estimate has not been approved yet' }, { status: 409 })
+      return Response.json({ error: `this ${paper.quoteLower} has not been approved yet` }, { status: 409 })
     }
     if (!quote.deposit_payable) {
       return Response.json(
-        { error: 'the shop needs to finish setting this estimate up before a deposit can be taken' },
+        { error: `the shop needs to finish setting this ${paper.quoteLower} up before a deposit can be taken` },
         { status: 409 },
       )
     }
@@ -101,7 +106,7 @@ export async function POST(request: Request) {
       return Response.json({ error: 'the remaining deposit is too small to pay by card' }, { status: 409 })
     }
     amount = outstanding
-    name = `Deposit — Estimate ${quote.quote_number}`
+    name = `Deposit — ${paper.quote} ${quote.quote_number}`
     description = quote.title?.slice(0, 300) || undefined
     metadata = {
       quote_token: quoteToken,

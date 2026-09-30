@@ -4,6 +4,14 @@ import DocBrand from '@/components/DocBrand'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { formatTaxRate } from '@/lib/billing'
+import {
+  PAPER,
+  aircraftMeta,
+  needsPartConditions,
+  printsRepairActNotice,
+  type AircraftSnapshot,
+  type ServiceLine,
+} from '@/lib/service-line'
 import type { AuthorizationEntry, DocLine, PartCondition } from '@/lib/types'
 
 export interface DocData {
@@ -35,6 +43,12 @@ export interface DocData {
   /** Invoice: the approvals behind the bill, frozen with it (AS 45.45.170(d)). */
   authorizations?: AuthorizationEntry[]
   business: { name: string; phone: string; address: string; email: string }
+  /** Which paper this is (AVN-3). REQUIRED on purpose: a caller that forgot it
+   *  would send car paper for an aircraft, so tsc names every caller. */
+  serviceLine: ServiceLine
+  /** Aviation: the aircraft's serial number and, on an invoice, its frozen
+   *  airframe hours — printed after the dates. The tail is in vehicleLabel. */
+  aircraft?: Partial<AircraftSnapshot> | null
 }
 
 const CONDITION_LABEL: Record<PartCondition, string> = {
@@ -77,11 +91,17 @@ const REPAIR_ACT_NOTICE =
  */
 export default function DocView({ doc }: { doc: DocData }) {
   const isQuote = doc.docType === 'Quote'
+  /** Every word that differs between car and aircraft paper (lib/service-line). */
+  const paper = PAPER[doc.serviceLine]
   /** The word the customer reads. Internally it is a quote (quotes table,
-   *  Q-numbers, "Jobs & Quotes"); on the customer's paper it is an ESTIMATE —
+   *  Q-numbers, "Jobs & Quotes"); on a car customer's paper it is an ESTIMATE —
    *  what AS 45.45 calls a written estimate, and what the footer below
-   *  already says it is. The number (Q008) is unchanged. */
-  const docLabel = isQuote ? 'Estimate' : 'Invoice'
+   *  already says it is. Aircraft paper says QUOTE: that statute covers motor
+   *  vehicles only (AVN-3). The number (Q008) is unchanged either way. */
+  const docLabel = isQuote ? paper.quote : 'Invoice'
+  /** AS 45.45.190's New / Used / Rebuilt / Reconditioned — car paper only. */
+  const partTags = needsPartConditions(doc.serviceLine)
+  const aircraftRows = doc.serviceLine === 'aviation' ? aircraftMeta(doc.aircraft) : []
   const showLinePrices = doc.lines.length > 1 || doc.lines.some((l) => Number(l.qty) !== 1)
 
   const paid = doc.paidCents ?? 0
@@ -102,7 +122,7 @@ export default function DocView({ doc }: { doc: DocData }) {
     : isQuote
       ? {
           settled: false,
-          label: 'Estimated total',
+          label: paper.quotedTotal,
           sub: doc.secondaryDate ? `valid until ${nbsp(formatDate(doc.secondaryDate))}` : null,
           amount: doc.totalCents,
         }
@@ -132,12 +152,12 @@ export default function DocView({ doc }: { doc: DocData }) {
           </div>
           {doc.vehicleLabel && (
             <div>
-              <dt>Vehicle</dt>
+              <dt>{paper.asset}</dt>
               <dd>{doc.vehicleLabel}</dd>
             </div>
           )}
           <div>
-            <dt>{isQuote ? 'Estimate date' : 'Issue date'}</dt>
+            <dt>{isQuote ? paper.quoteDate : 'Issue date'}</dt>
             <dd>{formatDate(doc.date)}</dd>
           </div>
           {doc.secondaryDate && (
@@ -146,6 +166,14 @@ export default function DocView({ doc }: { doc: DocData }) {
               <dd>{formatDate(doc.secondaryDate)}</dd>
             </div>
           )}
+          {/* Aircraft: serial number, and the airframe hours frozen with the
+              invoice. They wrap into the same 4-column grid (2 on a phone). */}
+          {aircraftRows.map((r) => (
+            <div key={r.label}>
+              <dt>{r.label}</dt>
+              <dd>{r.value}</dd>
+            </div>
+          ))}
         </dl>
 
         <div className="doc-job">
@@ -175,7 +203,7 @@ export default function DocView({ doc }: { doc: DocData }) {
                     {/* AS 45.45.190: each part replaced is identified as new,
                         used, rebuilt or reconditioned. Its own small word —
                         never appended to the description text. */}
-                    {l.condition && <span className="doc-cond">{CONDITION_LABEL[l.condition]}</span>}
+                    {partTags && l.condition && <span className="doc-cond">{CONDITION_LABEL[l.condition]}</span>}
                   </td>
                   <td className="doc-n doc-dim">{Number(l.qty)}</td>
                   {showLinePrices && (
@@ -292,11 +320,12 @@ export default function DocView({ doc }: { doc: DocData }) {
                Said actively rather than as a promise (his wording, 2026-09-13):
                the authorization is a requirement on the customer's side, which
                is both how AS 45.45.170 actually works and how it reads with
-               most authority. */
-            <p>
-              This is an estimate, valid until the date shown above. Your authorization is
-              required for any increase to this price.
-            </p>
+               most authority.
+
+               The car sentence lives in PAPER.automotive, word for word. An
+               aircraft quote makes the same promise without the word estimate
+               (AVN-3, the owner's CHOICE 1 in lib/service-line). */
+            <p>{paper.quoteFooter}</p>
           ) : (
             <>
               {doc.paymentInstructions && (
@@ -304,7 +333,8 @@ export default function DocView({ doc }: { doc: DocData }) {
                   <b>Payment:</b> {doc.paymentInstructions}
                 </p>
               )}
-              <p className="doc-legal">{REPAIR_ACT_NOTICE}</p>
+              {/* The motor-vehicle notice: never on aircraft paper. */}
+              {printsRepairActNotice(doc.serviceLine) && <p className="doc-legal">{REPAIR_ACT_NOTICE}</p>}
             </>
           )}
         </footer>

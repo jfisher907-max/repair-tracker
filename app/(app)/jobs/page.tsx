@@ -118,6 +118,8 @@ function JobsInner() {
         vehicleLabel(it.vehicle),
         it.vehicle?.license_plate ?? '',
         it.vehicle?.vin ?? '',
+        // An aircraft's serial number (its tail is already in the label).
+        it.vehicle?.serial_number ?? '',
       ]
         .join(' ')
         .toLowerCase()

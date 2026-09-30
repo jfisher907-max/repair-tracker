@@ -1,3 +1,5 @@
+import type { AircraftSnapshot, ServiceLine } from './service-line'
+
 export type PaymentStatus = 'unpaid' | 'partial' | 'paid'
 /**
  * Where a job is in the shop (migration 0043). scheduled = approved and
@@ -22,10 +24,11 @@ export interface Customer {
 
 /**
  * Which paper a vehicle, quote or invoice gets: the same words as
- * service_requests.service_line (0046). Local on purpose: AVN-3's
- * lib/service-line.ts owns the exported ServiceLine name.
+ * service_requests.service_line (0046). lib/service-line.ts owns the one
+ * definition (and every word that differs between the two); a type-only
+ * import, so nothing loads at runtime.
  */
-type LineWord = 'automotive' | 'aviation'
+type LineWord = ServiceLine
 
 export interface Vehicle {
   id: string
@@ -353,11 +356,7 @@ export interface Invoice {
   service_line?: LineWord
   /** Frozen aircraft identity on an aviation invoice (AVN-3's AircraftSnapshot);
    *  null otherwise. Optional: a row read before AVN-3's migration. */
-  aircraft?: {
-    registration: string | null
-    serial_number: string | null
-    airframe_hours: number | null
-  } | null
+  aircraft?: AircraftSnapshot | null
   public_token: string
   sent_at: string | null
   paid_at: string | null
@@ -477,11 +476,26 @@ export interface Expense {
   updated_at: string
 }
 
-/** "2015 Honda Civic LX" style label; falls back to whatever fields exist. */
+/**
+ * "2015 Honda Civic LX" style label; falls back to whatever fields exist.
+ * An aircraft (AVN-3) reads "N123AB · 2008 Make Model": the tail first, then
+ * year make model, joined by ' · ' (U+00B7) — the same label get_public_quote
+ * builds in SQL (0055), so every list and search carries the tail number.
+ */
 export function vehicleLabel(
-  v: Pick<Vehicle, 'year' | 'make' | 'model'> & Partial<Pick<Vehicle, 'trim'>> | null | undefined,
+  v:
+    | (Pick<Vehicle, 'year' | 'make' | 'model'> &
+        Partial<Pick<Vehicle, 'trim' | 'service_line' | 'registration'>>)
+    | null
+    | undefined,
 ): string {
   if (!v) return 'Unknown vehicle'
+  if (v.service_line === 'aviation') {
+    const aircraft = [v.registration?.trim(), [v.year, v.make, v.model].filter(Boolean).join(' ')]
+      .filter(Boolean)
+      .join(' · ')
+    return aircraft || 'Unlabeled aircraft'
+  }
   const label = [v.year, v.make, v.model, v.trim].filter(Boolean).join(' ')
   return label || 'Unlabeled vehicle'
 }

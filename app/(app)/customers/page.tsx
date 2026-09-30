@@ -7,7 +7,12 @@ import { supabase } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
 import type { Customer, Vehicle } from '@/lib/types'
 import { vehicleLabel } from '@/lib/types'
-import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
+import VehicleFields, {
+  emptyVehicleDraft,
+  vehicleDraftHasAnything,
+  vehiclePayload,
+} from '@/components/VehicleFields'
+import { paperErrorWords } from '@/lib/service-line'
 
 export default function CustomersPage() {
   const router = useRouter()
@@ -70,8 +75,9 @@ export default function CustomersPage() {
       return
     }
 
-    // Vehicle is optional — only create one if any field was filled in.
-    const hasVehicle = Object.values(veh).some((v) => v.trim() !== '')
+    // Vehicle is optional — only create one if any field was filled in (the
+    // Vehicle / Aircraft choice on its own isn't an entry).
+    const hasVehicle = vehicleDraftHasAnything(veh)
     if (hasVehicle) {
       const { error: vehErr } = await supabase.from('vehicles').insert({
         customer_id: data.id,
@@ -79,7 +85,7 @@ export default function CustomersPage() {
       })
       if (vehErr) {
         setSaving(false)
-        alert(`Customer saved, but the vehicle didn't: ${vehErr.message}`)
+        alert(`Customer saved, but the vehicle didn't: ${paperErrorWords(vehErr) ?? vehErr.message}`)
         router.push(`/customers/${data.id}`)
         return
       }
