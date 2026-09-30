@@ -169,8 +169,10 @@ export default function SettingsPage() {
     setExportMsg(null)
     try {
       // Loaded on the click: the zip library only comes down for a backup.
+      // It fails in a dead zone (the service worker has no copy of a piece it
+      // has never fetched) as well as after a deploy, so the words cover both.
       const { buildBackupZip } = await import('@/lib/backup-zip').catch(() => {
-        throw new Error('Couldn’t start the backup: this page is out of date. Reload it and try again.')
+        throw new Error('Couldn’t start the backup: check the signal, then reload the page and try again.')
       })
       const { blob, missing } = await buildBackupZip((text) => setExportMsg({ tone: 'busy', text }))
       const url = URL.createObjectURL(blob)

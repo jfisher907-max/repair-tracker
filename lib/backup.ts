@@ -339,13 +339,28 @@ export async function readBackupChunk(
     let text = ''
     let columns: string[] | null = null
     for (;;) {
-      const { data, error } = await supabase.from(table).select('*').range(row, row + PAGE - 1)
+      // No ORDER BY, so each CSV keeps the row order it has always had. Known
+      // limit: a table cut between two answers resumes at a row NUMBER, and a
+      // row edited or deleted in between can shift the rest — one row written
+      // twice or left out, silently. It can't happen while the backup is one
+      // answer (today ~0.1 MB of the 3 MB budget). The cure past that is a
+      // stable order resumed after the last id written (federal_estimate_plans
+      // and vehicle_year_miles have no id); it reorders those CSVs, so it
+      // waits for a ruling.
+      const { data, error, status } = await supabase.from(table).select('*').range(row, row + PAGE - 1)
       if (error) {
         // Not in the database yet: leave it out and say so. Anything else (a
         // refusal, a dropped connection) still fails the whole backup.
         if (isMissingSchema(error)) {
           chunk.skipped.push(table)
           continue tables
+        }
+        // No answer at all — status 0 is supabase-js's mark for a fetch that
+        // failed (after its own retries). This runs on the server: the words
+        // are Node's "fetch failed", not the browser's, and Jake's signal
+        // isn't the problem, so dbErrorWords' "check the signal" would mislead.
+        if (status === 0) {
+          throw new Error(`Couldn’t back up ${table}: the server couldn’t reach the database. Try again in a minute.`)
         }
         throw new Error(dbErrorWords(error, `back up ${table}`))
       }
