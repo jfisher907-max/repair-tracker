@@ -9,6 +9,7 @@ import { isBookedJob, preLedgerCash } from '@/lib/finances'
 import { collectedForJob, governingInvoice, owedGrossCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
+import { EXPENSE_LINES, totalsByLine } from '@/lib/schedule-c'
 import type { Expense, Invoice, Payment, Settings, Tip } from '@/lib/types'
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -270,10 +271,8 @@ export default function ReportsPage() {
     }
     const topCustomers = [...byCustomer.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
 
-    const byCategory = new Map<string, number>()
-    for (const e of expenses.filter((e) => inYear(e.date))) {
-      byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + e.amount_cents)
-    }
+    // Expenses by Schedule C line (EXP-2), numbered for this tax year.
+    const byLine = totalsByLine(expenses.filter((e) => inYear(e.date)), year)
 
     return {
       months,
@@ -288,7 +287,7 @@ export default function ReportsPage() {
       aging,
       owed,
       topCustomers,
-      byCategory: [...byCategory.entries()].sort((a, b) => b[1] - a[1]),
+      byLine,
     }
   }, [jobs, expenses, payments, invoices, tips, partOutflows, year])
 
@@ -477,19 +476,74 @@ export default function ReportsPage() {
             </section>
           )}
 
-          {report.byCategory.length > 0 && (
+          {(report.byLine.partII.length > 0 ||
+            report.byLine.partV.length > 0 ||
+            report.byLine.equipmentLarge != null ||
+            report.byLine.legacy.length > 0) && (
             <section>
-              <h2 className="text-lg font-bold">Overhead by category</h2>
-              <table className="report-table" style={{ maxWidth: '24rem' }}>
-                <tbody>
-                  {report.byCategory.map(([cat, cents]) => (
-                    <tr key={cat}>
-                      <td>{cat}</td>
-                      <td className="num">{formatCents(cents)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <h2 className="text-lg font-bold">Expenses by tax-form line — {year}</h2>
+              {(report.byLine.partII.length > 0 || report.byLine.partV.length > 0) && (
+                <table className="report-table" style={{ maxWidth: '30rem' }}>
+                  <tbody>
+                    {report.byLine.partII.map(({ key, line, cents }) => (
+                      <tr key={key}>
+                        <td style={{ width: '3rem' }}>{line}</td>
+                        <td>{EXPENSE_LINES[key].formName}</td>
+                        <td className="num">{formatCents(cents)}</td>
+                      </tr>
+                    ))}
+                    {/* 27b is the Part V total; its items sit under it. */}
+                    {report.byLine.partV.length > 0 && (
+                      <tr>
+                        <td style={{ width: '3rem' }}>{report.byLine.partVLine}</td>
+                        <td>Other expenses (Part V)</td>
+                        <td className="num">{formatCents(report.byLine.partVCents)}</td>
+                      </tr>
+                    )}
+                    {report.byLine.partV.map(({ key, cents }) => (
+                      <tr key={key}>
+                        <td />
+                        <td style={{ paddingLeft: '1.25rem' }}>{EXPENSE_LINES[key].label}</td>
+                        <td className="num">{formatCents(cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              {/* Kept off line 13 on purpose: line 13 is depreciation worked
+                  out on Form 4562, never the purchase price. */}
+              {report.byLine.equipmentLarge != null && (
+                <>
+                  <table className="report-table" style={{ maxWidth: '30rem' }}>
+                    <tbody>
+                      <tr>
+                        <td>For your preparer: equipment over $2,500 (Form 4562)</td>
+                        <td className="num">{formatCents(report.byLine.equipmentLarge)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p className="report-meta mt-1">
+                    Purchase prices, not a line-13 figure: the preparer works out the write-off on Form 4562.
+                  </p>
+                </>
+              )}
+              {report.byLine.legacy.length > 0 && (
+                <>
+                  <table className="report-table" style={{ maxWidth: '30rem' }}>
+                    <tbody>
+                      {report.byLine.legacy.map(({ label, cents }) => (
+                        <tr key={label}>
+                          <td>{label}</td>
+                          <td className="num">{formatCents(cents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="report-meta mt-1">
+                    Not on a tax-form line yet: saved before the lines. Pick a line for each on the Expenses page.
+                  </p>
+                </>
+              )}
             </section>
           )}
 

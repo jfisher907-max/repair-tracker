@@ -4,7 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { getAccessToken, supabase } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
 import ReceiptPreview, { type ReceiptKind } from '@/components/ReceiptPreview'
-import { EXPENSE_CATEGORIES } from '@/lib/payments'
+import {
+  COMMON,
+  DE_MINIMIS_CENTS,
+  MORE_LINES,
+  expenseErrorWords,
+  hintFor,
+  isExpenseLine,
+  pickerText,
+  rowLine,
+  shortFor,
+  totalsByLine,
+} from '@/lib/schedule-c'
 import { prepareUpload } from '@/lib/upload'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import { formatDate } from '@/lib/date'
@@ -13,6 +24,13 @@ import type { Expense } from '@/lib/types'
 function todayIso(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** A row's line: 'Taxes & licenses (23)', by the expense's own tax year. A
+ *  label saved before the lines reads as itself. */
+function lineText(e: Expense): string {
+  const line = rowLine(e.category, Number(e.date.slice(0, 4)))
+  return line ? `${shortFor(e.category)} (${line})` : e.category
 }
 
 /** Shop overhead — the other half of a real profit number (QuickBooks' bread and butter). */
@@ -26,8 +44,15 @@ export default function ExpensesPage() {
   const [scanNote, setScanNote] = useState('')
   /** The receipt stays on screen while its details are typed in. */
   const [preview, setPreview] = useState<{ url: string | null; kind: ReceiptKind; name: string } | null>(null)
+  /** A refused save, in plain words (never the database's text). */
+  const [formMsg, setFormMsg] = useState('')
+  /** A refused delete, shown above the list. */
+  const [listMsg, setListMsg] = useState('')
+  // category holds a Schedule C line key (EXP-2); 'other' is the database
+  // default too (0057). An old row being edited can still carry a label from
+  // before the lines, which the picker shows until a line is picked.
   const [form, setForm] = useState({
-    date: todayIso(), category: 'Other', vendor: '', description: '', amount: '', storage_path: '',
+    date: todayIso(), category: 'other', vendor: '', description: '', amount: '', storage_path: '',
   })
 
   /** QuickBooks-style snap-a-receipt: photo uploads, AI pre-fills the form, owner reviews. */
@@ -65,7 +90,8 @@ export default function ExpensesPage() {
           vendor: d.vendor ?? f.vendor,
           date: d.date ?? f.date,
           amount: d.total != null ? d.total.toFixed(2) : f.amount,
-          category: d.category ?? f.category,
+          // Only a line on the list; anything else keeps the picker as it was.
+          category: isExpenseLine(d.category) ? d.category : f.category,
           description: d.description ?? f.description,
         }))
         setScanNote('Read ✓ — double-check the fields, then save.')
@@ -106,16 +132,16 @@ export default function ExpensesPage() {
   }, [expenses, year])
 
   const total = scoped.reduce((s, e) => s + e.amount_cents, 0)
-  const byCategory = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const e of scoped) map.set(e.category, (map.get(e.category) ?? 0) + e.amount_cents)
-    return [...map.entries()].sort((a, b) => b[1] - a[1])
-  }, [scoped])
+  // Line numbers are per tax year; "All time" reads them as the newest year's
+  // form (only interest differs: 16b through 2025, 16c on the 2026 draft).
+  const lineYear = year === 'all' ? years[0] : year
+  const byLine = useMemo(() => totalsByLine(scoped, lineYear), [scoped, lineYear])
 
   function startEdit(e: Expense) {
     setEditingId(e.id)
     setAdding(true)
     setScanNote('')
+    setFormMsg('')
     setPreview(null)
     // Pull the stored receipt back up so edits can be checked against it.
     if (e.storage_path) {
@@ -143,13 +169,20 @@ export default function ExpensesPage() {
   async function save() {
     const amount = parseMoney(form.amount)
     if (!form.description.trim() || amount == null) {
-      alert('Description and amount are required.')
+      setFormMsg('Description and amount are required.')
       return
     }
+    // Only a key goes to the database: an old row still on a label from
+    // before the lines has to be given one first (the CHECK refuses labels).
+    if (!isExpenseLine(form.category)) {
+      setFormMsg('Pick a line from the list, then save.')
+      return
+    }
+    setFormMsg('')
     setBusy(true)
     const payload = {
       date: form.date,
-      category: form.category.trim() || 'Other',
+      category: form.category,
       vendor: form.vendor.trim() || null,
       description: form.description.trim(),
       amount_cents: amount,
@@ -160,7 +193,7 @@ export default function ExpensesPage() {
       : await supabase.from('expenses').insert(payload)
     setBusy(false)
     if (result.error) {
-      alert(result.error.message)
+      setFormMsg(expenseErrorWords(result.error, 'save the expense'))
       return
     }
     setForm({ date: form.date, category: form.category, vendor: form.vendor, description: '', amount: '', storage_path: '' })
@@ -172,10 +205,15 @@ export default function ExpensesPage() {
 
   async function remove(id: string) {
     if (!confirm('Delete this expense?')) return
+    setListMsg('')
     const { error } = await supabase.from('expenses').delete().eq('id', id)
-    if (error) alert(error.message)
+    if (error) setListMsg(expenseErrorWords(error, 'delete that expense'))
     else await load()
   }
+
+  const amountCents = parseMoney(form.amount)
+  const pickerYear = Number(form.date.slice(0, 4)) || lineYear
+  const hint = hintFor(form.category)
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -192,7 +230,7 @@ export default function ExpensesPage() {
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
-          <button className="btn btn-primary" onClick={() => { setAdding(!adding); setEditingId(null); setPreview(null) }}>
+          <button className="btn btn-primary" onClick={() => { setAdding(!adding); setEditingId(null); setPreview(null); setFormMsg('') }}>
             {adding ? 'Close' : '+ Add expense'}
           </button>
         </div>
@@ -234,22 +272,14 @@ export default function ExpensesPage() {
             <input className="input" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
           </div>
           <div>
-            <label className="label">Category</label>
-            <input
-              className="input"
-              list="expense-categories"
-              value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
-            />
-            <datalist id="expense-categories">
-              {EXPENSE_CATEGORIES.map((c) => <option key={c} value={c} />)}
-            </datalist>
-          </div>
-          <div>
             <label className="label">Vendor</label>
             <input className="input" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-2 sm:col-span-1">
+            <label className="label">Amount ($) *</label>
+            <input className="input" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          </div>
+          <div className="col-span-2 sm:col-span-3">
             <label className="label">Description *</label>
             <input
               className="input"
@@ -258,19 +288,58 @@ export default function ExpensesPage() {
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </div>
-          <div>
-            <label className="label">Amount ($) *</label>
-            <input className="input" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-          </div>
+          {/* The federal Schedule C line (EXP-2). Numbers follow the
+              expense's own tax year: interest reads 16b through 2025. */}
           <div className="col-span-2 sm:col-span-3">
+            <label className="label" htmlFor="expense-line">Tax-form line</label>
+            <select
+              id="expense-line"
+              className="select"
+              value={form.category}
+              onChange={(e) => { setForm({ ...form, category: e.target.value }); setFormMsg('') }}
+            >
+              {!isExpenseLine(form.category) && (
+                <option value={form.category} disabled>
+                  {form.category ? `${form.category} (from before the lines): pick one` : 'Pick a line'}
+                </option>
+              )}
+              {COMMON.map((k) => (
+                <option key={k} value={k}>{pickerText(k, pickerYear)}</option>
+              ))}
+              <optgroup label="More lines">
+                {MORE_LINES.map((k) => (
+                  <option key={k} value={k}>{pickerText(k, pickerYear)}</option>
+                ))}
+              </optgroup>
+            </select>
+            {hint && (
+              <p className="mt-1 text-sm" style={{ color: 'var(--text2)' }}>{hint}</p>
+            )}
+            {form.category === 'equipment_small' && amountCents != null && amountCents > DE_MINIMIS_CENTS && (
+              <p className="mt-1 flex flex-wrap items-center gap-2 text-sm" style={{ color: 'var(--status-wait-fg)' }}>
+                <span>That’s over $2,500. A single item over $2,500 goes on the over-$2,500 line.</span>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => setForm({ ...form, category: 'equipment_large' })}
+                >
+                  Use that line
+                </button>
+              </p>
+            )}
+          </div>
+          <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-3">
             <button className="btn btn-primary" disabled={busy} onClick={save}>
               {busy ? 'Saving…' : editingId ? 'Save expense' : '+ Add expense'}
             </button>
+            {formMsg && (
+              <span role="alert" className="text-sm" style={{ color: 'var(--red)' }}>{formMsg}</span>
+            )}
           </div>
         </div>
       )}
 
-      {byCategory.length > 0 && (
+      {scoped.length > 0 && (
         <div className="card">
           <div className="flex items-center justify-between">
             <span className="label !mb-0">
@@ -280,14 +349,49 @@ export default function ExpensesPage() {
               {formatCents(total)}
             </span>
           </div>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {byCategory.map(([cat, cents]) => (
-              <span key={cat} className="chip" style={{ background: 'var(--bg3)', color: 'var(--text2)' }}>
-                {cat} {formatCents(cents)}
+          {/* One chip per form line, in line order. Line numbers keep their
+              own case ('27b', not '27B') inside the uppercase chip. */}
+          {(byLine.partII.length > 0 || byLine.partV.length > 0) && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {byLine.partII.map(({ key, line, cents }) => (
+                <span key={key} className="chip" style={{ background: 'var(--bg3)', color: 'var(--text2)' }}>
+                  <span style={{ textTransform: 'none' }}>{line}</span> {shortFor(key)} {formatCents(cents)}
+                </span>
+              ))}
+              {byLine.partV.map(({ key, cents }) => (
+                <span key={key} className="chip" style={{ background: 'var(--bg3)', color: 'var(--text2)' }}>
+                  <span style={{ textTransform: 'none' }}>{byLine.partVLine}</span> {shortFor(key)} {formatCents(cents)}
+                </span>
+              ))}
+            </div>
+          )}
+          {/* Never a line-13 total: line 13 is depreciation from Form 4562,
+              which the preparer works out from these purchase prices. */}
+          {byLine.equipmentLarge != null && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-sm" style={{ color: 'var(--text2)' }}>
+                For your preparer: equipment over $2,500 (Form 4562)
               </span>
-            ))}
-          </div>
+              <span className="chip" style={{ background: 'var(--bg3)', color: 'var(--text2)' }}>
+                {formatCents(byLine.equipmentLarge)}
+              </span>
+            </div>
+          )}
+          {byLine.legacy.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-sm" style={{ color: 'var(--text2)' }}>Not on a line yet:</span>
+              {byLine.legacy.map(({ label, cents }) => (
+                <span key={label} className="chip" style={{ background: 'var(--bg3)', color: 'var(--text2)' }}>
+                  {label} {formatCents(cents)}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
+      )}
+
+      {listMsg && (
+        <p role="alert" className="text-sm" style={{ color: 'var(--red)' }}>{listMsg}</p>
       )}
 
       {!expenses ? (
@@ -304,7 +408,7 @@ export default function ExpensesPage() {
               <div className="min-w-0">
                 <div className="truncate font-semibold">{e.description}</div>
                 <div className="truncate text-sm" style={{ color: 'var(--text3)' }}>
-                  {[formatDate(e.date), e.category, e.vendor].filter(Boolean).join(' · ')}
+                  {[formatDate(e.date), lineText(e), e.vendor].filter(Boolean).join(' · ')}
                 </div>
               </div>
               <div className="flex items-center gap-2">
