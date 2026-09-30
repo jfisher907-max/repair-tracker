@@ -6,13 +6,18 @@ import { SkeletonList } from '@/components/Skeleton'
 import { loadFinanceRows, type FinanceRows } from '@/lib/finances'
 import {
   CBJ_FILING_URL,
+  CBJ_SALES_TAX_FORMS_URL,
+  CBJ_SALES_TAX_OFFICE,
+  FIRST_RETURN,
   cbjDueDates,
   computeBothReturns,
+  counterTaxSince,
   daysBetween,
   dbErrorWords,
   filingStatus,
   isMissingSchema,
   lateCost,
+  loadCounterTaxRows,
   loadTaxFilings,
   localIso,
   longDate,
@@ -22,8 +27,10 @@ import {
   quarterToShow,
   quarterWords,
   readiness,
+  resalePromptDue,
   returnQuarters,
   taxToPlanFor,
+  type CounterTax,
   type Quarter,
   type ReadyItem,
   type ReturnInvoice,
@@ -32,7 +39,7 @@ import {
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import { formatDate, formatDateShort } from '@/lib/date'
 import { supabase } from '@/lib/supabase'
-import type { TaxBasis, TaxFiling, TaxObligation, TaxPaymentMethod } from '@/lib/types'
+import type { Settings, TaxBasis, TaxFiling, TaxObligation, TaxPaymentMethod } from '@/lib/types'
 
 /** Money with a true minus sign, the dashboard's style. */
 const money = (c: number) => (c < 0 ? `−${formatCents(-c)}` : formatCents(c))
@@ -127,6 +134,8 @@ export default function TaxesPage() {
   const [basisReady, setBasisReady] = useState(false)
   const [basisError, setBasisError] = useState<string | null>(null)
   const [changingBasis, setChangingBasis] = useState(false)
+  /** The resale-card answer (TAX-3, 0056) from the settings row; null = the row could not be read. */
+  const [resale, setResale] = useState<Pick<Settings, 'resale_card_prompt'> | null>(null)
   const [hangar, setHangar] = useState<{ entry: string; exit: string | null; hangar: string }[] | null>(null)
   const [hangarFailed, setHangarFailed] = useState(false)
   /** The Airlift Northwest customer id; null = none; undefined = the read failed. */
@@ -167,6 +176,9 @@ export default function TaxesPage() {
         if (e) setBasisError(dbErrorWords(e, 'read the basis you chose'))
         const b = data?.sales_tax_basis
         setBasis(b === 'cash' || b === 'accrual' ? b : null)
+        // Only a row that was read: before 0056 its answer is undefined, and
+        // either way the reminder stays away (lib/sales-tax resalePromptDue).
+        setResale(e || !data ? null : { resale_card_prompt: data.resale_card_prompt })
         setBasisReady(true)
       })
     supabase
@@ -241,6 +253,8 @@ export default function TaxesPage() {
   const daysLeft = daysBetween(today, due.official)
   const late = lateCost(planTax)
   const edge = status.done ? 'edge-ok' : open ? 'edge-idle' : daysLeft <= 7 ? 'edge-stop' : daysLeft <= 30 ? 'edge-wait' : 'edge-idle'
+  // TAX-3: asked once, after the first return is recorded as filed.
+  const resaleDue = resalePromptDue(filings, resale)
 
   async function chooseBasis(next: TaxBasis | null) {
     setBasisError(null)
@@ -323,6 +337,8 @@ export default function TaxesPage() {
           Juneau sales tax: the numbers for your return, when it is due, and a record of what you filed and paid.
         </p>
       </div>
+
+      {resaleDue && <ResaleCardPrompt onAnswered={(answer) => setResale({ resale_card_prompt: answer })} />}
 
       {filingsError && (
         <p className="card text-sm" style={{ color: 'var(--red)' }}>
@@ -636,6 +652,109 @@ export default function TaxesPage() {
         shows the tax billed by issue date for the whole year.
       </p>
     </div>
+  )
+}
+
+/** What a missing resale_card_prompt column belongs to, for dbErrorWords. */
+const RESALE_SCHEMA = 'the resale-card reminder (migration 0056)'
+
+/** The counter-tax sentence: the figure, and how much of the truth it is. */
+function counterWords(c: CounterTax | null, failed: boolean): string {
+  if (failed) return 'Your parts receipts couldn’t be read just now, so the sales tax you’ve paid at the parts counter isn’t shown here.'
+  if (!c) return 'Adding up the sales tax on your parts receipts…'
+  if (c.receipts === 0) return 'No parts receipts are recorded since July, so this page can’t say what you’ve paid in sales tax at the parts counter.'
+  const yours = c.receipts === 1 ? 'your 1 receipt' : `your ${c.receipts} receipts`
+  if (c.withTax === 0)
+    return `None of ${yours} since July ${c.receipts === 1 ? 'shows its' : 'show their'} tax, so this page can’t say what you’ve paid in sales tax at the parts counter.`
+  if (c.withTax === c.receipts) return `Since July you’ve paid ${money(c.cents)} in sales tax at the parts counter, on ${yours}.`
+  return `Since July you’ve paid ${money(c.cents)} in sales tax at the parts counter, on the ${c.withTax} of ${yours} that ${
+    c.withTax === 1 ? 'shows its' : 'show their'
+  } tax, so it’s likely more.`
+}
+
+/**
+ * TAX-3 (owner, 2026-09-29: "Ask once my first return is filed"): once the
+ * July–September 2026 return is recorded as filed, ask once whether he has
+ * asked the city about a resale card. It shows the counter tax the receipts
+ * record since July and the city's rule, and makes no promise: CBJ 69.05.010
+ * gives the card only to a buyer whose principal business is reselling the
+ * goods. Either answer is saved on the settings row (0056), so it never comes
+ * back, on any device. The app never contacts the city.
+ */
+function ResaleCardPrompt({ onAnswered }: { onAnswered: (answer: 'asked' | 'hidden') => void }) {
+  const [counter, setCounter] = useState<CounterTax | null>(null)
+  const [counterFailed, setCounterFailed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  // Read only when the card is up: once answered, the receipts are never read for it again.
+  useEffect(() => {
+    loadCounterTaxRows()
+      .then((rows) => setCounter(counterTaxSince(rows, FIRST_RETURN.start)))
+      .catch(() => setCounterFailed(true))
+  }, [])
+
+  async function answer(a: 'asked' | 'hidden') {
+    setMsg(null)
+    setBusy(true)
+    const { data, error } = await supabase
+      .from('settings')
+      .update({ resale_card_prompt: a, resale_card_prompt_at: new Date().toISOString() })
+      .eq('id', 1)
+      .select('id')
+    setBusy(false)
+    if (error) {
+      setMsg(dbErrorWords(error, 'save your answer', RESALE_SCHEMA))
+      return
+    }
+    // No row back is a refusal too: row security drops the row without an
+    // error. Saying nothing would hide the card here and bring it back later.
+    if (!data || data.length === 0) {
+      setMsg(dbErrorWords({ code: '42501' }, 'save your answer', RESALE_SCHEMA))
+      return
+    }
+    onAnswered(a)
+  }
+
+  return (
+    <section className="card edge-info space-y-3" aria-labelledby="resale-heading">
+      <div>
+        <span className="label !mb-0">Juneau sales tax · asked once</span>
+        <h2 id="resale-heading" className="text-xl font-semibold">
+          Ask the city about a resale card?
+        </h2>
+      </div>
+      <p className="text-sm">
+        Your first return is filed, and you asked to be reminded about this. {counterWords(counter, counterFailed)} A
+        resale card lets you buy parts you resell without paying that tax. Juneau gives one only when your main business
+        is reselling what you buy. A repair shop may not qualify; that’s the city’s call.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <a href={CBJ_SALES_TAX_OFFICE.tel} className="btn">
+          Call the Sales Tax Office: {CBJ_SALES_TAX_OFFICE.words}
+        </a>
+        <a href={CBJ_SALES_TAX_FORMS_URL} target="_blank" rel="noopener noreferrer" className="btn">
+          Open the city’s resale form ↗
+        </a>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button className="btn" disabled={busy} onClick={() => answer('asked')}>
+          I asked the city
+        </button>
+        <button className="btn" disabled={busy} onClick={() => answer('hidden')}>
+          Hide this
+        </button>
+        {msg ? (
+          <span className="flash-in text-sm" role="alert" style={{ color: 'var(--red)' }}>
+            {msg}
+          </span>
+        ) : (
+          <span className="text-xs" style={{ color: 'var(--text3)' }}>
+            {busy ? 'Saving…' : 'Either one puts this away for good, on every device. This app never contacts the city.'}
+          </span>
+        )}
+      </div>
+    </section>
   )
 }
 
