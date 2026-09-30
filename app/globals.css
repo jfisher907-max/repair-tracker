@@ -260,6 +260,17 @@ h1, h2, h3, .display {
   transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease),
     border-color var(--dur-med) var(--ease), filter var(--dur-fast) var(--ease);
 }
+/* A status edge on a card. The .card border shorthand above resets the .edge-*
+   left edge declared before it at the same specificity, so the edge is restated
+   with two classes here (as .lane-door does). */
+.card.edge-ok, .card.edge-wait, .card.edge-stop, .card.edge-info, .card.edge-idle {
+  border-left-width: var(--edge-width);
+}
+.card.edge-ok { border-left-color: var(--status-ok-solid); }
+.card.edge-wait { border-left-color: var(--status-wait-solid); }
+.card.edge-stop { border-left-color: var(--status-stop-solid); }
+.card.edge-info { border-left-color: var(--status-info-solid); }
+.card.edge-idle { border-left-color: var(--status-idle-solid); }
 /* Emphasis = colored 1px outline on a neutral card (CASH PROFIT / UNPAID). */
 .card-line-ok, .stat-tile--ok { box-shadow: 0 0 0 1px var(--mint-line), var(--shadow-card); }
 .card-line-stop, .stat-tile--stop { box-shadow: 0 0 0 1px var(--ember-line), var(--shadow-card); }
