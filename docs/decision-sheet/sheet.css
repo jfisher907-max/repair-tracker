@@ -172,6 +172,7 @@ h1 {
 .q { font-size: 19px; line-height: 1.35; font-weight: 700; margin: 0; text-wrap: pretty; }
 .blocks { margin: 0; color: var(--ink); }
 .sup-note { margin: 0; color: var(--stop-ink); font-weight: 600; }
+.history { margin: 0; padding: 8px 12px; border-left: 3px solid var(--rule); color: var(--muted); font-size: 14px; }
 
 .rec { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
 .rec-label { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }

@@ -29,6 +29,7 @@
   })
 
   var answers = {}      // id -> {answer, note, at}
+  var history = {}      // id -> {answer, note, at}: a "Let's talk" saved before the item was reopened
   var dirty = {}        // ids edited on this view before the saved answers loaded
   var queues = {}       // id -> promise chain: one write at a time per document
   var noteTimers = {}
@@ -129,6 +130,7 @@
         part('Done and checked', la.done),
         part('Approved, not done yet', la.approved),
         part('With us', la.withUs),
+        la.withYou ? part('Waiting on you', la.withYou) : null,
       ]),
     ]))
   }
@@ -211,6 +213,7 @@
       el('h3', { className: 'q', text: it.q }),
       it.sup ? el('p', { className: 'sup-note', text: 'Replaced by ' + it.sup + '.' }) : null,
       el('p', { className: 'blocks', text: it.blocks }),
+      it.reopened ? el('p', { className: 'history', 'data-history': it.id, hidden: true }) : null,
       rec,
       opts,
       el('label', { className: 'note-label', for: noteId, text: 'Note' }),
@@ -402,6 +405,21 @@
       snap.docs.forEach(function (d) {
         if (!d.exists || dirty[d.id] || !byId[d.id]) return
         var v = d.data() || {}
+        // Reopened after a "Let's talk": what was saved before the reopening is
+        // shown as history, and the item counts as open again. A new answer
+        // replaces it (the old one is kept in docs/DECISIONS.md).
+        var reopened = byId[d.id].reopened
+        if (reopened && String(v.at || '') < reopened) {
+          history[d.id] = { answer: typeof v.answer === 'string' ? v.answer : null, note: typeof v.note === 'string' ? v.note : '', at: v.at || '' }
+          var h = document.querySelector('[data-history="' + d.id + '"]')
+          if (h) {
+            var said = history[d.id].answer || ''
+            if (history[d.id].note) said += (said ? ': ' : '') + '“' + history[d.id].note + '”'
+            h.textContent = 'You said earlier — ' + said
+            h.hidden = !said
+          }
+          return
+        }
         answers[d.id] = {
           answer: typeof v.answer === 'string' ? v.answer : null,
           note: typeof v.note === 'string' ? v.note : '',
