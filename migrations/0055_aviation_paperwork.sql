@@ -41,6 +41,13 @@
 --
 -- Run as ONE batch (apply_migration / SQL editor): the guard in section 5
 -- rolls the whole file back if any existing public output changed.
+--
+-- RE-RUNNING: a second run passes until the first aircraft (or aircraft
+-- quote) is saved - the guard strips the two new keys from BOTH sides, so a
+-- retry after an apply that timed out but did commit is harmless. Once an
+-- aircraft exists, the guard's "everything is automotive" checks roll a
+-- re-run back BY DESIGN. To see whether this file already landed, run the
+-- Verify queries at the end (7 columns, 3 triggers) instead of re-running it.
 
 -- 1. columns ---------------------------------------------------------------
 alter table public.vehicles
@@ -435,18 +442,22 @@ grant execute on function public.apply_billing_plan(uuid, jsonb) to authenticate
 -- 5. guard: existing documents did not change, or roll everything back --------
 -- Every existing key and value is byte-identical, the two new keys read
 -- automotive / null on every existing row that returns a document, and no
--- existing row became anything but automotive.
+-- existing row became anything but automotive. Both sides drop the two new
+-- keys: on a first run "before" has neither (a no-op), on a re-run it has
+-- both, and comparing them one-sided would flag every live document.
 do $$
 declare
   n int;
 begin
   select count(*) into n from _0055_quote_before b
-   where (public.get_public_quote(b.token) - 'service_line' - 'aircraft') is distinct from b.doc;
+   where (public.get_public_quote(b.token) - 'service_line' - 'aircraft')
+         is distinct from (b.doc - 'service_line' - 'aircraft');
   if n <> 0 then
     raise exception '0055: get_public_quote output changed for % existing quote(s) - rolling back', n;
   end if;
   select count(*) into n from _0055_invoice_before b
-   where (public.get_public_invoice(b.token) - 'service_line' - 'aircraft') is distinct from b.doc;
+   where (public.get_public_invoice(b.token) - 'service_line' - 'aircraft')
+         is distinct from (b.doc - 'service_line' - 'aircraft');
   if n <> 0 then
     raise exception '0055: get_public_invoice output changed for % existing invoice(s) - rolling back', n;
   end if;
@@ -518,8 +529,8 @@ drop table _0055_invoice_before;
 --     insert into quotes (quote_number, customer_id, vehicle_id, title, service_line)
 --       values ('ZZ-Q0055', c, air, 'Proof', 'automotive') returning id into q;
 --     select service_line into t from quotes where id = q;
---     if t <> 'aviation' then raise exception 'FAIL: quote paper %', t; end if;
---     if (select get_public_quote(public_token)->>'vehicle_label' from quotes where id = q) <> 'ZZTEST · Make Model'
+--     if t is distinct from 'aviation' then raise exception 'FAIL: quote paper %', t; end if;
+--     if (select get_public_quote(public_token)->>'vehicle_label' from quotes where id = q) is distinct from 'ZZTEST · Make Model'
 --       then raise exception 'FAIL: public label'; end if;
 --     if (select get_public_quote(public_token)->'aircraft' from quotes where id = q)
 --        is distinct from '{"registration":"ZZTEST","serial_number":"SN-TEST"}'::jsonb
@@ -538,7 +549,7 @@ drop table _0055_invoice_before;
 --       exception when raise_exception then if sqlerrm <> 'quote_needs_aircraft' then raise; end if; end;
 --     insert into quotes (quote_number, customer_id, title) values ('ZZ-Q0055m', c, 'P') returning id into qm;
 --     update quotes set status = 'sent', sent_at = now() where id = qm;
---     if (select service_line from quotes where id = qm) <> 'automotive' then raise exception 'FAIL: car quote paper'; end if;
+--     if (select service_line from quotes where id = qm) is distinct from 'automotive' then raise exception 'FAIL: car quote paper'; end if;
 --     -- an aircraft with a quote can't flip to a car
 --     begin update vehicles set service_line = 'automotive', registration = null, serial_number = null where id = air;
 --       raise exception 'FAIL: aircraft flipped';
@@ -560,10 +571,11 @@ drop table _0055_invoice_before;
 --       then raise exception 'FAIL: aircraft adjustment wording'; end if;
 --     if (select description from part_lines where job_id = jc and is_adjustment) is distinct from 'Adjustment to approved estimate'
 --       then raise exception 'FAIL: car adjustment wording changed'; end if;
---     -- the phone number on a phone OK stays required on EVERY job (owner, review blocker)
---     begin insert into job_authorizations (job_id, previous_ceiling_cents, new_total_cents, delta_cents,
+--     -- the phone number on a phone OK stays required on EVERY job (owner, review blocker).
+--     -- delta_cents is GENERATED ALWAYS (new_total - previous_ceiling): never listed here.
+--     begin insert into job_authorizations (job_id, previous_ceiling_cents, new_total_cents,
 --                                           description, method, by_name, authorized_at)
---       values (ja, 5000, 10000, 5000, 'Proof', 'phone', 'ZZ', now());
+--       values (ja, 5000, 10000, 'Proof', 'phone', 'ZZ', now());
 --       raise exception 'FAIL: aircraft phone OK took no number';
 --       exception when check_violation then
 --         if sqlerrm not like '%job_authorizations_phone_needs_number%' then raise; end if; end;
@@ -581,7 +593,7 @@ drop table _0055_invoice_before;
 --     if (select get_public_invoice(public_token)->'aircraft' from invoices where id = inv)
 --        is distinct from '{"registration":"ZZTEST","serial_number":"SN-TEST","airframe_hours":1240.0}'::jsonb
 --       then raise exception 'FAIL: public aircraft block (extra key or wrong value)'; end if;
---     if (select get_public_invoice(public_token)->>'service_line' from invoices where id = inv) <> 'aviation'
+--     if (select get_public_invoice(public_token)->>'service_line' from invoices where id = inv) is distinct from 'aviation'
 --       then raise exception 'FAIL: public invoice line'; end if;
 --     update invoices set status = 'sent', sent_at = now() where id = inv;
 --     begin update invoices set aircraft = jsonb_set(aircraft, '{airframe_hours}', '1.0') where id = inv;
