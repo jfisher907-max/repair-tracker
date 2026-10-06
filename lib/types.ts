@@ -81,6 +81,10 @@ export interface Job {
   /** Airframe hours at this job (aircraft); the aviation counterpart of
    *  odometer_miles. Optional: a row read before AVN-3's migration. */
   airframe_hours?: number | null
+  /** AOG / Nights & weekends work (0065): markers on aircraft jobs only,
+   *  frozen onto the invoice. Never a rate. Optional: a row read before 0065. */
+  aog?: boolean
+  after_hours?: boolean
   notes: string | null
   created_at: string
   updated_at: string
@@ -252,6 +256,11 @@ export interface Quote {
    *  Follows the quote's vehicle; fixed once sent. Optional: a row read before
    *  AVN-3's migration — a missing value reads as automotive. */
   service_line?: LineWord
+  /** AOG / Nights & weekends (0065): printed on an aircraft quote, carried
+   *  onto the job it becomes. Always false off aviation. Optional: a row read
+   *  before 0065. */
+  aog?: boolean
+  after_hours?: boolean
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -360,6 +369,11 @@ export interface Invoice {
   /** Frozen aircraft identity on an aviation invoice (AVN-3's AircraftSnapshot);
    *  null otherwise. Optional: a row read before AVN-3's migration. */
   aircraft?: AircraftSnapshot | null
+  /** AOG / Nights & weekends (0065), frozen from the job at creation (drafts
+   *  re-freeze); frozen once issued. Always false off aviation. Optional: a
+   *  row read before 0065. */
+  aog?: boolean
+  after_hours?: boolean
   public_token: string
   sent_at: string | null
   paid_at: string | null

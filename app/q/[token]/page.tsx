@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase'
 import { depositForRule } from '@/lib/billing'
 import { useCheckoutReturn } from '@/lib/checkout-return'
 import SharedPhotos from '@/components/public/SharedPhotos'
-import { PAPER, lineOf, type ServiceLine } from '@/lib/service-line'
+import { PAPER, lineOf, marksOf, type ServiceLine } from '@/lib/service-line'
 import type { DepositKind, DocLine } from '@/lib/types'
 
 type PublicQuoteLine = DocLine & { id: string; declined: boolean }
@@ -43,6 +43,9 @@ interface PublicQuote {
   service_line?: ServiceLine
   /** Aviation with an aircraft attached: its tail and serial number. */
   aircraft?: { registration: string | null; serial_number: string | null } | null
+  /** AOG / Nights & weekends (0065); false off aviation. Absent before 0065. */
+  aog?: boolean
+  after_hours?: boolean
 }
 
 /**
@@ -191,6 +194,7 @@ export default function PublicQuotePage({ params }: { params: Promise<{ token: s
     business: quote.business,
     serviceLine: lineOf(quote),
     aircraft: quote.aircraft ?? null,
+    marks: marksOf(quote),
   }
 
   async function respond(response: 'approved' | 'declined') {

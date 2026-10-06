@@ -19,7 +19,20 @@ import VehicleFields, {
   vehicleDraftHasAnything,
   vehiclePayload,
 } from '@/components/VehicleFields'
-import { PAPER, laborRateFor, lineOf, paperErrorWords, shopRates, type ServiceLine, type ShopRates } from '@/lib/service-line'
+import ServiceMarkToggles from '@/components/ServiceMarkToggles'
+import {
+  NO_MARKS,
+  PAPER,
+  laborRateFor,
+  lineOf,
+  marksOf,
+  marksPayload,
+  paperErrorWords,
+  shopRates,
+  type ServiceLine,
+  type ServiceMarks,
+  type ShopRates,
+} from '@/lib/service-line'
 import {
   vehicleLabel,
   type Customer,
@@ -133,6 +146,9 @@ export interface AddOnJobContext {
   customer_name: string
   vehicle_id: string
   vehicle_label: string
+  /** The job's AOG / Nights & weekends markers (0065): an add-on quote for
+   *  an aircraft starts from them. */
+  marks?: ServiceMarks
 }
 
 /**
@@ -190,6 +206,9 @@ export default function QuoteForm({
    *  then a new quote shows the shop's rate for its line (0064). */
   const [rateTouched, setRateTouched] = useState(!!quote || !!addOnJob)
   const [rates, setRates] = useState<ShopRates | null>(null)
+  /** Aircraft (0065): AOG / Nights & weekends. Markers only — the rate above
+   *  never moves with them. */
+  const [marks, setMarks] = useState<ServiceMarks>(quote ? marksOf(quote) : marksOf(addOnJob?.marks))
   // A new quote starts at Juneau's 5% until settings load (0041): never untaxed by accident.
   const [taxRate, setTaxRate] = useState(quote ? String(quote.tax_rate_bp / 100) : '5')
   const [validUntil, setValidUntil] = useState(quote?.valid_until ?? plusDays(30))
@@ -301,6 +320,13 @@ export default function QuoteForm({
       ? newVehicle.service_line
       : paperChoice
   const laborRateShown = rateTouched || !rates ? laborRate : centsToInput(laborRateFor(serviceLine, rates))
+  /** Moving the quote off an aircraft (a car, or Vehicle paper) clears the
+   *  markers, so they never come back ticked on the next aircraft. */
+  const [marksLine, setMarksLine] = useState<ServiceLine>(serviceLine)
+  if (marksLine !== serviceLine) {
+    setMarksLine(serviceLine)
+    if (serviceLine !== 'aviation') setMarks(NO_MARKS)
+  }
 
   const depositValue =
     depositKind === 'percent' ? 5000 : depositKind === 'fixed' ? (parseMoney(depositFixed) ?? 0) : null
@@ -576,6 +602,9 @@ export default function QuoteForm({
         // Estimate or Quote paper. With a vehicle the database sets it from
         // the vehicle anyway (quotes_paper_follows_vehicle, 0055).
         service_line: serviceLine,
+        // AOG / Nights & weekends (0065): what is ticked on an aircraft quote;
+        // a car's saves both false. Sent only when one is set or being cleared.
+        ...marksPayload(serviceLine, marks, quote),
         // Born linked: an add-on quote carries its job from creation, which is
         // what makes "convert" become "apply to that job" on approval.
         ...(addOnJob && !editing ? { job_id: addOnJob.id } : {}),
@@ -828,6 +857,11 @@ export default function QuoteForm({
           <label className="label">Valid until</label>
           <input className="input" type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} />
         </div>
+        {serviceLine === 'aviation' && (
+          <div className="sm:col-span-2">
+            <ServiceMarkToggles id="quote-marks" value={marks} onChange={setMarks} />
+          </div>
+        )}
       </div>
 
       <div className="card space-y-2">

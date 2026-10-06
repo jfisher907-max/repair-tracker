@@ -6,15 +6,21 @@ import { supabase } from '@/lib/supabase'
 import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type JobStage, type Vehicle } from '@/lib/types'
 import VehicleFields, { emptyVehicleDraft, vehiclePayload } from '@/components/VehicleFields'
+import ServiceMarkToggles from '@/components/ServiceMarkToggles'
 import { syncJobPayment } from '@/lib/payments'
 import {
   AIRCRAFT_HOURS_LABEL,
+  NO_MARKS,
   laborRateFor,
   lineOf,
+  marksOf,
+  marksPayload,
   paperErrorWords,
   parseAirframeHours,
+  serviceMarkText,
   shopRates,
   type ServiceLine,
+  type ServiceMarks,
   type ShopRates,
 } from '@/lib/service-line'
 import { listTemplates, type JobTemplate, type JobTemplateLine } from '@/lib/templates'
@@ -74,6 +80,9 @@ export default function JobForm({ job }: { job?: Job }) {
    *  shows the shop's rate for its line, so picking an aircraft moves it. */
   const [rateTouched, setRateTouched] = useState(!!job)
   const [rates, setRates] = useState<ShopRates | null>(null)
+  /** Aircraft (0065): AOG / Nights & weekends. Markers only — the rate above
+   *  never moves with them. */
+  const [marks, setMarks] = useState<ServiceMarks>(marksOf(job))
   const [workPerformed, setWorkPerformed] = useState(job?.work_performed ?? '')
   const [notes, setNotes] = useState(job?.notes ?? '')
   const [promisedDate, setPromisedDate] = useState(job?.promised_date ?? '')
@@ -105,7 +114,10 @@ export default function JobForm({ job }: { job?: Job }) {
   const createdJobId = useRef<string | null>(null)
 
   const editVehicleId = job?.vehicle_id ?? null
-  const editHadHours = job?.airframe_hours != null
+  /** What the job itself shows before (or without) its vehicle: hours on
+   *  record, or an AOG / Nights & weekends marker (0065), mean an aircraft —
+   *  so a failed read can never save its markers away as a car's. */
+  const editLooksAircraft = job?.airframe_hours != null || serviceMarkText(job) != null
   useEffect(() => {
     if (!editVehicleId) return
     supabase
@@ -114,11 +126,10 @@ export default function JobForm({ job }: { job?: Job }) {
       .eq('id', editVehicleId)
       .maybeSingle()
       .then(({ data, error }) =>
-        // A failed read falls back on what the job itself shows: hours on
-        // record means an aircraft.
-        setEditLine(error ? (editHadHours ? 'aviation' : 'automotive') : lineOf(data as Vehicle | null)),
+        // A failed read falls back on what the job itself shows.
+        setEditLine(error ? (editLooksAircraft ? 'aviation' : 'automotive') : lineOf(data as Vehicle | null)),
       )
-  }, [editVehicleId, editHadHours])
+  }, [editVehicleId, editLooksAircraft])
 
   useEffect(() => {
     supabase
@@ -162,12 +173,19 @@ export default function JobForm({ job }: { job?: Job }) {
   /** Which paper this job gets, and so which fields it asks for: the job's own
    *  vehicle when editing, the new-vehicle draft, or the one picked. */
   const serviceLine: ServiceLine = editing
-    ? (editLine ?? (job.airframe_hours != null ? 'aviation' : 'automotive'))
+    ? (editLine ?? (editLooksAircraft ? 'aviation' : 'automotive'))
     : creatingVehicle
       ? newVehicle.service_line
       : lineOf(selectedVehicle)
   const isAircraft = serviceLine === 'aviation'
   const laborRateShown = rateTouched || !rates ? laborRate : centsToInput(laborRateFor(serviceLine, rates))
+  /** Moving the job off an aircraft (a car, or no vehicle picked yet) clears
+   *  the markers, so they never come back ticked on the next aircraft. */
+  const [marksLine, setMarksLine] = useState<ServiceLine>(serviceLine)
+  if (marksLine !== serviceLine) {
+    setMarksLine(serviceLine)
+    if (serviceLine !== 'aviation') setMarks(NO_MARKS)
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -273,6 +291,9 @@ export default function JobForm({ job }: { job?: Job }) {
         warranty_miles: warrantyMilesNum,
         stage,
         ...(stageMoved ? { stage_changed_at: new Date().toISOString() } : {}),
+        // AOG / Nights & weekends (0065): what is ticked on an aircraft; a car
+        // saves both false. Sent only when one is set or being cleared.
+        ...marksPayload(serviceLine, marks, job),
       }
 
       if (editing) {
@@ -610,6 +631,11 @@ export default function JobForm({ job }: { job?: Job }) {
             }}
           />
         </div>
+        {isAircraft && (
+          <div className="sm:col-span-2">
+            <ServiceMarkToggles id="job-marks" value={marks} onChange={setMarks} />
+          </div>
+        )}
         <div className="sm:col-span-2">
           <label className="label">Private notes</label>
           <textarea

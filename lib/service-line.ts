@@ -1,3 +1,4 @@
+import { isMissingSchema } from './db-errors'
 import type { Job, Vehicle } from './types'
 
 /**
@@ -223,6 +224,61 @@ export function normalizeRegistration(s: string): string {
   return s.replace(/\s+/g, '').toUpperCase()
 }
 
+// ---------------------------------------------------------------------------
+// AOG AND NIGHTS & WEEKENDS (migration 0065). The owner, 2026-09-30: "I think
+// we keep the rate flexible, but we can definitely have a category for AOG and
+// nights + weekends." Two markers an aircraft quote, job or invoice carries —
+// either, both or neither — printed on the customer's paper. Words, never a
+// price: nothing moves a labor rate because one is ticked. Car paper never
+// carries them (0065's CHECKs on quotes and invoices refuse it).
+// ---------------------------------------------------------------------------
+
+/** The two markers as quotes, jobs and invoices store them (0065). */
+export interface ServiceMarks {
+  aog: boolean
+  after_hours: boolean
+}
+
+/** A row that may carry the markers — or a row read before 0065, which has none. */
+type MarksLike = { aog?: boolean | null; after_hours?: boolean | null } | null | undefined
+
+export const NO_MARKS: ServiceMarks = { aog: false, after_hours: false }
+
+/** The markers in the order the forms and the paper list them, with their words. */
+export const SERVICE_MARKS: readonly { key: keyof ServiceMarks; label: string }[] = [
+  { key: 'aog', label: 'AOG' },
+  { key: 'after_hours', label: 'Nights & weekends' },
+]
+
+/** What the paper prints them under (DocView's meta row). */
+export const SERVICE_MARK_LABEL = 'Service'
+
+/** A row's markers. A missing key (a row read before 0065) is not set. */
+export function marksOf(row: MarksLike): ServiceMarks {
+  return { aog: row?.aog === true, after_hours: row?.after_hours === true }
+}
+
+/** The markers in words: 'AOG', 'Nights & weekends', 'AOG · Nights & weekends',
+ *  or null when neither is set. The customer's paper and the owner's chips both
+ *  read this; callers show it on aircraft work only. */
+export function serviceMarkText(row: MarksLike): string | null {
+  const marks = marksOf(row)
+  const words = SERVICE_MARKS.filter((m) => marks[m.key]).map((m) => m.label)
+  return words.length ? words.join(' · ') : null
+}
+
+/**
+ * The two columns as a save sends them. Aircraft work sends what is ticked;
+ * anything else sends false. Either way they go only when a marker is set now
+ * or was set on the saved row (so it clears): a save with no marker, car or
+ * aircraft, is the same request it was before 0065.
+ */
+export function marksPayload(line: ServiceLine, ticked: MarksLike, saved?: MarksLike): Partial<ServiceMarks> {
+  const next = line === 'aviation' ? marksOf(ticked) : NO_MARKS
+  const had = marksOf(saved)
+  return next.aog || next.after_hours || had.aog || had.after_hours ? next : {}
+}
+
 /** The meta rows aircraft paper prints after the dates (DocView; CHOICE 3 lives here). */
 export function aircraftMeta(a: Partial<AircraftSnapshot> | null | undefined): { label: string; value: string }[] {
   if (!a) return []
@@ -255,5 +311,10 @@ export function paperErrorWords(e: unknown): string | null {
     return 'Airframe hours can’t be negative.'
   if (message.includes('invoices_aircraft_check'))
     return 'Only an aircraft invoice can carry aircraft details. Reload the job and create the invoice again.'
+  if (message.includes('quotes_aog_after_hours_check') || message.includes('invoices_aog_after_hours_check'))
+    return 'AOG and Nights & weekends are for aircraft work only. Untick them, or pick the aircraft, and save again.'
+  // The app is ahead of the database: a marker was ticked before 0065 landed.
+  if (isMissingSchema(e) && /\b(aog|after_hours)\b/.test(message))
+    return 'AOG and Nights & weekends need a database update (0065) that isn’t applied yet. Untick them to save for now.'
   return null
 }

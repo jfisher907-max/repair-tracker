@@ -3,7 +3,7 @@ import { buildInvoiceSnapshot } from './billing'
 import { buildAuthorizationTrail, isOverApproval, loadJobAuthorization } from './authorization'
 import { syncJobPayment } from './payments'
 import { formatCents } from './money'
-import { aircraftSnapshot, holdsToApproval, lineOf, needsPartConditions } from './service-line'
+import { aircraftSnapshot, holdsToApproval, lineOf, marksPayload, needsPartConditions } from './service-line'
 import type { Invoice, Job, PartLine, Vehicle } from './types'
 
 export interface DraftRefresh {
@@ -98,6 +98,8 @@ export async function refreshDraftInvoice(jobId: string): Promise<DraftRefresh> 
       authorizations: await buildAuthorizationTrail(jobId, line),
       // A draft only (sent ones never reach here): the tail, serial and hours as they stand now.
       ...(line === 'aviation' ? { aircraft: aircraftSnapshot(vehicle, jobRow) } : {}),
+      // ...and AOG / Nights & weekends as the job is marked now (0065).
+      ...marksPayload(line, jobRow, draft),
       ...snapshot,
     })
     .eq('id', draft.id)

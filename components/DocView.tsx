@@ -6,11 +6,14 @@ import { formatDate } from '@/lib/date'
 import { formatTaxRate } from '@/lib/billing'
 import {
   PAPER,
+  SERVICE_MARK_LABEL,
   aircraftMeta,
   needsPartConditions,
   printsRepairActNotice,
+  serviceMarkText,
   type AircraftSnapshot,
   type ServiceLine,
+  type ServiceMarks,
 } from '@/lib/service-line'
 import type { AuthorizationEntry, DocLine, PartCondition } from '@/lib/types'
 
@@ -49,6 +52,9 @@ export interface DocData {
   /** Aviation: the aircraft's serial number and, on an invoice, its frozen
    *  airframe hours — printed after the dates. The tail is in vehicleLabel. */
   aircraft?: Partial<AircraftSnapshot> | null
+  /** Aviation: AOG / Nights & weekends (0065), printed as one "Service" item
+   *  when either is set. Ignored on car paper. */
+  marks?: Partial<ServiceMarks> | null
 }
 
 const CONDITION_LABEL: Record<PartCondition, string> = {
@@ -102,6 +108,9 @@ export default function DocView({ doc }: { doc: DocData }) {
   /** AS 45.45.190's New / Used / Rebuilt / Reconditioned — car paper only. */
   const partTags = needsPartConditions(doc.serviceLine)
   const aircraftRows = doc.serviceLine === 'aviation' ? aircraftMeta(doc.aircraft) : []
+  /** "AOG", "Nights & weekends" or both — aircraft paper with a marker only,
+   *  so car paper and unmarked aircraft paper render exactly as before 0065. */
+  const serviceMark = doc.serviceLine === 'aviation' ? serviceMarkText(doc.marks) : null
   const showLinePrices = doc.lines.length > 1 || doc.lines.some((l) => Number(l.qty) !== 1)
 
   const paid = doc.paidCents ?? 0
@@ -174,6 +183,12 @@ export default function DocView({ doc }: { doc: DocData }) {
               <dd>{r.value}</dd>
             </div>
           ))}
+          {serviceMark && (
+            <div>
+              <dt>{SERVICE_MARK_LABEL}</dt>
+              <dd>{serviceMark}</dd>
+            </div>
+          )}
         </dl>
 
         <div className="doc-job">

@@ -8,7 +8,7 @@ import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { useCheckoutReturn } from '@/lib/checkout-return'
 import SharedPhotos from '@/components/public/SharedPhotos'
-import { lineOf, type AircraftSnapshot, type ServiceLine } from '@/lib/service-line'
+import { lineOf, marksOf, type AircraftSnapshot, type ServiceLine } from '@/lib/service-line'
 import type { AuthorizationEntry, DocLine } from '@/lib/types'
 
 interface PublicInvoice {
@@ -38,6 +38,10 @@ interface PublicInvoice {
   service_line?: ServiceLine
   /** Aviation only: the three frozen aircraft keys, never the whole column. */
   aircraft?: AircraftSnapshot | null
+  /** AOG / Nights & weekends (0065), frozen with the invoice; false off
+   *  aviation. Absent before 0065. */
+  aog?: boolean
+  after_hours?: boolean
   business: {
     name: string
     phone: string
@@ -155,6 +159,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
     business: invoice.business,
     serviceLine: lineOf(invoice),
     aircraft: invoice.aircraft ?? null,
+    marks: marksOf(invoice),
   }
 
   return (

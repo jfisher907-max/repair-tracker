@@ -17,6 +17,8 @@ import {
   aircraftSnapshot,
   holdsToApproval,
   lineOf,
+  marksOf,
+  marksPayload,
   needsPartConditions,
   paperErrorWords,
 } from '@/lib/service-line'
@@ -155,6 +157,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           authorizations: await buildAuthorizationTrail(invoice.job_id, line),
           // A draft only: the tail, serial and hours as they stand now.
           ...(line === 'aviation' ? { aircraft: aircraftSnapshot(vehicle, job) } : {}),
+          // ...and AOG / Nights & weekends as the job is marked now (0065).
+          ...marksPayload(line, job, invoice),
           ...snapshot,
         })
         .eq('id', invoice.id)
@@ -246,6 +250,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     // The paper it was created on, and its frozen aircraft block (AVN-3).
     serviceLine: lineOf(invoice),
     aircraft: invoice.aircraft ?? null,
+    // Its frozen AOG / Nights & weekends markers (0065).
+    marks: marksOf(invoice),
   }
 
   async function patch(fields: Partial<Invoice>, alsoJob?: 'paid') {
