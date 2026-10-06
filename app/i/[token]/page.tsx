@@ -53,6 +53,8 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
   const [invoice, setInvoice] = useState<PublicInvoice | null | 'missing'>(null)
 
   const [cardEnabled, setCardEnabled] = useState(false)
+  /** The job's pre-buy report link, when it has a final, shared one (0067). */
+  const [reportToken, setReportToken] = useState<string | null>(null)
   const [paying, setPaying] = useState(false)
   const [payError, setPayError] = useState<string | null>(null)
 
@@ -66,6 +68,12 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
   useEffect(() => {
     reload()
   }, [reload])
+
+  useEffect(() => {
+    supabase.rpc('get_invoice_inspection_token', { token }).then(({ data, error }) => {
+      if (!error && typeof data === 'string') setReportToken(data)
+    })
+  }, [token])
 
   useEffect(() => {
     fetch('/api/pay/status')
@@ -192,6 +200,13 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
           {payError && (
             <span className="text-xs" style={{ color: '#f58e8b' }}>{payError}</span>
           )}
+        </div>
+      )}
+      {reportToken && (
+        <div className="no-print px-4 py-3 text-center" style={{ background: '#f4f5f8' }}>
+          <a href={`/r/${reportToken}`} className="font-semibold" style={{ color: '#1f4f73' }}>
+            View the pre-purchase inspection report →
+          </a>
         </div>
       )}
       <SharedPhotos token={token} kind="invoice" title="The work" />

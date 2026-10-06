@@ -26,6 +26,7 @@ import {
   setCoreOutcome,
 } from '@/lib/cores'
 import JobPhotos from '@/components/JobPhotos'
+import JobInspection from '@/components/JobInspection'
 import RecommendationList from '@/components/RecommendationList'
 import BillingCheck, { RecordedOks, type BillingSheet, type JobOk } from '@/components/BillingCheck'
 import {
@@ -1434,6 +1435,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       )}
 
       <JobPhotos jobId={id} />
+
+      {/* Pre-buy inspection (0067): automotive only for now. */}
+      {serviceLine !== 'aviation' && <JobInspection jobId={id} customerName={customer?.name ?? null} />}
 
       {/* Quotes tied to this job — the originating quote and any add-on
           authorizations for extra work found mid-job. */}
