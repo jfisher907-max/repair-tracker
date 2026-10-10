@@ -242,6 +242,13 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
                 <a className="btn btn-primary" href={`/r/${ins.public_token}`} target="_blank" rel="noopener">
                   Open the report
                 </a>
+                {/* For customers who want it by email: the report's own print
+                    screen, named for the file ("R001 Pre-Purchase Inspection — …"). */}
+                {!ins.link_revoked_at && (
+                  <a className="btn" href={`/r/${ins.public_token}?pdf=1`} target="_blank" rel="noopener">
+                    Save as PDF
+                  </a>
+                )}
                 {!ins.link_revoked_at && (
                   <button className="btn" onClick={share}>
                     Share the link
@@ -256,8 +263,8 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
               </div>
               <p className="text-xs" style={{ color: 'var(--text3)' }}>
                 {ins.link_revoked_at
-                  ? 'The link is off: anyone who has it sees “not available”, and the invoice no longer shows it.'
-                  : 'Anyone with the link can read the report. It also shows on this job’s invoice.'}
+                  ? 'The link is off: anyone who has it sees “not available”, and the invoice no longer shows it. Turn it back on to save a PDF.'
+                  : 'Anyone with the link can read the report. It also shows on this job’s invoice. Save as PDF makes a file you can email.'}
               </p>
               {!confirmVoid ? (
                 <button className="btn btn-sm btn-danger" onClick={() => setConfirmVoid(true)}>

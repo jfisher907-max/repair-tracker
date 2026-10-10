@@ -1783,6 +1783,15 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
     transition: none !important;
   }
   @page { size: letter; margin: 0.55in; }
+  /* An inspection runs several sheets: never split a checklist row, and
+     never leave a section heading alone at the foot of a page. */
+  .insp-doc tr { break-inside: avoid; }
+  .insp-doc h2 { break-after: avoid; }
+  /* A full Quick Check is ~30 rows: tighter rows keep it to three sheets,
+     with the disclaimer on the last one instead of a sheet of its own. */
+  .insp-doc .doc-table tbody td { padding: 5px 0; }
+  .insp-doc .doc-section { margin-top: 14px; }
+  .insp-doc .doc-section + .doc-section { padding-top: 12px; }
 }
 
 /* --- Public landing page (Bold Brand palette, dark form section) --------- */

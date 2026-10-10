@@ -69,6 +69,9 @@ function Pill({ rating }: { rating: Rating }) {
         padding: '2px 8px',
         borderRadius: 6,
         whiteSpace: 'nowrap',
+        // A saved PDF keeps the colours: the rating IS the pill.
+        printColorAdjust: 'exact',
+        WebkitPrintColorAdjust: 'exact',
       }}
     >
       {RATING_LABEL[rating]}
@@ -115,7 +118,22 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
   }, [token])
 
   const loaded = report && report !== 'missing' ? report : null
-  useDocumentTitle(loaded ? `Inspection ${loaded.report_number} — ${loaded.business.name || BRAND_NAME}` : null)
+  useDocumentTitle(
+    // The title is the saved PDF's filename, which may be emailed on:
+    // "R001 Pre-Purchase Inspection — 2014 Subaru Outback".
+    loaded
+      ? `${loaded.report_number} Pre-Purchase Inspection — ${snapshotLabel(loaded.vehicle) || loaded.business.name || BRAND_NAME}`
+      : null,
+  )
+
+  // ?pdf=1 (the shop's "Save as PDF" button) opens the print screen once the
+  // report has loaded; the title above is set by then, so the file is named.
+  useEffect(() => {
+    if (!loaded) return
+    if (new URLSearchParams(window.location.search).get('pdf') !== '1') return
+    const t = setTimeout(() => window.print(), 400)
+    return () => clearTimeout(t)
+  }, [loaded])
 
   if (report === null) {
     return <div className="p-8 text-center" style={{ color: 'var(--text3)' }}>Loading report…</div>
@@ -150,7 +168,16 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
   ].join(', ')
 
   return (
-    <div className="doc-wrap min-h-dvh px-0 py-0 sm:px-4 sm:py-8" style={{ background: '#e9ebef' }}>
+    <div className="min-h-dvh" style={{ background: '#e9ebef' }}>
+      <div className="no-print flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-3" style={{ background: '#f4f5f8' }}>
+        <button className="btn btn-sm" onClick={() => window.print()}>
+          Save as PDF
+        </button>
+        <span className="text-xs" style={{ color: '#586072' }}>
+          Opens your print screen: choose “Save as PDF”.
+        </span>
+      </div>
+      <div className="doc-wrap insp-doc px-0 py-0 sm:px-4 sm:py-8">
       <div className="doc-root">
         <DocBrand business={report.business} docType="Pre-Purchase Inspection" docRef={report.report_number} badge={template.name} />
         <div className="doc-body">
@@ -174,7 +201,8 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
             {v?.vin && (
               <div>
                 <dt>VIN</dt>
-                <dd style={{ fontFamily: 'var(--font-mono, ui-monospace)', fontSize: '0.9em' }}>{v.vin}</dd>
+                {/* One line: a VIN broken in two is easy to misread back. */}
+                <dd style={{ fontFamily: 'var(--font-mono, ui-monospace)', fontSize: '0.85em', whiteSpace: 'nowrap' }}>{v.vin}</dd>
               </div>
             )}
             {report.odometer_miles != null && (
@@ -288,6 +316,7 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
             </p>
           </footer>
         </div>
+      </div>
       </div>
     </div>
   )
