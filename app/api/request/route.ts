@@ -1,4 +1,5 @@
 import { serviceClient } from '@/lib/payments-server'
+import { sendPushToOwner } from '@/lib/push-server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -14,9 +15,9 @@ export const dynamic = 'force-dynamic'
  * including the p_ip the rate limit keys on.
  *
  * All real validation and the honeypot check live in submit_service_request;
- * this route shapes the payload, hands it over, and — when notification env
- * vars are present — emails the owner about the new request. Honeypot hits
- * return no id, so bots never generate email.
+ * this route shapes the payload, hands it over, and — for whichever channels
+ * are configured — alerts the owner by phone push and/or email. Honeypot hits
+ * return no id, so bots never generate an alert.
  *
  * serviceLine records which side of the page (Automotive / Aviation) the
  * request came from. Validated strictly: 'aviation' or it is 'automotive'.
@@ -91,31 +92,52 @@ export async function POST(request: Request) {
     return Response.json({ ok: false, error: result?.error ?? 'Could not send your request.' }, { status: 400 })
   }
 
-  // Owner notification — only for a REAL insert (result.id present; honeypot
-  // drops return ok with no id), and only when configured. Best effort: a
-  // mail hiccup must never fail the customer's submission.
-  if (result.id && process.env.RESEND_API_KEY && process.env.OWNER_NOTIFY_EMAIL) {
-    try {
-      await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: process.env.NOTIFY_FROM_EMAIL ?? 'onboarding@resend.dev',
-          to: process.env.OWNER_NOTIFY_EMAIL,
-          subject: lineRecorded
-            ? `New ${serviceLine} service request — ${name} (${vehicle})`
-            : `New service request — ${name} (${vehicle})`,
-          text: `A new service request just came in.\n\nOpen it: https://wingsnthings.repair/requests\n\n(Details are in the app, not this email.)`,
-        }),
-        signal: AbortSignal.timeout(4000),
-      })
-    } catch {
-      // The request is safely stored; the dashboard banner still shows it.
-    }
+  // Owner notifications — only for a REAL insert (result.id present; honeypot
+  // drops return ok with no id), and only for the channels that are
+  // configured. Phone push (VAPID_* env, migration 0068) and email (RESEND_*)
+  // go out side by side. Best effort: neither may fail the customer's
+  // submission, and both are bounded by their own 4s timeouts.
+  if (result.id) {
+    const lineLabel = lineRecorded ? `${serviceLine === 'aviation' ? 'Aviation' : 'Automotive'} · ` : ''
+    await Promise.allSettled([
+      sendPushToOwner({
+        title: 'New service request',
+        body: `${lineLabel}${name} — ${vehicle}`,
+        url: '/requests',
+        tag: `request-${result.id}`,
+      }),
+      sendOwnerEmail(name, vehicle, serviceLine, lineRecorded),
+    ])
   }
 
   return Response.json({ ok: true })
+}
+
+async function sendOwnerEmail(
+  name: string,
+  vehicle: string,
+  serviceLine: 'automotive' | 'aviation',
+  lineRecorded: boolean,
+) {
+  if (!process.env.RESEND_API_KEY || !process.env.OWNER_NOTIFY_EMAIL) return
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: process.env.NOTIFY_FROM_EMAIL ?? 'onboarding@resend.dev',
+        to: process.env.OWNER_NOTIFY_EMAIL,
+        subject: lineRecorded
+          ? `New ${serviceLine} service request — ${name} (${vehicle})`
+          : `New service request — ${name} (${vehicle})`,
+        text: `A new service request just came in.\n\nOpen it: https://wingsnthings.repair/requests\n\n(Details are in the app, not this email.)`,
+      }),
+      signal: AbortSignal.timeout(4000),
+    })
+  } catch {
+    // The request is safely stored; the dashboard banner still shows it.
+  }
 }

@@ -41,6 +41,7 @@ npm run dev
    - `NEXT_PUBLIC_SUPABASE_URL` = `https://kccmalbgfekapedgvhar.supabase.co` *(optional — hardcoded fallback exists)*
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY` = the publishable key from Supabase → Settings → API *(optional — fallback exists)*
    - `ANTHROPIC_API_KEY` = **server-only** key from [console.anthropic.com](https://console.anthropic.com) — enables AI receipt reading. Without it, receipts still work; you type lines in manually. Never expose this with a `NEXT_PUBLIC_` prefix.
+   - `VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` = phone push alerts for new service requests. Generate a pair once with `npx web-push generate-vapid-keys`. The private key is **server-only** (no `NEXT_PUBLIC_`). Optional `VAPID_SUBJECT` = `mailto:you@…`. Then Settings → **New request alerts** → Turn on alerts, on each device (on iPhone, from the Home Screen app). Needs migration `0068_push_subscriptions.sql`.
 4. Every later `git push` to `main` deploys automatically.
 
 ## The one account (auth)
