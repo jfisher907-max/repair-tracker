@@ -64,3 +64,41 @@ self.addEventListener('fetch', (event) => {
     }),
   )
 })
+
+// Push alerts (migration 0068): /api/request pushes { title, body, url, tag }
+// when a customer submits the Request service form.
+self.addEventListener('push', (event) => {
+  let msg = {}
+  try {
+    msg = event.data ? event.data.json() : {}
+  } catch {
+    msg = { body: event.data ? event.data.text() : '' }
+  }
+  event.waitUntil(
+    self.registration.showNotification(msg.title || 'New service request', {
+      body: msg.body || 'Open the app to see it.',
+      icon: '/icon-192',
+      badge: '/icon-192',
+      tag: msg.tag || 'service-request',
+      renotify: true,
+      data: { url: msg.url || '/requests' },
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const path = (event.notification.data && event.notification.data.url) || '/requests'
+  const target = new URL(path, self.location.origin).href
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      // Reuse an open app window when there is one; otherwise open the app.
+      for (const c of list) {
+        if (new URL(c.url).origin === self.location.origin && 'focus' in c) {
+          return c.focus().then((w) => (w && 'navigate' in w ? w.navigate(target) : w))
+        }
+      }
+      return self.clients.openWindow(target)
+    }),
+  )
+})

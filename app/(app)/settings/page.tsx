@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getAccessToken, supabase } from '@/lib/supabase'
 import BusinessDocuments from '@/components/BusinessDocuments'
+import PushAlerts from '@/components/PushAlerts'
 import { BRAND_SLUG } from '@/lib/brand'
 import { DEFAULT_TIERS, type MarkupTier } from '@/lib/markup'
 import { QUOTE_PRICING_CHOICES, type QuotePricing } from '@/lib/quote-pricing'
@@ -320,6 +321,8 @@ export default function SettingsPage() {
           </div>
         )}
       </div>
+
+      <PushAlerts />
 
       {/* You're already signed in, so the password changes right here — no
           email round-trip, no recovery links pointing at dead URLs. */}
