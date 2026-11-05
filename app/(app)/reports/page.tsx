@@ -9,6 +9,7 @@ import { isBookedJob, preLedgerCash } from '@/lib/finances'
 import { collectedForJob, governingInvoice, owedGrossCents } from '@/lib/calc'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
+import { actualHours, efficiencyColor, efficiencyPct, formatHours, formatPct, summarizeEfficiency } from '@/lib/labor-time'
 import { EXPENSE_LINES, totalsByLine } from '@/lib/schedule-c'
 import type { Expense, Invoice, Payment, Settings, Tip } from '@/lib/types'
 
@@ -271,6 +272,20 @@ export default function ReportsPage() {
     }
     const topCustomers = [...byCustomer.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5)
 
+    // Actual time vs book (0068): done jobs this year with time logged. Jobs
+    // never tracked (actual_hours null) stay out instead of reading as 0 hr.
+    const timedJobs = doneJobs.filter(
+      (j) => inYear(j.job.date) && actualHours(j.job) != null && Number(j.job.labor_hours) > 0,
+    )
+    const efficiency = {
+      summary: summarizeEfficiency(timedJobs.map((j) => j.job)),
+      rows: timedJobs.map((j) => {
+        const actual = actualHours(j.job) ?? 0
+        const book = Number(j.job.labor_hours)
+        return { id: j.job.id, job: j.job.job_number, title: j.job.title, book, actual, pct: efficiencyPct(book, actual) }
+      }),
+    }
+
     // Expenses by Schedule C line (EXP-2), numbered for this tax year.
     const byLine = totalsByLine(expenses.filter((e) => inYear(e.date)), year)
 
@@ -288,6 +303,7 @@ export default function ReportsPage() {
       owed,
       topCustomers,
       byLine,
+      efficiency,
     }
   }, [jobs, expenses, payments, invoices, tips, partOutflows, year])
 
@@ -644,6 +660,44 @@ export default function ReportsPage() {
                     <tr key={name}>
                       <td>{name}</td>
                       <td className="num">{formatCents(cents)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {/* Owner's own performance, not the books — left off the printed copy. */}
+          {report.efficiency.rows.length > 0 && (
+            <section className="no-print">
+              <h2 className="text-lg font-bold">Labor efficiency — {year}</h2>
+              <p className="report-meta mt-1">
+                Book hours billed vs. the time you logged, on {report.efficiency.summary.jobs} done job
+                {report.efficiency.summary.jobs === 1 ? '' : 's'}: {formatHours(report.efficiency.summary.bookHours)}{' '}
+                book in {formatHours(report.efficiency.summary.actualHours)} actual ={' '}
+                <b style={{ color: efficiencyColor(report.efficiency.summary.pct) }}>
+                  {formatPct(report.efficiency.summary.pct)}
+                </b>
+                . Over 100% means you beat book time.
+              </p>
+              <table className="report-table">
+                <thead>
+                  <tr>
+                    <th>Job</th>
+                    <th className="num">Book</th>
+                    <th className="num">Actual</th>
+                    <th className="num">Efficiency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.efficiency.rows.map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        {r.job} · {r.title}
+                      </td>
+                      <td className="num">{formatHours(r.book)}</td>
+                      <td className="num">{formatHours(r.actual)}</td>
+                      <td className="num" style={{ color: efficiencyColor(r.pct) }}>{formatPct(r.pct)}</td>
                     </tr>
                   ))}
                 </tbody>

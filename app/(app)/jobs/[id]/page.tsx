@@ -27,6 +27,7 @@ import {
 } from '@/lib/cores'
 import JobPhotos from '@/components/JobPhotos'
 import JobInspection from '@/components/JobInspection'
+import JobTimeCard from '@/components/JobTimeCard'
 import RecommendationList from '@/components/RecommendationList'
 import BillingCheck, { RecordedOks, type BillingSheet, type JobOk } from '@/components/BillingCheck'
 import {
@@ -1594,6 +1595,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
         )}
       </div>
+
+      {/* Actual time vs book (0068) — owner only, never on the customer's paper. */}
+      <JobTimeCard job={job} onUpdate={(patch) => updateJob(patch)} />
 
       {/* Parts */}
       <div className="card space-y-2">
