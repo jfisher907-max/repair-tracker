@@ -85,6 +85,11 @@ export interface Job {
    *  frozen onto the invoice. Never a rate. Optional: a row read before 0065. */
   aog?: boolean
   after_hours?: boolean
+  /** Hours actually spent (0068), owner only; labor_hours is the book time
+   *  billed. Null = not tracked. Optional: a row read before 0068. */
+  actual_hours?: number | null
+  /** Set while the job clock runs (0068); Stop folds it into actual_hours. */
+  clock_started_at?: string | null
   notes: string | null
   created_at: string
   updated_at: string

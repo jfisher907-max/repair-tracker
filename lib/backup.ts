@@ -54,7 +54,7 @@ const TABLES: Record<string, string[]> = {
   ],
   jobs: [
     'id', 'job_number', 'vehicle_id', 'date', 'odometer_miles', 'airframe_hours', 'title', 'work_performed',
-    'labor_hours', 'labor_rate_cents', 'parts_charged_override_cents', 'payment_status',
+    'labor_hours', 'actual_hours', 'clock_started_at', 'labor_rate_cents', 'parts_charged_override_cents', 'payment_status',
     'amount_paid_cents', 'stage', 'stage_changed_at', 'warranty_months', 'warranty_miles',
     'promised_date', 'notes', 'created_at', 'updated_at', 'deleted_at',
   ],
