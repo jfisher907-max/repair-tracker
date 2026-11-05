@@ -249,16 +249,26 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
               <table className="doc-table doc-table--tight" style={{ marginTop: 8 }}>
                 <tbody>
                   {[...attention, ...watch].map((it, i) => (
+                    // On a phone the pill and the cost each took a column, leaving
+                    // the finding a strip three words wide. There they stack in
+                    // the finding's own cell: pill above, cost below. Wider
+                    // screens and the PDF keep the three columns.
                     <tr key={i}>
-                      <td style={{ width: 1 }}>
+                      <td className="hidden sm:table-cell" style={{ width: 1 }}>
                         <Pill rating={it.rating!} />
                       </td>
                       <td className="doc-desc">
+                        <span className="mb-1 block sm:hidden">
+                          <Pill rating={it.rating!} />
+                        </span>
                         <b>{it.label}</b>
                         {it.note && <span className="doc-dim"> · {it.note}</span>}
                         {measureText(it) && <span className="doc-dim" style={{ display: 'block', fontSize: '0.88em' }}>{measureText(it)}</span>}
+                        {report.show_costs && costText(it) && (
+                          <span className="mt-1 block font-semibold sm:hidden">{costText(it)}</span>
+                        )}
                       </td>
-                      {report.show_costs && <td className="doc-n">{costText(it) ?? ''}</td>}
+                      {report.show_costs && <td className="doc-n hidden sm:table-cell">{costText(it) ?? ''}</td>}
                     </tr>
                   ))}
                 </tbody>
