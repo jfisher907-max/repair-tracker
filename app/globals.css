@@ -348,6 +348,11 @@ body {
    careful about.) */
 .app-frame {
   isolation: isolate;
+  /* Clearance for the floating tab bar and the iPhone home bar, from the same
+     token that sizes the bar. It lives here and not in an inline style,
+     because an inline style would also apply on a desk, where there is no
+     bar — and `sm:pb-0` could never beat it. */
+  padding-bottom: var(--tabbar-clear);
 }
 
 /* A customer document rendered INSIDE the owner shell (an invoice, a quote,
@@ -1632,6 +1637,23 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .tabbar-new:active { transform: scale(var(--press-scale)); }
 .tabbar-new:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
+/* Phone only. The `sm:hidden` utility CANNOT do this: `display: none` from
+   @layer utilities loses to the unlayered `display: flex` on .chrome-corner
+   and .tabbar, so on a desk the floating chrome and the tab bar both stayed
+   on screen over the sidebar. Same trap as .desk-only — and this block has to
+   sit AFTER both rules, because a media query adds no specificity: the first
+   version of it was written above them and lost on source order. */
+@media (min-width: 640px) {
+  .chrome-corner,
+  .tabbar {
+    display: none;
+  }
+  /* No floating bar on a desk, so no clearance for one. */
+  .app-frame {
+    padding-bottom: 0;
+  }
+}
+
 /* ---------- Segmented controls ---------- */
 
 /* One track of sunken glass holding 2-4 mutually exclusive segments: job
@@ -1736,6 +1758,16 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .side-item:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+/* A control the phone gets from the floating chrome instead (a back link, the
+   job's Edit). It CANNOT be Tailwind's `hidden sm:inline-flex`: `hidden` lives
+   in @layer utilities and `.btn { display: inline-flex }` here is unlayered,
+   so the button wins and the control shows up twice on a phone. Declared
+   unlayered, next to .btn, where it is decided by source order. */
+.desk-only { display: none; }
+@media (min-width: 640px) {
+  .desk-only { display: inline-flex; }
 }
 
 /* Interactive rows share the button press response. */

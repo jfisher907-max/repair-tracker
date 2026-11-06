@@ -510,7 +510,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
       <div className="no-print space-y-3">
         <div className="flex items-center justify-between">
           {/* Phone: the floating back button top-left (AppShell). */}
-          <Link href="/jobs?tab=quotes" className="btn btn-sm hidden sm:inline-flex">← Quotes</Link>
+          <Link href="/jobs?tab=quotes" className="btn btn-sm desk-only">← Quotes</Link>
           <span className="flex items-center gap-2">
             {quote.sent_at && (
               <span

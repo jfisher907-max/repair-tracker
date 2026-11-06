@@ -1162,7 +1162,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           {/* Phone: this is the floating Edit button in the top-right corner
               (components/AppShell.tsx). Here for the desktop, which has no
               floating chrome. */}
-          <Link href={`/jobs/${id}/edit`} className="btn btn-sm hidden sm:inline-flex">Edit</Link>
+          <Link href={`/jobs/${id}/edit`} className="btn btn-sm desk-only">Edit</Link>
         </div>
 
         {/* Stage (0043): scheduled = booked, not started · in progress = on

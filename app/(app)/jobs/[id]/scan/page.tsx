@@ -620,7 +620,7 @@ export default function ScanReceiptPage({
       <div className="flex items-center justify-between">
         <h1 className="text-2xl">{resumeId ? 'Finish receipt' : 'Scan receipt'}</h1>
         {/* Phone: the floating back button top-left (AppShell). */}
-        <Link href={`/jobs/${jobId}`} className="btn btn-sm hidden sm:inline-flex">← Back to job</Link>
+        <Link href={`/jobs/${jobId}`} className="btn btn-sm desk-only">← Back to job</Link>
       </div>
 
       {phase === 'pick' && (

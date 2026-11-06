@@ -158,14 +158,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const back = backFor(pathname)
   const action = actionFor(pathname)
 
+  // The bottom clearance for the floating bar is .app-frame's own rule in
+  // globals.css, not a utility here: it has to switch off at sm:, and an
+  // inline style could not be overridden.
   return (
-    <div
-      className="app-frame min-h-dvh sm:grid sm:grid-cols-[232px_1fr] sm:pb-0"
-      // Clearance for the floating tab bar AND the iPhone home bar, from the
-      // one token that also sizes the bar. sm:pb-0 drops it on a desk, where
-      // the bar is not there.
-      style={{ paddingBottom: 'var(--tabbar-clear)' }}
-    >
+    <div className="app-frame min-h-dvh sm:grid sm:grid-cols-[232px_1fr]">
       {/* The lit ground the glass shows through. Owner shell only: the
           customer's quote, invoice and report pages never mount it, and it is
           display:none in print. */}
@@ -210,7 +207,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             scrolling underneath. The old flat .appbar bar is gone — the brand
             is in the sidebar on a desk and in the dashboard's own title on a
             phone, and Home is a tab. */}
-        <div className="chrome-corner chrome-corner-l sm:hidden">
+        <div className="chrome-corner chrome-corner-l">
           {back ? (
             <Link href={back.href} className="glass-float chrome-btn chrome-solo">
               <span aria-hidden="true">←</span> {back.label}
@@ -226,7 +223,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        <div className="chrome-corner chrome-corner-r sm:hidden">
+        <div className="chrome-corner chrome-corner-r">
           {action ? (
             <Link href={action.href} className="glass-float chrome-btn chrome-solo">
               {action.label}
@@ -262,7 +259,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* Phone tab bar: a floating pill set in from both edges, with New Job
           as its own round gold button beside it. */}
-      <nav className="tabbar sm:hidden" aria-label="Main">
+      <nav className="tabbar" aria-label="Main">
         <div className="glass-float tabbar-pill">
           {tabs.map((t) => {
             const active = isActive(t.href, pathname, 'bar')
