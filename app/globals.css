@@ -182,11 +182,13 @@
      clear it: the 64px tab pill, the running clock bar when there is one, the
      14px the stack is set in from the bottom, the iPhone home bar, and air.
 
-     --clockbar-h is 0 until components/RunningClockBar.tsx mounts and sets it
-     on the root; everything that has to sit above the stack — the content
-     padding here and .save-bar — reads --tabbar-stack, so the clock bar
-     appearing pushes all of them up together instead of landing on top of
-     them. */
+     --clockbar-h is 0 until a clock is running. The shell detects that with
+     :has(.clock-bar) rather than having the component write a variable onto
+     the root — the bar is in the DOM exactly when a clock runs, so the layout
+     can read that itself and there is no effect to leak or get out of step.
+     Everything that must sit above the stack — the content padding and
+     .save-bar — reads --tabbar-stack, so the bar appearing lifts all of them
+     together instead of landing on top of them. */
   --tabbar-h: 64px;
   --tabbar-inset: 14px;
   --clockbar-h: 0px;
@@ -334,6 +336,12 @@ body {
   /* The one inline use of the sunken surface (components/CoreDeposits.tsx)
      wants the same treatment. */
   --surface-sunken: rgba(6, 8, 12, 0.32);
+
+  /* Re-declared here, not just in :root: a custom property inherits its
+     COMPUTED value, so --tabbar-clear computed at :root would have baked in
+     the root's --clockbar-h (0) and never see the shell's. */
+  --tabbar-stack: calc(var(--tabbar-h) + var(--clockbar-h));
+  --tabbar-clear: calc(var(--tabbar-stack) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 22px);
 
   /* A frosted panel needs a corner the blur can turn. */
   --wnt-radius-xs: 8px;
@@ -1652,6 +1660,12 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
    pane of glass riding directly above the tab pill. On a desk, where there is
    no tab bar, it tucks into the bottom-right corner instead of stretching the
    width of the window. */
+/* A clock is running exactly when the bar is in the DOM. 60px = its 54px
+   height plus the gap above the tab pill. */
+.app-frame:has(.clock-bar) {
+  --clockbar-h: 60px;
+}
+
 .clock-bar {
   position: fixed;
   left: 12px;
@@ -1673,6 +1687,13 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
     bottom: 20px;
     width: max-content;
     max-width: min(380px, calc(100vw - 40px));
+  }
+  /* The save row spans the content column at the window's bottom edge, and
+     the clock bar docks into the same corner — on a form with a clock running
+     the bar sat on top of Cancel. Lift the row over it: the bar's top edge is
+     74px up (20px offset + 54px tall), so 80px clears it by six. */
+  .app-frame:has(.clock-bar) .save-bar {
+    bottom: 80px;
   }
 }
 @media print { .clock-bar { display: none; } }

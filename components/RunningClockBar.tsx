@@ -21,9 +21,6 @@ interface RunningJob {
   clock_started_at: string
 }
 
-/** The stack token the shell reads, in px, while the bar is up. 52px + 8px gap. */
-const STACK_CONTRIBUTION = '60px'
-
 /**
  * The clock that followed you off the job page.
  *
@@ -31,6 +28,10 @@ const STACK_CONTRIBUTION = '60px'
  * the number the whole book-vs-actual comparison rests on (0068). So once one
  * is running it rides above the tab bar on every owner screen, says which job
  * it is on, and can be stopped from there.
+ *
+ * The layout does NOT need telling it is here: globals.css reads
+ * `.app-frame:has(.clock-bar)` to grow the floating stack, so the tab bar,
+ * the content padding and a form's save row all make room on their own.
  *
  * It refreshes on three signals: the CLOCK_CHANGED event (instant, fired by
  * the two controls that start and stop a clock), a route change (covers a
@@ -80,19 +81,6 @@ export default function RunningClockBar() {
     if (!job) return
     const t = setInterval(() => setNow(Date.now()), 15_000)
     return () => clearInterval(t)
-  }, [job])
-
-  /* The shell's floating stack has to grow by this bar's height, or the tab
-     bar would sit under it and the content padding would be short by one bar.
-     Set on the root so one token drives the padding, .save-bar and the stack
-     (see --tabbar-stack in globals.css). */
-  useEffect(() => {
-    const root = document.documentElement
-    if (job) root.style.setProperty('--clockbar-h', STACK_CONTRIBUTION)
-    else root.style.removeProperty('--clockbar-h')
-    return () => {
-      root.style.removeProperty('--clockbar-h')
-    }
   }, [job])
 
   async function stop() {
