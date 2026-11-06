@@ -26,8 +26,9 @@ import {
   setCoreOutcome,
 } from '@/lib/cores'
 import JobPhotos from '@/components/JobPhotos'
-import JobInspection from '@/components/JobInspection'
+import JobInspection, { StartQuickCheck } from '@/components/JobInspection'
 import JobTimeCard from '@/components/JobTimeCard'
+import JobClockButton from '@/components/JobClockButton'
 import RecommendationList from '@/components/RecommendationList'
 import BillingCheck, { RecordedOks, type BillingSheet, type JobOk } from '@/components/BillingCheck'
 import {
@@ -1247,6 +1248,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           >
             + Add part manually
           </button>
+          {/* Hidden on a finished job unless it is still running: nobody
+              starts a clock on done work, but a forgotten one must stop. */}
+          {(job.stage !== 'done' || !!job.clock_started_at) && (
+            <JobClockButton job={job} onUpdate={(patch) => updateJob(patch)} />
+          )}
           <button className="btn btn-sm" disabled={invoicing || !customer} onClick={invoiceAction}>
             {invoicing
               ? 'Creating…'
@@ -1306,6 +1312,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <Link href={`/quotes/new?job=${id}`} className="btn btn-sm">
               + Quote extra work
             </Link>
+            {serviceLine !== 'aviation' && <StartQuickCheck jobId={id} customerName={customer?.name ?? null} />}
           </div>
         )}
 
@@ -1445,71 +1452,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <p className="whitespace-pre-wrap">{job.work_performed}</p>
         </div>
       )}
-
-      <JobPhotos jobId={id} />
-
-      {/* Pre-buy inspection (0067): automotive only for now. */}
-      {serviceLine !== 'aviation' && <JobInspection jobId={id} customerName={customer?.name ?? null} />}
-
-      {/* Quotes tied to this job — the originating quote and any add-on
-          authorizations for extra work found mid-job. */}
-      {linkedQuotes.length > 0 && (
-        <div className="card space-y-2">
-          <span className="label !mb-0">Quotes on this job</span>
-          {linkedQuotes.map((q) => (
-            <div key={q.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-              <div className="min-w-0">
-                <Link href={`/quotes/${q.id}`} style={{ color: 'var(--blue)' }}>
-                  {q.quote_number}
-                </Link>{' '}
-                <span className="truncate" style={{ color: 'var(--text2)' }}>{q.title}</span>
-              </div>
-              <div className="flex flex-none items-center gap-2">
-                {q.total_cents != null && <span className="money">{formatCents(q.total_cents)}</span>}
-                <span className={statusChipClass(q.status)}>{q.status}</span>
-                <span className="text-xs" style={{ color: q.applied_at ? 'var(--green)' : 'var(--text3)' }}>
-                  {q.applied_at ? '✓ on job' : 'not applied'}
-                </span>
-              </div>
-            </div>
-          ))}
-          <p className="text-xs" style={{ color: 'var(--text3)' }}>
-            {/* The quoted label tracks the real button, which drops its emoji
-                on desktop — so this prose has to as well. */}
-            Found more while you&apos;re in there? “Quote
-            extra work” sends the customer the usual approval link, and approved lines land on
-            this job.
-          </p>
-        </div>
-      )}
-
-      {/* The OKs past the estimate (AS 45.45.170(d)) as the OWNER sees them,
-          each correctable until an invoice goes out. The wrong time on one of
-          these is what the owner could not fix (2026-09-14); the record has to
-          be accurate, and a correction shows on the row rather than quietly
-          replacing what was there. Not the customer's copy — that trail is
-          built by buildAuthorizationTrail and frozen onto the invoice, and it
-          carries the facts of the approval, never this app's edit history. */}
-      <RecordedOks
-        jobId={id}
-        serviceLine={serviceLine}
-        oks={oks}
-        lines={lines}
-        locked={lockedByInvoice}
-        onChanged={load}
-      />
-
-      {/* Recommendations — trackable items that follow the vehicle and seed
-          the invoice the customer receives. */}
-      <div className="card space-y-2">
-        <span className="label !mb-0">Recommendations</span>
-        <RecommendationList
-          jobId={id}
-          vehicleId={job.vehicle_id}
-          items={recs}
-          onChanged={load}
-        />
-      </div>
 
       {/* Labor — adjusted right here, no trip through Edit job. */}
       <div className="card space-y-2">
@@ -1861,6 +1803,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
         )}
       </div>
+
+      {/* Photos: under Parts since the 2026-11 phone sweep — parts are
+          what gets added most, so nothing that is rarely touched sits above them. */}
+      <JobPhotos jobId={id} />
 
       {/* Receipts */}
       {receipts.length > 0 && (
@@ -2502,6 +2448,71 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           </div>
         )}
       </div>
+
+      {/* Below the money (2026-11 phone sweep): quotes, OKs, recommendations
+          and the pre-buy card are read now and then, not worked every visit. */}
+      {/* Quotes tied to this job — the originating quote and any add-on
+          authorizations for extra work found mid-job. */}
+      {linkedQuotes.length > 0 && (
+        <div className="card space-y-2">
+          <span className="label !mb-0">Quotes on this job</span>
+          {linkedQuotes.map((q) => (
+            <div key={q.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <div className="min-w-0">
+                <Link href={`/quotes/${q.id}`} style={{ color: 'var(--blue)' }}>
+                  {q.quote_number}
+                </Link>{' '}
+                <span className="truncate" style={{ color: 'var(--text2)' }}>{q.title}</span>
+              </div>
+              <div className="flex flex-none items-center gap-2">
+                {q.total_cents != null && <span className="money">{formatCents(q.total_cents)}</span>}
+                <span className={statusChipClass(q.status)}>{q.status}</span>
+                <span className="text-xs" style={{ color: q.applied_at ? 'var(--green)' : 'var(--text3)' }}>
+                  {q.applied_at ? '✓ on job' : 'not applied'}
+                </span>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs" style={{ color: 'var(--text3)' }}>
+            {/* The quoted label tracks the real button, which drops its emoji
+                on desktop — so this prose has to as well. */}
+            Found more while you&apos;re in there? “Quote
+            extra work” sends the customer the usual approval link, and approved lines land on
+            this job.
+          </p>
+        </div>
+      )}
+
+      {/* The OKs past the estimate (AS 45.45.170(d)) as the OWNER sees them,
+          each correctable until an invoice goes out. The wrong time on one of
+          these is what the owner could not fix (2026-09-14); the record has to
+          be accurate, and a correction shows on the row rather than quietly
+          replacing what was there. Not the customer's copy — that trail is
+          built by buildAuthorizationTrail and frozen onto the invoice, and it
+          carries the facts of the approval, never this app's edit history. */}
+      <RecordedOks
+        jobId={id}
+        serviceLine={serviceLine}
+        oks={oks}
+        lines={lines}
+        locked={lockedByInvoice}
+        onChanged={load}
+      />
+
+      {/* Recommendations — trackable items that follow the vehicle and seed
+          the invoice the customer receives. */}
+      <div className="card space-y-2">
+        <span className="label !mb-0">Recommendations</span>
+        <RecommendationList
+          jobId={id}
+          vehicleId={job.vehicle_id}
+          items={recs}
+          onChanged={load}
+        />
+      </div>
+
+      {/* Pre-buy inspection (0067): automotive only for now. */}
+      {serviceLine !== 'aviation' && <JobInspection jobId={id} />}
 
       {/* Notes + danger zone */}
       {job.notes && (

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import type { Job } from '@/lib/types'
 import {
   actualHours,
+  clockStartPatch,
+  clockStopPatch,
   efficiencyColor,
   efficiencyPct,
   formatClock,
@@ -55,13 +57,12 @@ export default function JobTimeCard({
 
   function start() {
     if (busy || running) return
-    run({ clock_started_at: new Date().toISOString(), actual_hours: job.actual_hours ?? 0 })
+    run(clockStartPatch(job))
   }
 
   function stop() {
     if (busy || !running) return
-    const total = roundHours(Number(job.actual_hours ?? 0) + runningHours(job.clock_started_at))
-    run({ actual_hours: total, clock_started_at: null })
+    run(clockStopPatch(job))
   }
 
   function openEditor() {

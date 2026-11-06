@@ -649,7 +649,7 @@ export default function JobForm({ job }: { job?: Job }) {
 
       {error && <p style={{ color: 'var(--red)' }}>{error}</p>}
 
-      <div className="flex gap-2">
+      <div className="save-bar flex gap-2">
         <button className="btn btn-primary flex-1" disabled={busy} type="submit">
           {busy ? 'Saving…' : editing ? 'Save changes' : 'Create job'}
         </button>

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { QUICK_CHECK } from '@/lib/inspection-templates'
@@ -12,22 +12,14 @@ import { inspectionErrorWords, startInspection, VERDICT_LABEL, type Inspection }
  * (the owner sets the hours on the job, so the price stays his to adjust);
  * the report itself lives on /inspections/[id] and is shared by its own link,
  * which the invoice also carries once the report is final.
+ *
+ * Shown only once a job has a report (2026-11 phone sweep): an empty card on
+ * every car job cost a third of a screen for something done now and then.
+ * Starting one is <StartQuickCheck /> under the job's "More" buttons.
  */
-export default function JobInspection({ jobId, customerName }: { jobId: string; customerName: string | null }) {
-  const router = useRouter()
+export default function JobInspection({ jobId }: { jobId: string }) {
   const [rows, setRows] = useState<Inspection[] | null>(null)
-  const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('inspections')
-      .select('*')
-      .eq('job_id', jobId)
-      .order('created_at', { ascending: false })
-    // Before 0067 the table does not exist: show nothing rather than an error.
-    setRows(error ? [] : ((data as Inspection[]) ?? []))
-  }, [jobId])
 
   useEffect(() => {
     let alive = true
@@ -37,25 +29,13 @@ export default function JobInspection({ jobId, customerName }: { jobId: string; 
       .eq('job_id', jobId)
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
+        // Before 0067 the table does not exist: show nothing rather than an error.
         if (alive) setRows(error ? [] : ((data as Inspection[]) ?? []))
       })
     return () => {
       alive = false
     }
   }, [jobId])
-
-  async function start() {
-    setBusy(true)
-    setMsg(null)
-    try {
-      const id = await startInspection(jobId, 'quick', customerName)
-      router.push(`/inspections/${id}`)
-    } catch (e) {
-      setMsg(inspectionErrorWords(e, 'start the inspection'))
-      setBusy(false)
-      await load()
-    }
-  }
 
   async function copyLink(token: string) {
     const url = `${window.location.origin}/r/${token}`
@@ -72,6 +52,7 @@ export default function JobInspection({ jobId, customerName }: { jobId: string; 
 
   if (rows === null) return null
   const live = rows.filter((r) => r.status !== 'void')
+  if (live.length === 0 && !msg) return null
 
   return (
     <div className="card space-y-2">
@@ -98,22 +79,52 @@ export default function JobInspection({ jobId, customerName }: { jobId: string; 
           </div>
         </div>
       ))}
-      {live.length === 0 && (
-        <>
-          <p className="text-sm" style={{ color: 'var(--text2)' }}>
-            A {QUICK_CHECK.name} is about {QUICK_CHECK.hours} hr of checks. The fee is this job&apos;s labor, so
-            set the hours under Labor; the report gets its own link and shows on the invoice.
-          </p>
-          <button className="btn btn-primary" disabled={busy} onClick={start}>
-            {busy ? 'Starting…' : 'Start a Quick Check'}
-          </button>
-        </>
-      )}
       {msg && (
         <p className="text-sm" style={{ color: msg.includes('✓') ? 'var(--green)' : 'var(--red)' }} role="status">
           {msg}
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * "Start a Quick Check" for the job's More buttons. The fee is the job's
+ * labor (set under Labor); the report gets its own link and shows on the
+ * invoice once final.
+ */
+export function StartQuickCheck({ jobId, customerName }: { jobId: string; customerName: string | null }) {
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  async function start() {
+    setBusy(true)
+    setMsg(null)
+    try {
+      const id = await startInspection(jobId, 'quick', customerName)
+      router.push(`/inspections/${id}`)
+    } catch (e) {
+      setMsg(inspectionErrorWords(e, 'start the inspection'))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <button
+        className="btn btn-sm"
+        disabled={busy}
+        onClick={start}
+        title={`About ${QUICK_CHECK.hours} hr of checks; the fee is this job's labor`}
+      >
+        {busy ? 'Starting…' : `Start a ${QUICK_CHECK.name}`}
+      </button>
+      {msg && (
+        <p className="w-full text-sm" style={{ color: 'var(--red)' }} role="status">
+          {msg}
+        </p>
+      )}
+    </>
   )
 }

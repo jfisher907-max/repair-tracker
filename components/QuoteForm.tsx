@@ -1096,7 +1096,7 @@ export default function QuoteForm({
       </div>
 
       {error && <p style={{ color: 'var(--red)' }}>{error}</p>}
-      <div className="flex gap-2 pb-4">
+      <div className="save-bar flex gap-2">
         <button className="btn btn-primary flex-1" disabled={busy} onClick={save}>
           {busy ? 'Saving…' : editing ? 'Save changes' : 'Create quote'}
         </button>

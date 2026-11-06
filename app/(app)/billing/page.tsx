@@ -93,42 +93,6 @@ export default function BillingPage() {
         <Link href="/reports" className="btn btn-primary">Reports</Link>
       </div>
 
-      <section className="space-y-2" aria-labelledby="finances-heading">
-        <div className="flex items-center justify-between gap-2">
-          <h2 id="finances-heading" className="label !mb-0">Finances</h2>
-          <label className="sr-only" htmlFor="billing-year">
-            Year
-          </label>
-          <select
-            id="billing-year"
-            className="select !w-auto"
-            value={String(year)}
-            onChange={(e) => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-          >
-            <option value="all">All time</option>
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-        {error ? (
-          <p style={{ color: 'var(--red)' }}>Couldn&apos;t load the finances: {error}</p>
-        ) : !f ? (
-          <SkeletonList rows={3} />
-        ) : (
-          <section className="card" aria-label="The money ledger">
-            <MoneyLedger
-              f={f}
-              year={year}
-              card={false}
-              taxPaid={taxFilings === undefined ? undefined : taxFilings === null ? null : salesTaxPaid(taxFilings, year)}
-            />
-          </section>
-        )}
-      </section>
-
       {/* Work done, nothing sent: the first thing billing has to do. Same
           definition as the dashboard's Billing door (lib/finances jobsToInvoice). */}
       {toInvoice && toInvoice.length > 0 && (
@@ -192,6 +156,45 @@ export default function BillingPage() {
               </SwipeableRow>
             ))}
           </div>
+        )}
+      </section>
+
+      {/* Finances under the invoices (2026-11 phone sweep): the invoice list
+          is what gets opened here, and it started 2.4 phone screens down below
+          the ledger. The same ledger leads the dashboard. */}
+      <section className="space-y-2" aria-labelledby="finances-heading">
+        <div className="flex items-center justify-between gap-2">
+          <h2 id="finances-heading" className="label !mb-0">Finances</h2>
+          <label className="sr-only" htmlFor="billing-year">
+            Year
+          </label>
+          <select
+            id="billing-year"
+            className="select !w-auto"
+            value={String(year)}
+            onChange={(e) => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+          >
+            <option value="all">All time</option>
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+        </div>
+        {error ? (
+          <p style={{ color: 'var(--red)' }}>Couldn&apos;t load the finances: {error}</p>
+        ) : !f ? (
+          <SkeletonList rows={3} />
+        ) : (
+          <section className="card" aria-label="The money ledger">
+            <MoneyLedger
+              f={f}
+              year={year}
+              card={false}
+              taxPaid={taxFilings === undefined ? undefined : taxFilings === null ? null : salesTaxPaid(taxFilings, year)}
+            />
+          </section>
         )}
       </section>
     </div>

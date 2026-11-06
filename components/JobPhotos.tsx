@@ -227,87 +227,49 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
 
       {photos && photos.length === 0 && (
         <p className="text-sm" style={{ color: 'var(--text3)' }}>
-          No photos yet. Shoot the fault before you fix it and the finished work after — it sells
-          the job, and it settles arguments about what the car looked like when it arrived.
+          No photos yet. Shoot the fault before, the finished work after.
         </p>
       )}
 
       {photos && photos.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        // Small tiles (2026-11 phone sweep): three photos with their caption
+        // and share buttons took a whole phone screen above the money. The
+        // caption, Quote / Invoice and delete now live in the viewer a tap
+        // away; a tile shows only whether the customer will see it.
+        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
           {photos.map((p) => (
-            <div
+            <button
               key={p.id}
-              className="overflow-hidden rounded-lg border"
+              className="relative block overflow-hidden rounded-lg border"
               style={{ borderColor: 'var(--border)', background: 'var(--bg2)' }}
+              onClick={() => {
+                setViewing(p)
+                // A tile with no link means signing failed or expired — the
+                // tap is the retry, never a dead end.
+                if (!signedRef.current[p.storage_path]) load()
+              }}
+              aria-label={`${p.caption || 'Open photo'}${p.show_on_quote ? ', on the quote' : ''}${p.show_on_invoice ? ', on the invoice' : ''}`}
             >
-              <button
-                className="block w-full"
-                onClick={() => {
-                  setViewing(p)
-                  // A tile with no link means signing failed or expired — the
-                  // tap is the retry, never a dead end.
-                  if (!signedRef.current[p.storage_path]) load()
-                }}
-                aria-label={p.caption || 'Open photo'}
-              >
-                {urls[p.storage_path] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={urls[p.storage_path]}
-                    alt={p.caption || 'Job photo'}
-                    className="aspect-square w-full object-cover"
-                    onError={() => imgFailed(p)}
-                  />
-                ) : (
-                  <span className="flex aspect-square items-center justify-center text-xs" style={{ color: 'var(--text3)' }}>photo</span>
-                )}
-              </button>
-              <div className="space-y-1 p-1.5">
-                <input
-                  className="input !min-h-[44px]" style={{ fontSize: 16 }}
-                  placeholder="Caption"
-                  defaultValue={p.caption ?? ''}
-                  onBlur={(e) => {
-                    if (e.target.value.trim() !== (p.caption ?? '')) setCaption(p, e.target.value)
-                  }}
+              {urls[p.storage_path] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={urls[p.storage_path]}
+                  alt={p.caption || 'Job photo'}
+                  className="aspect-square w-full object-cover"
+                  onError={() => imgFailed(p)}
                 />
-                <div className="flex items-center justify-between gap-1">
-                  <button
-                    className="btn btn-sm !px-1.5 !text-[0.65rem]"
-                    aria-pressed={p.show_on_quote}
-                    style={
-                      p.show_on_quote
-                        ? { borderColor: 'var(--status-ok-solid)', color: 'var(--status-ok-fg)' }
-                        : undefined
-                    }
-                    onClick={() => toggleShare(p, 'show_on_quote')}
-                    title="Show this photo on the customer's quote"
-                  >
-                    {p.show_on_quote ? '✓ ' : ''}Quote
-                  </button>
-                  <button
-                    className="btn btn-sm !px-1.5 !text-[0.65rem]"
-                    aria-pressed={p.show_on_invoice}
-                    style={
-                      p.show_on_invoice
-                        ? { borderColor: 'var(--status-ok-solid)', color: 'var(--status-ok-fg)' }
-                        : undefined
-                    }
-                    onClick={() => toggleShare(p, 'show_on_invoice')}
-                    title="Attach this photo to the customer's invoice"
-                  >
-                    {p.show_on_invoice ? '✓ ' : ''}Invoice
-                  </button>
-                  <button
-                    className="btn btn-sm btn-danger !px-1.5"
-                    aria-label="Delete photo"
-                    onClick={() => remove(p)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-            </div>
+              ) : (
+                <span className="flex aspect-square items-center justify-center text-xs" style={{ color: 'var(--text3)' }}>photo</span>
+              )}
+              {(p.show_on_quote || p.show_on_invoice) && (
+                <span
+                  className="absolute bottom-1 left-1 rounded px-1 text-[0.6rem] font-semibold"
+                  style={{ background: 'rgba(6,8,12,0.78)', color: 'var(--status-ok-fg)' }}
+                >
+                  {[p.show_on_quote && 'Q', p.show_on_invoice && 'Inv'].filter(Boolean).join(' · ')}
+                </span>
+              )}
+            </button>
           ))}
         </div>
       )}
@@ -315,7 +277,12 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
       {viewing && (
         <div
           className="fixed inset-0 z-50 flex flex-col gap-2 p-3"
-          style={{ background: 'rgba(6,8,12,0.94)' }}
+          style={{
+            background: 'rgba(6,8,12,0.94)',
+            // Clear the iPhone notch and home bar: the viewer's buttons sit at its edges.
+            paddingTop: 'calc(0.75rem + env(safe-area-inset-top))',
+            paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
+          }}
           role="dialog"
           aria-modal="true"
         >
@@ -344,6 +311,54 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
                 : 'Loading photo…'}
             </div>
           )}
+          {/* The photo's own controls, moved here off the tile. Read from the
+              list, not the snapshot taken on open, so a toggle shows at once. */}
+          {(() => {
+            const p = photos?.find((x) => x.id === viewing.id) ?? viewing
+            return (
+              <div className="space-y-2 pb-[env(safe-area-inset-bottom)]">
+                <input
+                  key={p.id}
+                  className="input !min-h-[44px]"
+                  style={{ fontSize: 16 }}
+                  placeholder="Caption"
+                  defaultValue={p.caption ?? ''}
+                  onBlur={(e) => {
+                    if (e.target.value.trim() !== (p.caption ?? '')) setCaption(p, e.target.value)
+                  }}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    className="btn flex-1 !min-h-[44px]"
+                    aria-pressed={p.show_on_quote}
+                    style={
+                      p.show_on_quote
+                        ? { borderColor: 'var(--status-ok-solid)', color: 'var(--status-ok-fg)' }
+                        : undefined
+                    }
+                    onClick={() => toggleShare(p, 'show_on_quote')}
+                  >
+                    {p.show_on_quote ? '✓ On the quote' : 'Show on quote'}
+                  </button>
+                  <button
+                    className="btn flex-1 !min-h-[44px]"
+                    aria-pressed={p.show_on_invoice}
+                    style={
+                      p.show_on_invoice
+                        ? { borderColor: 'var(--status-ok-solid)', color: 'var(--status-ok-fg)' }
+                        : undefined
+                    }
+                    onClick={() => toggleShare(p, 'show_on_invoice')}
+                  >
+                    {p.show_on_invoice ? '✓ On the invoice' : 'Show on invoice'}
+                  </button>
+                  <button className="btn btn-danger !min-h-[44px] !px-3" aria-label="Delete photo" onClick={() => remove(p)}>
+                    ✕
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )}
     </div>

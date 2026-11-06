@@ -694,10 +694,14 @@ a.card:focus-visible {
 .board > *, .board-tiles > * { min-width: 0; }
 .board-tiles { display: contents; }
 .board-head, .lane, .ledger-card, .strip, .tile--wide, .board-chart, .recent, .doors { grid-column: 1 / -1; }
-/* Phone source order: head, lane, cash profit, ledger, unpaid, the rest of
-   the tiles, strip, chart, recent, doors. "How am I doing" before "how much
-   did I do". */
+/* Phone source order: head, doors, lane, cash profit, ledger, unpaid, the
+   rest of the tiles, strip, chart, recent. "How am I doing" before "how much
+   did I do". The doors (New Quote, Reports, Expenses, Taxes) sat last, 4.7
+   phone screens down; they are pressed, not read, so they ride under the
+   title (2026-11 phone sweep). Same order value as the head, which comes
+   first in the source. */
 .board-head { order: 0; }
+.doors { order: 0; }
 .lane, .cal { order: 1; }
 .board-tiles > * { order: 4; }
 .board-tiles > .tile--lead { order: 2; }
@@ -706,7 +710,6 @@ a.card:focus-visible {
 .strip { order: 5; }
 .board-chart { order: 6; }
 .recent { order: 7; }
-.doors { order: 8; }
 /* The board is the page's one arrival; the shell's per-child rise must not
    run a second one on top of it. */
 .page-anim > .board { animation: none; }
@@ -988,8 +991,8 @@ a.card:focus-visible {
 .recent-item { display: contents; }
 
 /* Phone-only doors to the pages the tab bar does not reach. */
-.doors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.doors .btn { padding: 0.5rem 0.4rem; font-size: 0.9rem; }
+.doors { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.doors .btn { padding: 0.5rem 0.25rem; font-size: 0.85rem; white-space: nowrap; }
 
 /* Desktop board: four columns, everything on one screen beside the rail. */
 /* JobRow's !py-3 is an important declaration inside Tailwind's utilities layer,
@@ -1320,8 +1323,31 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
-/* Each direct child of a page fades up, lightly staggered — the "arrival" feel. */
-.page-anim > * { animation: rise-in 0.38s var(--ease) both; }
+/* A long form's Create / Save row stays on screen while the form scrolls
+   (2026-11 phone sweep: Create job sat 2.5 phone screens down, Create quote
+   2.9). On a phone it rides just above the tab bar; on the desktop, at the
+   bottom of the window. It sticks only within its own form. */
+.save-bar {
+  position: sticky;
+  bottom: calc(57px + env(safe-area-inset-bottom));
+  z-index: 30;
+  margin-inline: -1rem;
+  padding: 0.6rem 1rem;
+  background: var(--surface-page);
+  border-top: 1px solid var(--border-hairline);
+}
+@media (min-width: 640px) {
+  .save-bar { bottom: 0; margin-inline: -1.5rem; padding-inline: 1.5rem; }
+}
+@media print { .save-bar { display: none; } }
+
+/* Each direct child of a page fades up, lightly staggered — the "arrival" feel.
+   `backwards`, not `both`: a held final keyframe leaves an identity transform
+   on the section, and any transform makes the section the containing block for
+   position:fixed inside it. The job photo viewer (fixed inset-0) then sized to
+   the 2,700px column, not the screen, and its controls landed off screen
+   (2026-11 phone sweep). The end state is opacity 1 / no transform anyway. */
+.page-anim > * { animation: rise-in 0.38s var(--ease) backwards; }
 .page-anim > *:nth-child(2) { animation-delay: 45ms; }
 .page-anim > *:nth-child(3) { animation-delay: 90ms; }
 .page-anim > *:nth-child(4) { animation-delay: 135ms; }

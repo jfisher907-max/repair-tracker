@@ -28,6 +28,19 @@ export function actualHours(job: TimeFields, now = Date.now()): number | null {
   return Number(job.actual_hours ?? 0) + running
 }
 
+/** What Start writes: the clock runs from now; an untracked job starts at 0 logged. */
+export function clockStartPatch(job: TimeFields): { clock_started_at: string; actual_hours: number } {
+  return { clock_started_at: new Date().toISOString(), actual_hours: Number(job.actual_hours ?? 0) }
+}
+
+/** What Stop writes: the running time is added to the logged hours and the clock clears. */
+export function clockStopPatch(job: TimeFields): { actual_hours: number; clock_started_at: null } {
+  return {
+    actual_hours: roundHours(Number(job.actual_hours ?? 0) + runningHours(job.clock_started_at)),
+    clock_started_at: null,
+  }
+}
+
 /** Rounded to the hundredth the column stores. */
 export function roundHours(h: number): number {
   return Math.round(h * 100) / 100
