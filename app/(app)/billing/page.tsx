@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
@@ -30,12 +31,35 @@ function overdueDays(inv: Invoice): number {
   )
 }
 
+type Tab = 'toinvoice' | 'invoices' | 'finances'
+
 /**
  * Billing is invoices plus the finances — quotes moved to /jobs?tab=quotes,
- * where the work they describe lives. An old ?tab=invoices link still lands
- * here; the param is simply ignored.
+ * where the work they describe lives.
+ *
+ * The three sections are segments rather than one long scroll (owner,
+ * 2026-11-05). ?tab= carries which one, the same way /jobs does, so a link can
+ * point at one and the back button steps between them — and the old
+ * ?tab=invoices links that this page used to ignore now land where they say.
+ *
+ * Invoices is the default: the phone sweep found the invoice list is what
+ * actually gets opened here, which is why it had just been moved above the
+ * ledger.
  */
 export default function BillingPage() {
+  return (
+    <Suspense fallback={<SkeletonList rows={4} />}>
+      <BillingInner />
+    </Suspense>
+  )
+}
+
+function BillingInner() {
+  const params = useSearchParams()
+  const tabParam = params.get('tab')
+  const tab: Tab =
+    tabParam === 'toinvoice' ? 'toinvoice' : tabParam === 'finances' ? 'finances' : 'invoices'
+
   const [invoices, setInvoices] = useState<Invoice[] | null>(null)
   const [rows, setRows] = useState<FinanceRows | null>(null)
   const [year, setYear] = useState<'all' | number>('all')
@@ -93,25 +117,63 @@ export default function BillingPage() {
         <Link href="/reports" className="btn btn-primary">Reports</Link>
       </div>
 
+      {/* Links and aria-current, not a tablist: the URL is the section, so
+          there is no tabpanel or arrow-key switching to promise. Same pattern
+          as the Jobs / Quotes switch. */}
+      <nav className="seg-track" aria-label="Billing section">
+        <Link
+          href="/billing?tab=toinvoice"
+          aria-current={tab === 'toinvoice' ? 'page' : undefined}
+          className={`seg-item ${tab === 'toinvoice' ? 'on' : ''}`}
+        >
+          To invoice{toInvoice ? ` (${toInvoice.length})` : ''}
+        </Link>
+        <Link
+          href="/billing?tab=invoices"
+          aria-current={tab === 'invoices' ? 'page' : undefined}
+          className={`seg-item ${tab === 'invoices' ? 'on' : ''}`}
+        >
+          Invoices{invoices ? ` (${invoices.length})` : ''}
+        </Link>
+        <Link
+          href="/billing?tab=finances"
+          aria-current={tab === 'finances' ? 'page' : undefined}
+          className={`seg-item ${tab === 'finances' ? 'on' : ''}`}
+        >
+          Finances
+        </Link>
+      </nav>
+
       {/* Work done, nothing sent: the first thing billing has to do. Same
-          definition as the dashboard's Billing door (lib/finances jobsToInvoice). */}
-      {toInvoice && toInvoice.length > 0 && (
+          definition as the dashboard's Billing door (lib/finances jobsToInvoice).
+          Unlike the other two this section can be legitimately empty, so it
+          says so rather than showing a bare heading. */}
+      {tab === 'toinvoice' && (
         <section className="space-y-2" aria-labelledby="to-invoice-heading">
           <h2 id="to-invoice-heading" className="label !mb-0">
-            To invoice ({toInvoice.length})
+            To invoice{toInvoice ? ` (${toInvoice.length})` : ''}
           </h2>
           <p className="text-sm" style={{ color: 'var(--text2)' }}>
             Jobs marked done with no invoice yet. Open one and tap Create invoice. Scheduled and
             in-progress work is not billed yet, so it is not here.
           </p>
-          <div className="space-y-2">
-            {toInvoice.map((it) => (
-              <JobRow key={it.job.id} item={it} />
-            ))}
-          </div>
+          {!toInvoice ? (
+            <SkeletonList rows={2} />
+          ) : toInvoice.length === 0 ? (
+            <div className="card text-center" style={{ color: 'var(--text2)' }}>
+              Nothing waiting — every job marked done has an invoice.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {toInvoice.map((it) => (
+                <JobRow key={it.job.id} item={it} />
+              ))}
+            </div>
+          )}
         </section>
       )}
 
+      {tab === 'invoices' && (
       <section className="space-y-2" aria-labelledby="invoices-heading">
         <h2 id="invoices-heading" className="label !mb-0">
           Invoices{invoices ? ` (${invoices.length})` : ''}
@@ -158,10 +220,13 @@ export default function BillingPage() {
           </div>
         )}
       </section>
+      )}
 
-      {/* Finances under the invoices (2026-11 phone sweep): the invoice list
-          is what gets opened here, and it started 2.4 phone screens down below
-          the ledger. The same ledger leads the dashboard. */}
+      {/* The same ledger that leads the dashboard. It is its own section now
+          rather than a scroll below the invoices (which is where the 2026-11
+          phone sweep had just moved it, for the same reason Invoices is the
+          default segment). */}
+      {tab === 'finances' && (
       <section className="space-y-2" aria-labelledby="finances-heading">
         <div className="flex items-center justify-between gap-2">
           <h2 id="finances-heading" className="label !mb-0">Finances</h2>
@@ -197,6 +262,7 @@ export default function BillingPage() {
           </section>
         )}
       </section>
+      )}
     </div>
   )
 }
