@@ -559,7 +559,11 @@ a.card:focus-visible {
    matched on the link instead of the card. */
 .card-hit {
   position: absolute;
-  inset: 0;
+  /* inset resolves against the card's PADDING box, which leaves the 1px border
+     ring untappable and the corner radius a pixel too round. -1px is the border
+     box exactly. A status-edged card keeps a 2px strip of its thicker left
+     edge uncovered; that edge is decoration. */
+  inset: -1px;
   z-index: 0;
   border-radius: inherit;
 }

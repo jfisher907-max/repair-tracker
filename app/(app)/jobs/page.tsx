@@ -244,12 +244,14 @@ function JobsInner() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            {/* Three controls across a phone leaves 98px each: the status
-                option clipped to “All statu” and the dates to “mm/dd”.
-                Status takes its own row until there is width for three. */}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {/* Three across left 98px each: the status option clipped to
+                “All statu” (90px short) and both dates to “mm/dd” (2px
+                short). Three only fit above a ~893px viewport once the 232px
+                sidebar is out, so this is two rows at every width rather than
+                a breakpoint derived from the shell. */}
+            <div className="grid grid-cols-2 gap-2">
               <select
-                className="select col-span-2 min-w-0 sm:col-span-1"
+                className="select col-span-2 min-w-0"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as JobFilter)}
                 aria-label="Job status"
