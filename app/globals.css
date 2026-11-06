@@ -552,6 +552,31 @@ a.card:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
 }
+/* A whole-card link that is a SIBLING of the card's content instead of its
+   parent. An <a> may not contain another <a>, so a card that needs both a
+   card-wide target and its own tel: link stretches the card link across the
+   card and lets the tel: link ride above it. The states below mirror a.card's,
+   matched on the link instead of the card. */
+.card-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+}
+.card:has(> .card-hit:hover) {
+  background-color: var(--gs-fill-raised);
+  border-color: var(--gs-line-strong);
+  box-shadow: var(--gs-shadow-raised);
+}
+.card:has(> .card-hit:active) {
+  transform: scale(var(--press-scale));
+}
+.card:has(> .card-hit:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.card-hit:focus-visible {
+  outline: none;
+}
 
 /* ---------- Controls ---------- */
 

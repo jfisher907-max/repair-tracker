@@ -234,6 +234,7 @@ function Report() {
             .from('vehicles')
             .select('*')
             .eq('customer_id', customerId)
+            .is('deleted_at', null)
           vehicles = (vs as Vehicle[]) ?? []
         } else {
           throw new Error('Missing ?customer=, ?vehicle=, or ?job= parameter')

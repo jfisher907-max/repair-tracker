@@ -244,9 +244,12 @@ function JobsInner() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <div className="grid grid-cols-3 gap-2">
+            {/* Three controls across a phone leaves 98px each: the status
+                option clipped to “All statu” and the dates to “mm/dd”.
+                Status takes its own row until there is width for three. */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <select
-                className="select"
+                className="select col-span-2 min-w-0 sm:col-span-1"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as JobFilter)}
                 aria-label="Job status"
@@ -258,8 +261,8 @@ function JobsInner() {
                 <option value="partial">Partial</option>
                 <option value="paid">Paid</option>
               </select>
-              <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
-              <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
+              <input className="input min-w-0" type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
+              <input className="input min-w-0" type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
             </div>
           </div>
 

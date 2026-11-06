@@ -175,11 +175,19 @@ export default function CustomersPage() {
           {filtered.map((c) => {
             const vehicles = vehiclesByCustomer.get(c.id) ?? []
             return (
-              <Link
+              <div
                 key={c.id}
-                href={`/customers/${c.id}`}
-                className="card flex items-center justify-between !py-3 hover:brightness-110"
+                className="card relative flex items-center justify-between gap-2 !py-3"
               >
+                {/* The card link is stretched across the card rather than
+                    wrapping it: an <a> cannot legally contain the tel: <a>
+                    below, and that nesting made the server HTML and the
+                    hydrated DOM disagree. */}
+                <Link
+                  href={`/customers/${c.id}`}
+                  aria-label={`Open ${c.name}`}
+                  className="card-hit"
+                />
                 <div className="min-w-0">
                   <div className="font-semibold">{c.name}</div>
                   <div className="truncate text-sm" style={{ color: 'var(--text2)' }}>
@@ -190,17 +198,17 @@ export default function CustomersPage() {
                 </div>
                 {c.phone && (
                   // Tappable straight from the list — finding a number was
-                  // costing a trip through the detail page.
+                  // costing a trip through the detail page. It rides above the
+                  // stretched card link and never breaks mid-number.
                   <a
                     href={`tel:${c.phone.replace(/[^\d+]/g, '')}`}
-                    className="flex min-h-[44px] items-center px-1 text-sm"
+                    className="relative z-[1] flex min-h-[44px] shrink-0 items-center whitespace-nowrap px-1 text-sm"
                     style={{ color: 'var(--blue)' }}
-                    onClick={(e) => e.stopPropagation()}
                   >
                     {c.phone}
                   </a>
                 )}
-              </Link>
+              </div>
             )
           })}
         </div>
