@@ -619,7 +619,8 @@ export default function ScanReceiptPage({
     <div className={`mx-auto space-y-4 ${phase === 'review' ? 'max-w-5xl' : 'max-w-3xl'}`}>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl">{resumeId ? 'Finish receipt' : 'Scan receipt'}</h1>
-        <Link href={`/jobs/${jobId}`} className="btn btn-sm">← Back to job</Link>
+        {/* Phone: the floating back button top-left (AppShell). */}
+        <Link href={`/jobs/${jobId}`} className="btn btn-sm hidden sm:inline-flex">← Back to job</Link>
       </div>
 
       {phase === 'pick' && (

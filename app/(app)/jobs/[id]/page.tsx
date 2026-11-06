@@ -1159,7 +1159,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 : job.odometer_miles != null && ` · ${formatMiles(job.odometer_miles)} mi`}
             </div>
           </div>
-          <Link href={`/jobs/${id}/edit`} className="btn btn-sm">Edit</Link>
+          {/* Phone: this is the floating Edit button in the top-right corner
+              (components/AppShell.tsx). Here for the desktop, which has no
+              floating chrome. */}
+          <Link href={`/jobs/${id}/edit`} className="btn btn-sm hidden sm:inline-flex">Edit</Link>
         </div>
 
         {/* Stage (0043): scheduled = booked, not started · in progress = on
@@ -1169,17 +1172,16 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           <div
             role="group"
             aria-label="Job stage"
-            className="grid min-w-0 flex-1 gap-2"
-            style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', flexBasis: 260 }}
+            className="seg-track min-w-0 flex-1"
+            style={{ flexBasis: 260 }}
           >
             {STAGES.map((s) => (
               <button
                 key={s.value}
                 type="button"
-                className="btn btn-sm !min-h-[44px]"
+                className={`seg-item ${stage === s.value ? 'on' : ''}`}
                 aria-pressed={stage === s.value}
                 disabled={stageBusy || (stageLocked && s.value !== stage)}
-                style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
                 onClick={() => setStage(s.value)}
               >
                 {s.label}

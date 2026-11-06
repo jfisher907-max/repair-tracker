@@ -304,7 +304,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       <div className="no-print space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Link href="/billing" className="btn btn-sm">← Billing</Link>
+            {/* Phone: the floating back button top-left (AppShell). */}
+            <Link href="/billing" className="btn btn-sm hidden sm:inline-flex">← Billing</Link>
             <Link href={`/jobs/${invoice.job_id}`} className="btn btn-sm">Job →</Link>
           </div>
           <span className={statusChipClass(invoice.status)}>{invoice.status}</span>

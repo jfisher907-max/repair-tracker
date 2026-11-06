@@ -13,15 +13,20 @@ const LINKS = [
 export default function HangarSubNav() {
   const pathname = usePathname()
   return (
-    <div className="mb-4 flex gap-2 sm:hidden">
+    <nav className="seg-track mb-4 sm:hidden" aria-label="Hangar section">
       {LINKS.map((l) => {
         const active = l.href === '/hangar' ? pathname === '/hangar' : pathname.startsWith(l.href)
         return (
-          <Link key={l.href} href={l.href} className={`btn btn-sm flex-1 justify-center ${active ? 'btn-primary' : ''}`}>
+          <Link
+            key={l.href}
+            href={l.href}
+            aria-current={active ? 'page' : undefined}
+            className={`seg-item ${active ? 'on' : ''}`}
+          >
             {l.label}
           </Link>
         )
       })}
-    </div>
+    </nav>
   )
 }

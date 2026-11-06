@@ -143,9 +143,6 @@ function JobsInner() {
 
   if (error) return <p style={{ color: 'var(--red)' }}>Couldn&apos;t load: {error}</p>
 
-  const segStyle = (active: boolean) =>
-    active ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -161,20 +158,18 @@ function JobsInner() {
           item and a shared link both land on the right list. Plain navigation
           (aria-current), not a tablist — there is no tabpanel or arrow-key
           switching to promise. */}
-      <nav className="flex gap-2" aria-label="Jobs or quotes">
+      <nav className="seg-track" aria-label="Jobs or quotes">
         <Link
           href="/jobs?tab=jobs"
           aria-current={tab === 'jobs' ? 'page' : undefined}
-          className="btn btn-sm flex-1"
-          style={segStyle(tab === 'jobs')}
+          className={`seg-item ${tab === 'jobs' ? 'on' : ''}`}
         >
           Jobs{items ? ` (${items.length})` : ''}
         </Link>
         <Link
           href="/jobs?tab=quotes"
           aria-current={tab === 'quotes' ? 'page' : undefined}
-          className="btn btn-sm flex-1"
-          style={segStyle(tab === 'quotes')}
+          className={`seg-item ${tab === 'quotes' ? 'on' : ''}`}
         >
           Quotes{quotes ? ` (${quotes.length})` : ''}
         </Link>

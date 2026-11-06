@@ -20,10 +20,18 @@
   --night-600: #2e3746;
   --night-500: #3e4859;
 
-  /* --- Ink: text on night --- */
+  /* --- Ink: text on night ---
+     GLASS (2026-11-05): the owner shell's surfaces are translucent over a lit
+     ground, so every secondary tier moved one step up the ramp. Measured
+     against the LIGHTEST panel the glass can produce — the amber light's peak
+     with blue bleeding in, #38393a — ink-400 reads 3.79:1 and fails the 11px
+     micro-label; ink-300 reads 5.66:1. ink-350 exists because the old
+     four-tier ramp has no room left: it is the faintest shade that still
+     clears 4.5:1 there (4.66:1). Numbers in docs/design-system/glass.md. */
   --ink-100: #f2f4f8;
   --ink-200: #d7dce5;
   --ink-300: #aeb6c4;
+  --ink-350: #9da5b6;
   --ink-400: #8b94a7;
   --ink-500: #5f6779;
   --ink-600: #454d5e;
@@ -45,9 +53,14 @@
   --mint-line: rgba(76, 217, 123, 0.45);
   --ember-500: #ef6f6c;
   --ember-400: #f58e8b;
+  /* ember-300 / sky-400: the TEXT steps. On glass, ember-400 on the ember
+     chip tint reads 4.30:1 and sky-500 reads 4.46:1 — both just under. The
+     500s stay for edges, dots and bars (non-text, 3:1). */
+  --ember-300: #f8a19e;
   --ember-tint: rgba(239, 111, 108, 0.12);
   --ember-line: rgba(239, 111, 108, 0.45);
   --sky-500: #5ca8de;
+  --sky-400: #8cc3ea;
   --sky-tint: rgba(92, 168, 222, 0.12);
 
   /* --- Semantic surfaces (dark-first) --- */
@@ -63,14 +76,15 @@
   /* --- Semantic text --- */
   --text-heading: var(--ink-100);
   --text-body: var(--ink-200);
-  --text-muted: var(--ink-400);
-  /* NON-TEXT ONLY (status edges, decoration): ink-500 measures under 4.5:1
-     on every dark surface, so it must never carry copy. Use --text-muted. */
-  --text-faint: var(--ink-500);
+  --text-muted: var(--ink-300);
+  /* The faintest tier that still carries copy ON GLASS (4.66:1). ink-500 is
+     NON-TEXT ONLY and has no token of its own any more: it measured under
+     4.5:1 even on the flat card, and on glass it reads 1.79:1. */
+  --text-faint: var(--ink-350);
   --text-link: var(--gold-500);
   --text-on-accent: var(--gold-ink);
   --text-money-in: var(--mint-500);
-  --text-money-owed: var(--ember-500);
+  --text-money-owed: var(--ember-400);
 
   /* --- Semantic lines --- */
   --border-hairline: var(--night-800);
@@ -86,13 +100,13 @@
   --status-wait-fg: var(--gold-400);
   --status-wait-bg: var(--gold-tint);
   --status-wait-solid: var(--gold-500);
-  --status-stop-fg: var(--ember-400);
+  --status-stop-fg: var(--ember-300);
   --status-stop-bg: var(--ember-tint);
   --status-stop-solid: var(--ember-500);
-  --status-info-fg: var(--sky-500);
+  --status-info-fg: var(--sky-400);
   --status-info-bg: var(--sky-tint);
   --status-info-solid: var(--sky-500);
-  --status-idle-fg: var(--ink-400);
+  --status-idle-fg: var(--ink-300);
   --status-idle-bg: rgba(255, 255, 255, 0.06);
   --status-idle-solid: var(--ink-500);
 
@@ -112,6 +126,9 @@
      after Tailwind's silently resized every rounded-* class in the app
      (rounded-lg 8px -> 18px, rounded-md 6px -> 14px) and inverted the scale
      against the undefined rounded-xl. Never reuse the bare names. */
+  /* The paper scale. The owner shell widens it (see .app-frame) because a
+     frosted panel needs a corner the blur can turn; the customer's quote,
+     invoice and inspection keep these. */
   --wnt-radius-xs: 6px;
   --wnt-radius-sm: 10px;
   --wnt-radius-md: 14px;
@@ -124,6 +141,48 @@
   --shadow-inset-field: inset 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-glow-gold: 0 0 0 1px var(--gold-line), 0 4px 16px rgba(240, 168, 50, 0.15);
   --scrim-overlay: rgba(4, 6, 10, 0.66);
+
+  /* =====================================================================
+     Liquid Glass — the SURFACE CONTRACT (--gs-*)
+     ---------------------------------------------------------------------
+     Every shared primitive (.card, .btn, .input, .chip, .skeleton…) paints
+     itself out of these variables and nothing else. Here in :root they hold
+     the FLAT values, so the customer-facing surfaces that share those
+     primitives — the public quote and invoice pages, the inspection report,
+     the landing page — are untouched by any of this, and so is print.
+
+     `.app-frame` — the owner shell, and only the owner shell — rebinds them
+     to glass. One opt-in, no scoped selectors, no specificity to unpick, and
+     the reduced-transparency / no-backdrop-filter / print fallbacks are all
+     just a third rebinding of the same names.
+     ===================================================================== */
+  --gs-fill: var(--surface-card);
+  --gs-fill-raised: var(--surface-raised);
+  --gs-fill-chrome: var(--surface-rail);
+  --gs-fill-sunken: var(--surface-sunken);
+  --gs-image: none;
+  --gs-image-chrome: none;
+  --gs-filter: none;
+  --gs-filter-float: none;
+  --gs-line: var(--border-hairline);
+  --gs-line-strong: var(--border-default);
+  --gs-edge: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --gs-edge-strong: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --gs-shadow: var(--shadow-card);
+  --gs-shadow-raised: var(--shadow-raised);
+  --gs-shadow-float: var(--shadow-overlay);
+  --gs-field-fill: var(--surface-raised);
+  --gs-field-line: var(--border-default);
+  /* The "lit lozenge": the selected tab, the selected segment, a hover. */
+  --gs-fill-hover: var(--night-700);
+  --gs-nest: var(--surface-hover);
+  --gs-nest-on: var(--surface-selected);
+
+  /* How far content must clear the floating tab bar: the 64px pill, the 14px
+     it is set in from the bottom, the iPhone home bar, and air. */
+  --tabbar-h: 64px;
+  --tabbar-inset: 14px;
+  --tabbar-clear: calc(var(--tabbar-h) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 22px);
 
   /* --- Motion: 130ms controls, 200ms panels, no bounce --- */
   --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1);
@@ -149,12 +208,15 @@
   --accent2: var(--gold-400);
   --accent-dim: #6e4d13;
   --text: var(--ink-100);
-  --text2: var(--ink-300);
-  --text3: var(--ink-400);
+  /* The two aliases now point at the semantic tiers they always meant, which
+     is also what glass needs: --text3 carried ink-400 (3.79:1 on glass) in
+     186 places, most of them 11-13px. */
+  --text2: var(--text-body);
+  --text3: var(--text-muted);
   --green: var(--mint-500);
-  --red: var(--ember-500);
-  --orange: #f08840;
-  --blue: var(--sky-500);
+  --red: var(--ember-400);
+  --orange: #f8a05a;
+  --blue: var(--sky-400);
   --shadow-1: var(--shadow-card);
   --shadow-2: var(--shadow-raised);
   --glow-accent: 0 2px 14px rgba(240, 168, 50, 0.22);
@@ -165,11 +227,180 @@ html {
 }
 
 body {
-  /* Flat color only — the design system bans decorative gradients. */
+  /* The ground stays flat and dark; the light that the glass shows through is
+     its own fixed layer (.app-lit), mounted by the owner shell only, so the
+     customer-facing documents and the print sheet never see it. */
   background: var(--surface-page);
   color: var(--text-body);
   font-family: var(--font-body), system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* =======================================================================
+   The owner shell turns to glass
+   -----------------------------------------------------------------------
+   The mockup's recipe tints the glass WHITE (rgba(255,255,255,.08) under a
+   .13 sheen). On this app's content that cannot hold: over the amber light's
+   peak it composites to #73634c, where --text-muted reads 1.90:1, the gold
+   accent 2.85:1 and even body text only 4.20:1. This app has 738 micro-labels
+   at 11px and gold on nearly every card, so the tint is DARK instead — which
+   is what iOS 26 itself does on a dark ground. The glass tell comes from the
+   hairline, the sheen and the lit top edge, not from lightening the panel.
+
+   At the LIGHTEST spot the glass can produce (the amber peak with blue
+   bleeding in) a card composites to #38393a: heading 10.49:1, body 8.40:1,
+   muted 5.66:1, gold-500 5.70:1. The arithmetic, and the script that
+   produced it, are in docs/design-system/glass.md — re-run it before
+   changing any value here.
+
+   --glass-blur is the one perf dial: cost scales with the radius and with how
+   many blurred layers a page stacks. ONLY surfaces with real content moving
+   behind them blur — cards, panels, the chrome, dialogs. Anything nested
+   inside a glass surface (fields, chips, segment tracks, bands, buttons)
+   takes a plain translucent fill, because a nested backdrop-filter pays for
+   a blur that changes nothing AND becomes the containing block for any
+   position:fixed element inside it.
+
+   .glass-scope is the same opt-in for the fixed overlays, which are portalled
+   out to document.body (see components/Overlay.tsx) and so sit outside
+   .app-frame entirely.
+   ======================================================================= */
+.app-frame,
+.glass-scope {
+  --glass-blur: 22px;
+  --glass-sat: 170%;
+
+  /* Fills: night-850 / night-800 / night-900 / night-1000 at the alphas the
+     contrast math was run against. */
+  --gs-fill: rgba(20, 25, 34, 0.55);
+  --gs-fill-raised: rgba(26, 32, 44, 0.58);
+  --gs-fill-chrome: rgba(16, 20, 28, 0.68);
+  --gs-fill-sunken: rgba(6, 8, 12, 0.34);
+  /* The sheen is a background-IMAGE layer, not a ::before, so it never
+     collides with the pseudo-elements the system already uses
+     (.section-title::after, .skeleton::after) and needs no positioning. */
+  --gs-image: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0) 45%);
+  --gs-image-chrome: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0) 52%);
+  --gs-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  /* The floating chrome frosts real content scrolling under it, so it blurs
+     harder than a card does. */
+  --gs-filter-float: blur(calc(var(--glass-blur) + 8px)) saturate(200%);
+  /* .18, not the mockup's .14: at the amber light's peak a dark-tinted pane
+     is only 1.15:1 against the ground behind it, so the hairline is most of
+     what says "this is a card". .14 puts it at 1.77:1 against that ground,
+     .18 at 2.00:1. The lit top edge and the drop shadow carry the rest. */
+  --gs-line: rgba(255, 255, 255, 0.18);
+  --gs-line-strong: rgba(255, 255, 255, 0.26);
+  --gs-edge: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  --gs-edge-strong: inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  --gs-shadow: var(--gs-edge), 0 6px 22px rgba(0, 0, 0, 0.3);
+  --gs-shadow-raised: var(--gs-edge-strong), 0 10px 30px rgba(0, 0, 0, 0.38);
+  --gs-shadow-float: var(--gs-edge-strong), 0 8px 26px rgba(0, 0, 0, 0.42);
+  --gs-field-fill: rgba(6, 8, 12, 0.34);
+  --gs-field-line: rgba(255, 255, 255, 0.1);
+  --gs-fill-hover: rgba(38, 46, 62, 0.66);
+  --gs-nest: rgba(255, 255, 255, 0.07);
+  /* White .14 over the chrome glass puts gold-400 at 4.71:1. */
+  --gs-nest-on: rgba(255, 255, 255, 0.14);
+
+  /* ---- Nested surfaces ----
+     43 places across the owner pages set `background: var(--bg2)` or
+     `var(--bg3)` inline on a sub-panel, a chip or a note row inside a card.
+     Rebinding the two aliases here turns every one of them into glass at
+     once, instead of 43 edits.
+
+     They go DARKER than the card, not lighter, even though night-700/800 were
+     lighter than night-850 in the flat system. That is a contrast guarantee
+     rather than a taste: a well cut INTO the pane can only raise the ratio of
+     whatever text sits in it, so every token combination that already passed
+     on the card still passes inside one of these. Going the other way —
+     white .10, the obvious reading of the mockup — drops --text3 to 4.16:1
+     and gold-500 to 4.18:1 in panels that use both. Measured values for all
+     four steps are in docs/design-system/glass.md.
+
+     --bg0 is the page ground and stays opaque. */
+  --bg1: rgba(6, 8, 12, 0.44);
+  --bg2: rgba(6, 8, 12, 0.2);
+  --bg3: rgba(6, 8, 12, 0.32);
+  /* The one inline use of the sunken surface (components/CoreDeposits.tsx)
+     wants the same treatment. */
+  --surface-sunken: rgba(6, 8, 12, 0.32);
+
+  /* A frosted panel needs a corner the blur can turn. */
+  --wnt-radius-xs: 8px;
+  --wnt-radius-sm: 14px;
+  --wnt-radius-md: 20px;
+  --wnt-radius-lg: 26px;
+}
+
+/* The shell has to be its own stacking context for .app-lit to be visible at
+   all. Paint order inside <html> runs: html's background, then negative
+   z-index child contexts, then in-flow non-positioned blocks — and <body>'s
+   background is one of those. So a z-index:-1 layer anywhere below an
+   un-isolated body paints UNDER the opaque page colour and is never seen.
+   Isolating the frame moves the whole subtree to one slot in that order, and
+   inside it the light paints after the frame and before the content.
+
+   `isolation` and not `position: relative; z-index: 0`: isolation creates a
+   stacking context WITHOUT creating a containing block, so .tabbar and
+   .chrome-corner keep measuring the viewport. (transform, filter and
+   backdrop-filter would do both — that is the trap this whole pass is
+   careful about.) */
+.app-frame {
+  isolation: isolate;
+}
+
+/* A customer document rendered INSIDE the owner shell (an invoice, a quote,
+   an inspection on the owner's own screen) is still paper: it takes the flat
+   contract and the paper corners back. */
+:is(.app-frame, .glass-scope) :is(.doc-root, .report-root) {
+  --bg1: var(--night-900);
+  --bg2: var(--night-800);
+  --bg3: var(--night-700);
+  --surface-sunken: var(--night-900);
+  --gs-fill: var(--surface-card);
+  --gs-fill-raised: var(--surface-raised);
+  --gs-fill-sunken: var(--surface-sunken);
+  --gs-image: none;
+  --gs-filter: none;
+  --gs-line: var(--border-hairline);
+  --gs-line-strong: var(--border-default);
+  --gs-edge: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --gs-shadow: var(--shadow-card);
+  --gs-field-fill: var(--surface-raised);
+  --gs-field-line: var(--border-default);
+  --gs-fill-hover: var(--night-700);
+  --gs-nest: var(--surface-hover);
+  --gs-nest-on: var(--surface-selected);
+  --wnt-radius-xs: 6px;
+  --wnt-radius-sm: 10px;
+  --wnt-radius-md: 14px;
+  --wnt-radius-lg: 18px;
+}
+
+/* ---------- The lit ground (owner shell only) ----------
+   Three soft lights on the dark ground — amber top-left, blue down the right,
+   violet at the foot — so a frosted panel has something to show through and
+   the same card reads differently at the top of a page than at the bottom.
+
+   position: fixed, not a background on the shell: `background-attachment:
+   fixed` is not honoured on iOS Safari (it falls back to scrolling with the
+   content), and this app is an installed iPhone PWA first.
+
+   z-index: -1 works because .app-frame isolates itself (above): the layer
+   lands above the frame and below every bit of content in it.
+
+   vmax units so the lights keep their shape from a 375px phone to a desktop
+   and never pull in to a tight knot in one corner. */
+.app-lit {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(62vmax 46vmax at 4% 0%, rgba(240, 168, 50, 0.17), transparent 68%),
+    radial-gradient(56vmax 60vmax at 104% 38%, rgba(74, 144, 217, 0.14), transparent 70%),
+    radial-gradient(54vmax 46vmax at 10% 100%, rgba(138, 110, 224, 0.11), transparent 70%);
 }
 
 h1, h2, h3, h4 { color: var(--text-heading); }
@@ -251,14 +482,21 @@ h1, h2, h3, .display {
 
 /* ---------- Surfaces ---------- */
 
+/* A pane of glass: the dark fill, the sheen painted over it, a white hairline
+   and the lit top edge. The sheen is a background-image layer, so an inline
+   `background:` shorthand on a card replaces the whole stack rather than
+   leaving a stray gradient behind — and `background-color` alone can still
+   retint one without losing the sheen. */
 .card {
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
+  background-color: var(--gs-fill);
+  background-image: var(--gs-image);
+  backdrop-filter: var(--gs-filter);
+  border: 1px solid var(--gs-line);
   border-radius: var(--wnt-radius-md);
   padding: 1rem;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--gs-shadow);
   transition: transform var(--dur-fast) var(--ease), box-shadow var(--dur-med) var(--ease),
-    border-color var(--dur-med) var(--ease), filter var(--dur-fast) var(--ease);
+    border-color var(--dur-med) var(--ease), background-color var(--dur-med) var(--ease);
 }
 /* A status edge on a card. The .card border shorthand above resets the .edge-*
    left edge declared before it at the same specificity, so the edge is restated
@@ -271,18 +509,19 @@ h1, h2, h3, .display {
 .card.edge-stop { border-left-color: var(--status-stop-solid); }
 .card.edge-info { border-left-color: var(--status-info-solid); }
 .card.edge-idle { border-left-color: var(--status-idle-solid); }
-/* Emphasis = colored 1px outline on a neutral card (CASH PROFIT / UNPAID). */
-.card-line-ok, .stat-tile--ok { box-shadow: 0 0 0 1px var(--mint-line), var(--shadow-card); }
-.card-line-stop, .stat-tile--stop { box-shadow: 0 0 0 1px var(--ember-line), var(--shadow-card); }
-.card-glow-gold { box-shadow: var(--shadow-glow-gold); }
+/* Emphasis = colored 1px outline on a neutral card (CASH PROFIT / UNPAID).
+   The glass edge rides along so an emphasised card keeps its lit top. */
+.card-line-ok, .stat-tile--ok { box-shadow: 0 0 0 1px var(--mint-line), var(--gs-shadow); }
+.card-line-stop, .stat-tile--stop { box-shadow: 0 0 0 1px var(--ember-line), var(--gs-shadow); }
+.card-glow-gold { box-shadow: var(--gs-edge), 0 0 0 1px var(--gold-line), 0 4px 16px rgba(240, 168, 50, 0.15); }
 
 /* Only cards that are links behave interactively */
 /* Dark-surface hover lightens ONE STEP (night-850 -> night-800); press scales
    .985. No lift, no brightness filter — the spec bans bounce. */
 a.card:hover {
-  background: var(--surface-raised);
-  border-color: var(--border-default);
-  box-shadow: var(--shadow-raised);
+  background-color: var(--gs-fill-raised);
+  border-color: var(--gs-line-strong);
+  box-shadow: var(--gs-shadow-raised);
 }
 a.card:active {
   transform: scale(var(--press-scale));
@@ -301,20 +540,30 @@ a.card:focus-visible {
   gap: 0.4rem;
   min-height: 44px;
   padding: 0.5rem 1rem;
-  border-radius: var(--wnt-radius-sm);
-  border: 1px solid var(--border-default);
-  background: var(--action-secondary-bg);
+  /* A pill, as the mockup draws it: 22px on a 44px control. */
+  border-radius: var(--wnt-radius-pill);
+  border: 1px solid var(--gs-line);
+  background-color: var(--gs-fill-raised);
+  background-image: var(--gs-image);
   color: var(--text-heading);
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
   text-decoration: none;
-  transition: var(--transition-control), transform var(--dur-fast) var(--ease-standard);
+  box-shadow: var(--gs-edge);
+  transition: var(--transition-control), transform var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
 }
-/* Dark-surface hover lightens one step; press scales .985 — no bounce. */
+/* NO backdrop-filter on a button, deliberately. Most of the 638 of them sit
+   inside a glass card, where a second blur pass buys nothing (the backdrop is
+   already frosted) and costs a compositing layer each. The few that sit
+   straight on the page have only a smooth gradient behind them, which a blur
+   leaves unchanged. The standalone floating controls that DO need to frost
+   real content scrolling under them take .glass-float below. */
 .btn:hover {
-  background: var(--night-700);
-  border-color: var(--border-strong);
+  background-color: var(--gs-fill-hover);
+  border-color: var(--gs-line-strong);
+  box-shadow: var(--gs-edge-strong);
 }
 .btn:active {
   transform: scale(var(--press-scale));
@@ -331,25 +580,34 @@ a.card:focus-visible {
 }
 
 /* Gold hovers LIGHTEN (500 → 400); press goes 600. Flat — no gradients. */
+/* Gold glass: the accent at 88% so a little of the light behind still tints
+   it, with a warm rim. #201503 on it reads 8.85:1 flat, 6.59:1 at 82% over
+   the amber light, so the ink never comes off the gold. */
 .btn-primary {
-  background: var(--action-primary);
-  border-color: var(--action-primary);
+  background-color: color-mix(in srgb, var(--action-primary) 88%, transparent);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 52%);
+  border-color: rgba(255, 236, 190, 0.5);
   color: var(--text-on-accent);
-  box-shadow: var(--shadow-card);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, 0.5), 0 6px 20px rgba(240, 168, 50, 0.22);
 }
 .btn-primary:hover {
-  background: var(--action-primary-hover);
-  border-color: var(--action-primary-hover);
+  background-color: var(--action-primary-hover);
+  border-color: rgba(255, 244, 214, 0.62);
 }
 .btn-primary:active {
-  background: var(--action-primary-active);
+  background-color: var(--action-primary-active);
   border-color: var(--action-primary-active);
 }
 
+/* Tinted glass, not a transparent outline: on a frosted card an outline-only
+   button disappears. The label takes the lighter ember step because
+   ember-400 on this tint over the lit card reads 4.30:1 — ember-300 is
+   4.99:1. */
 .btn-danger {
-  background: transparent;
-  border-color: var(--red);
-  color: var(--red);
+  background-color: rgba(239, 111, 108, 0.12);
+  background-image: var(--gs-image);
+  border-color: var(--ember-line);
+  color: var(--status-stop-fg);
 }
 
 .btn-sm { min-height: 36px; padding: 0.25rem 0.7rem; font-size: 0.85rem; }
@@ -361,14 +619,17 @@ a.card:focus-visible {
   .btn-sm { min-height: 44px; }
 }
 
+/* Fields read as a well cut INTO the glass, not a second pane on top of it:
+   a dark translucent fill, a soft inner line, no blur of their own (they are
+   always inside a card that is already frosted). */
 .input, .select, .textarea {
   width: 100%;
   min-height: 44px;
   padding: 9px 12px;
   border-radius: var(--wnt-radius-sm);
-  border: 1px solid var(--border-default);
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-inset-field);
+  border: 1px solid var(--gs-field-line);
+  background: var(--gs-field-fill);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
   color: var(--text-heading);
   font-size: 1rem; /* stays >=16px so iOS never zooms the viewport */
   transition: var(--transition-control);
@@ -377,7 +638,7 @@ a.card:focus-visible {
 .input:focus, .select:focus, .textarea:focus {
   outline: none;
   border-color: var(--border-focus);
-  box-shadow: var(--focus-ring), var(--shadow-inset-field);
+  box-shadow: var(--focus-ring), inset 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 /* Placeholders carry real content ("Type your name to approve") — muted, not
    faint: faint is 2.88:1 on the field and fails at every size. */
@@ -396,6 +657,7 @@ a.card:focus-visible {
   letter-spacing: 0.08em;
 }
 
+/* Nested in a glass card, so: tint only, no blur. */
 .chip {
   display: inline-block;
   padding: 0.1rem 0.55rem;
@@ -404,7 +666,8 @@ a.card:focus-visible {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--gs-nest);
+  box-shadow: var(--gs-edge);
 }
 /* The status VOCABULARY: every state maps to one of five meanings.
    ok = paid/cleared · wait = partial/awaiting (gold) · stop = unpaid/blocked
@@ -414,15 +677,17 @@ a.card:focus-visible {
 .chip-partial, .chip-open, .chip-expired { background: var(--status-wait-bg); color: var(--status-wait-fg); }
 .chip-unpaid, .chip-declined, .chip-overdue { background: var(--status-stop-bg); color: var(--status-stop-fg); }
 .chip-sent, .chip-booked { background: var(--status-info-bg); color: var(--status-info-fg); }
-.chip-draft, .chip-void { background: var(--status-idle-bg); color: var(--ink-300); }
+.chip-draft, .chip-void { background: var(--status-idle-bg); color: var(--status-idle-fg); }
 
 .stat-tile {
   position: relative;
-  background: var(--surface-card);
-  border: 1px solid var(--border-hairline);
+  background-color: var(--gs-fill);
+  background-image: var(--gs-image);
+  backdrop-filter: var(--gs-filter);
+  border: 1px solid var(--gs-line);
   border-radius: var(--wnt-radius-md);
   padding: 0.8rem 0.95rem;
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--gs-shadow);
 }
 .stat-tile .stat-label {
   font-family: var(--font-display), sans-serif;
@@ -745,13 +1010,15 @@ a.card:focus-visible {
   min-width: 0;
   padding: 0.35rem 0.65rem 0.35rem 0.6rem;
   border-radius: var(--wnt-radius-md);
-  background: var(--surface-card);
+  background-color: var(--gs-fill);
+  background-image: var(--gs-image);
+  backdrop-filter: var(--gs-filter);
   /* The shorthand would reset the .edge-* left edge declared above it at the
      same specificity, so the status edge is restated here, and hover never
      touches the left side. */
-  border: 1px solid var(--border-hairline);
+  border: 1px solid var(--gs-line);
   border-left-width: var(--edge-width);
-  box-shadow: var(--shadow-card);
+  box-shadow: var(--gs-shadow);
   transition: background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
 .lane-door.edge-ok { border-left-color: var(--status-ok-solid); }
@@ -760,10 +1027,10 @@ a.card:focus-visible {
 .lane-door.edge-info { border-left-color: var(--status-info-solid); }
 .lane-door.edge-idle { border-left-color: var(--status-idle-solid); }
 .lane-door:hover {
-  background: var(--surface-raised);
-  border-top-color: var(--border-default);
-  border-right-color: var(--border-default);
-  border-bottom-color: var(--border-default);
+  background-color: var(--gs-fill-raised);
+  border-top-color: var(--gs-line-strong);
+  border-right-color: var(--gs-line-strong);
+  border-bottom-color: var(--gs-line-strong);
 }
 .lane-door:active { transform: scale(var(--press-scale)); }
 .lane-door:focus-visible { outline: none; box-shadow: var(--focus-ring); }
@@ -827,9 +1094,10 @@ a.card:focus-visible {
 .tile-band {
   margin: auto -11px 0;
   padding: 7px 11px 7px;
-  background: var(--surface-sunken);
-  border-top: 1px solid var(--border-hairline);
-  border-radius: 0 0 13px 13px;
+  /* Sunken into the glass, not a pane of its own: tint, no blur. */
+  background: var(--gs-fill-sunken);
+  border-top: 1px solid var(--gs-field-line);
+  border-radius: 0 0 calc(var(--wnt-radius-md) - 1px) calc(var(--wnt-radius-md) - 1px);
   min-width: 0;
 }
 .tile .stat-value { font-size: 26px; line-height: 28px; margin-top: 2px; letter-spacing: 0.01em; }
@@ -1111,24 +1379,24 @@ a.card:focus-visible {
   gap: 2px;
   min-height: 44px;
   padding: 3px 3px 4px;
-  border-radius: 6px;
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-hairline);
+  border-radius: 9px;
+  background: var(--gs-fill-sunken);
+  border: 1px solid var(--gs-field-line);
   cursor: pointer;
   user-select: none;
   transition: var(--transition-control);
 }
-.cal-day:hover { background: var(--surface-raised); border-color: var(--border-default); }
+.cal-day:hover { background: var(--gs-nest); border-color: var(--gs-line); }
 .cal-day:active { transform: scale(var(--press-scale)); }
 .cal-day:focus-visible { outline: none; box-shadow: var(--focus-ring); }
-.cal-day.is-selected { background: var(--surface-selected); border-color: var(--gold-line); }
+.cal-day.is-selected { background: rgba(240, 168, 50, 0.18); border-color: var(--gold-line); }
 .cal-day.is-today { box-shadow: inset 0 0 0 1px var(--gold-500); }
 .cal-day.is-today:focus-visible { box-shadow: inset 0 0 0 1px var(--gold-500), var(--focus-ring); }
 /* Days outside the month are muted, never hidden: a booking on the 1st of
    next month still shows where the week puts it. */
 .cal-day.is-outside { background: transparent; border-color: transparent; }
-.cal-day.is-outside:hover { border-color: var(--border-hairline); }
-.cal-day.is-outside.is-selected { background: var(--surface-selected); border-color: var(--gold-line); }
+.cal-day.is-outside:hover { border-color: var(--gs-field-line); }
+.cal-day.is-outside.is-selected { background: rgba(240, 168, 50, 0.18); border-color: var(--gold-line); }
 .cal-num-row { display: flex; align-items: center; justify-content: space-between; gap: 2px; min-width: 0; }
 .cal-num { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--text-body); font-variant-numeric: tabular-nums; }
 .is-outside .cal-num { color: var(--text-muted); font-weight: 500; }
@@ -1214,50 +1482,222 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* Note: declare only the standard backdrop-filter — LightningCSS adds the
    -webkit- prefix itself, and hand-writing both makes it drop the standard one. */
-/* Flat chrome — the system reserves transparency/blur for the dialog scrim
-   only; no glass panels. The bars sit on the rail surface, one step darker
-   than the page, so the content plane reads as the lit one. */
-.appbar {
-  background: var(--surface-rail);
-  border-bottom: 1px solid var(--border-hairline);
-  padding-top: calc(env(safe-area-inset-top) + 0.75rem);
+
+/* The chrome FLOATS now: a pill set in from the screen edges with the page
+   scrolling under it, and glass buttons in the top corners. The old flat
+   .appbar bar is gone from the phone — the brand lives in the sidebar on a
+   desk and in the dashboard's own title on a phone.
+
+   These four — the tab pill, the New Job button, the corner capsules and the
+   dialog panels — are the only places a backdrop-filter has real content
+   moving behind it, so they are the only places the blur earns its cost. */
+
+/* A floating capsule of glass: the corner chrome and the tab bar share it. */
+.glass-float {
+  background-color: var(--gs-fill-chrome);
+  background-image: var(--gs-image-chrome);
+  backdrop-filter: var(--gs-filter-float);
+  border: 1px solid var(--gs-line);
+  box-shadow: var(--gs-shadow-float);
 }
 
+/* Top corners. Left is the way back, right is the page's own pair of doors.
+   Both clear the status bar / notch on an installed PWA. */
+.chrome-corner {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 10px);
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.chrome-corner-l { left: 12px; }
+.chrome-corner-r { right: 12px; }
+/* A capsule holding two icon buttons side by side (Hangar + Settings): one
+   pane of glass, a hairline between them, each half still 44px wide. */
+.chrome-capsule {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  border-radius: var(--wnt-radius-pill);
+  overflow: hidden;
+}
+.chrome-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 46px;
+  min-height: 44px;
+  padding: 0 12px;
+  color: var(--text-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.chrome-capsule .chrome-btn + .chrome-btn { box-shadow: inset 1px 0 0 var(--gs-line); }
+.chrome-btn:hover { background-color: var(--gs-nest); color: var(--text-heading); }
+.chrome-btn.active { color: var(--accent2); }
+.chrome-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* A lone floating button (back, Edit) is its own pane. */
+.chrome-solo {
+  border-radius: var(--wnt-radius-pill);
+  min-height: 44px;
+  padding: 0 16px;
+}
+
+/* ---------- The floating tab bar ---------- */
+
+/* The pill and the New Job button are siblings in one fixed row, set in from
+   both screen edges and sitting above the home bar. */
 .tabbar {
-  background: var(--surface-rail);
-  border-top: 1px solid var(--border-hairline);
-  padding-bottom: env(safe-area-inset-bottom);
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom) + var(--tabbar-inset));
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-
+.tabbar-pill {
+  flex: 1;
+  min-width: 0;
+  height: var(--tabbar-h);
+  padding: 5px;
+  border-radius: calc(var(--tabbar-h) / 2);
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+}
 .tab-item {
-  transition: color var(--dur-med) var(--ease);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  border-radius: calc(var(--tabbar-h) / 2 - 5px);
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.1;
+  text-align: center;
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color var(--dur-med) var(--ease), background-color var(--dur-med) var(--ease);
 }
 .tab-item .tab-icon {
+  font-size: 1.05rem;
+  line-height: 1;
   transition: transform var(--dur-med) var(--ease);
 }
+/* The selected tab is a lit lozenge inside the pill, as the mockup draws it.
+   White .14 over the chrome glass puts gold-400 at 4.71:1. */
+.tab-item.active {
+  color: var(--accent2);
+  background-color: var(--gs-nest-on);
+  box-shadow: var(--gs-edge);
+}
 .tab-item.active .tab-icon {
-  transform: translateY(-2px) scale(1.14);
+  transform: translateY(-1px) scale(1.1);
 }
-.tab-item .tab-dot {
-  width: 4px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--accent2);
-  opacity: 0;
-  transform: scale(0);
-  transition: opacity var(--dur-med) var(--ease), transform var(--dur-med) var(--ease);
+.tab-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* New Job: its own round pane of gold glass beside the pill, never a tab. */
+.tabbar-new {
+  flex: none;
+  width: var(--tabbar-h);
+  height: var(--tabbar-h);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.9rem;
+  line-height: 1;
+  font-weight: 400;
+  text-decoration: none;
+  color: var(--text-on-accent);
+  background-color: color-mix(in srgb, var(--action-primary) 88%, transparent);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 52%);
+  backdrop-filter: var(--gs-filter-float);
+  border: 1px solid rgba(255, 236, 190, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 248, 230, 0.55), 0 8px 26px rgba(240, 168, 50, 0.3);
+  transition: background-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
-.tab-item.active .tab-dot {
-  opacity: 1;
-  transform: scale(1);
+.tabbar-new:hover { background-color: var(--action-primary-hover); }
+.tabbar-new:active { transform: scale(var(--press-scale)); }
+.tabbar-new:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ---------- Segmented controls ---------- */
+
+/* One track of sunken glass holding 2-4 mutually exclusive segments: job
+   stage, Jobs/Quotes, the Hangar's section nav, chart vs table. The track is
+   nested inside a card more often than not, so it tints without blurring. */
+.seg-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 3px;
+  min-width: 0;
+  border-radius: var(--wnt-radius-pill);
+  background: var(--gs-field-fill);
+  border: 1px solid var(--gs-field-line);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
+.seg-item {
+  /* 44px even though the track adds 3px of padding either side: the greasy-
+     thumb rule is about the hit area, and this IS the hit area. */
+  min-height: 44px;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0 0.6rem;
+  border: 0;
+  border-radius: var(--wnt-radius-pill);
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--text-muted);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.seg-item:hover:not(:disabled):not(.on) { color: var(--text-heading); }
+/* Selected: the lit lozenge again, so a segment and a tab read as the same
+   idea. Gold-400 on it is 4.71:1 at the lightest spot. */
+.seg-item.on {
+  color: var(--accent2);
+  background-color: var(--gs-nest-on);
+  box-shadow: var(--gs-edge);
+}
+.seg-item:disabled { opacity: 0.45; cursor: default; }
+.seg-item:disabled.on { opacity: 1; }
+.seg-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* Status-coloured segments (the hangar board's Wings / ALNW / Out switch
+   keeps its meaning — mint, gold, neutral). */
+.seg-item.on.seg-ok { color: var(--status-ok-fg); background-color: rgba(76, 217, 123, 0.18); }
+.seg-item.on.seg-wait { color: var(--status-wait-fg); background-color: rgba(240, 168, 50, 0.2); }
+.seg-item.on.seg-idle { color: var(--text-heading); background-color: var(--gs-nest-on); }
 
 /* ---------- Desktop sidebar ---------- */
 
-/* The rail is the DARKEST surface — flat night-1000, one step below the page. */
+/* The rail is a tall pane of glass down the left: the lit ground shows
+   through it, so the page beside it still reads as the lit plane. */
 .sidebar {
-  background: var(--surface-rail);
-  border-right: 1px solid var(--border-hairline);
+  background-color: var(--gs-fill-chrome);
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0) 40%);
+  backdrop-filter: var(--gs-filter);
+  border-right: 1px solid var(--gs-line);
 }
 .side-label {
   font-family: var(--font-display), sans-serif;
@@ -1275,7 +1715,7 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   align-items: center;
   gap: 0.6rem;
   padding: 0.55rem 0.75rem;
-  border-radius: 10px;
+  border-radius: var(--wnt-radius-sm);
   font-weight: 600;
   font-size: 0.92rem;
   color: var(--text2);
@@ -1284,13 +1724,14 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
     border-color var(--dur-med) var(--ease);
 }
 .side-item:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--gs-nest);
   color: var(--text);
 }
 .side-item.active {
-  background: var(--surface-selected);
+  background: var(--gs-nest-on);
   color: var(--gold-400);
   border-left-color: var(--status-wait-solid);
+  box-shadow: var(--gs-edge);
 }
 .side-item:focus-visible {
   outline: none;
@@ -1361,6 +1802,29 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 /* Inline panels that expand into view (add-part, add-vehicle, review) */
 .panel-in { animation: panel-in var(--dur-med) var(--ease) both; }
 
+/* A dialog is the one card that floats over the whole page, so it gets the
+   deeper blur and the strong rim: it has real content moving behind it. */
+.glass-dialog {
+  background-color: var(--gs-fill-chrome);
+  background-image: var(--gs-image-chrome);
+  backdrop-filter: var(--gs-filter-float);
+  border: 1px solid var(--gs-line-strong);
+  border-radius: var(--wnt-radius-lg);
+  box-shadow: var(--gs-shadow-float);
+}
+/* The scrim behind it frosts the page rather than just darkening it. */
+.glass-scrim {
+  background: rgba(4, 6, 10, 0.5);
+  backdrop-filter: blur(10px) saturate(130%);
+}
+/* A full-screen viewer (a job photo, a receipt) wants the picture to win, so
+   its veil stays nearly solid and only takes enough blur to kill the edges
+   of whatever is behind it. */
+.glass-veil {
+  background: rgba(6, 8, 12, 0.88);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
 @keyframes flash-in {
   from { opacity: 0; transform: translateX(-8px); }
   to { opacity: 1; transform: none; }
@@ -1377,9 +1841,11 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .skeleton {
   position: relative;
   overflow: hidden;
-  background: var(--bg2);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  background: var(--gs-fill);
+  backdrop-filter: var(--gs-filter);
+  border: 1px solid var(--gs-line);
+  border-radius: var(--wnt-radius-md);
+  box-shadow: var(--gs-edge);
 }
 .skeleton::after {
   content: '';
@@ -1769,6 +2235,75 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* ---------- Guards ---------- */
 
+/* ===== Glass guards =====
+   All three are the same move: rebind the surface contract back to the flat
+   values, so every primitive turns solid at once and nothing has to be
+   re-stated rule by rule. --gs-filter: none also removes the containing
+   block that backdrop-filter creates, which is the behaviour the fixed
+   overlays are tested against. */
+
+/* 1. Someone who has asked for less transparency gets solid panels and no
+      lights at all — the point is to stop content showing through. */
+@media (prefers-reduced-transparency: reduce) {
+  .app-frame,
+  .glass-scope {
+    --bg1: var(--night-900);
+    --bg2: var(--night-800);
+    --bg3: var(--night-700);
+    --surface-sunken: var(--night-900);
+    --gs-fill: var(--surface-card);
+    --gs-fill-raised: var(--surface-raised);
+    --gs-fill-chrome: var(--night-1000);
+    --gs-fill-sunken: var(--surface-sunken);
+    --gs-fill-hover: var(--night-700);
+    --gs-image: none;
+    --gs-image-chrome: none;
+    --gs-filter: none;
+    --gs-filter-float: none;
+    --gs-line: var(--border-default);
+    --gs-line-strong: var(--border-strong);
+    --gs-edge: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    --gs-edge-strong: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    --gs-shadow: var(--shadow-card);
+    --gs-shadow-raised: var(--shadow-raised);
+    --gs-shadow-float: var(--shadow-overlay);
+    --gs-field-fill: var(--surface-raised);
+    --gs-field-line: var(--border-default);
+    --gs-nest: var(--surface-hover);
+    --gs-nest-on: var(--surface-selected);
+  }
+  .app-lit { display: none; }
+  .glass-scrim { background: var(--scrim-overlay); backdrop-filter: none; }
+  .glass-veil { background: rgba(6, 8, 12, 0.98); backdrop-filter: none; }
+  .tabbar-new,
+  .btn-primary { background-image: none; }
+  /* Opaque chrome, so nothing reads through the floating bars. */
+  .glass-float,
+  .glass-dialog { background-color: var(--night-1000); }
+}
+
+/* 2. A browser with no backdrop-filter would otherwise show translucent
+      panels with the page legible straight through them. */
+@supports not (backdrop-filter: blur(1px)) {
+  .app-frame,
+  .glass-scope {
+    --bg1: var(--night-900);
+    --bg2: var(--night-800);
+    --bg3: var(--night-700);
+    --surface-sunken: var(--night-900);
+    --gs-fill: var(--surface-card);
+    --gs-fill-raised: var(--surface-raised);
+    --gs-fill-chrome: var(--night-1000);
+    --gs-fill-sunken: var(--surface-sunken);
+    --gs-fill-hover: var(--night-700);
+    --gs-field-fill: var(--surface-raised);
+  }
+  .glass-float,
+  .glass-dialog { background-color: var(--night-1000); }
+  .glass-scrim { background: var(--scrim-overlay); }
+  .glass-veil { background: rgba(6, 8, 12, 0.98); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
@@ -1784,7 +2319,34 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   body { background: #ffffff; }
   .no-print { display: none !important; }
   /* App chrome never prints — only the document does. */
-  .sidebar, .appbar, .tabbar { display: none !important; }
+  .sidebar, .appbar, .tabbar, .chrome-corner, .app-lit { display: none !important; }
+  /* 3. No glass on paper. The contract goes flat and the blur comes off
+        every surface: a printer renders backdrop-filter as a grey slab, and
+        the only thing that should reach a sheet is the document. */
+  .app-frame,
+  .glass-scope {
+    --bg1: #ffffff;
+    --bg2: #ffffff;
+    --bg3: #ffffff;
+    --surface-sunken: #ffffff;
+    --gs-fill: #ffffff;
+    --gs-fill-raised: #ffffff;
+    --gs-fill-chrome: #ffffff;
+    --gs-fill-sunken: #ffffff;
+    --gs-fill-hover: #ffffff;
+    --gs-image: none;
+    --gs-image-chrome: none;
+    --gs-filter: none;
+    --gs-filter-float: none;
+    --gs-edge: none;
+    --gs-edge-strong: none;
+    --gs-shadow: none;
+    --gs-shadow-raised: none;
+    --gs-shadow-float: none;
+  }
+  *, *::before, *::after {
+    backdrop-filter: none !important;
+  }
   .app-frame { display: block !important; padding: 0 !important; }
   main.page-anim { max-width: none; padding: 0; }
   .doc-wrap { padding: 0 !important; }
@@ -1827,7 +2389,8 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   width: 100%;
   background: var(--night-800);
   border: 1px solid var(--night-700);
-  border-radius: var(--wnt-radius-sm);
+  /* The landing page is customer-facing: the paper corner, not the shell's. */
+  border-radius: 10px;
   padding: 11px 12px;
   font-size: 16px; /* >=16px so iOS doesn't zoom the viewport on focus */
   color: var(--ink-100);
@@ -1943,44 +2506,56 @@ html[data-line="aviation"] [data-line-tab="automotive"] .pub-line-check {
    The one-tap location switch on the hangar board: three equal segments,
    Wings = mint, ALNW = brand gold, Out = neutral raised. Everything else in
    the section uses the standard primitives. */
+/* One track, three segments — the same control as the job stage and the
+   Jobs/Quotes switch, but the segments keep their status meaning: Wings =
+   mint, ALNW = brand gold, Out = neutral. */
 .hangar-switch {
-  display: flex;
-  gap: 0.5rem;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 3px;
+  min-width: 0;
+  border-radius: var(--wnt-radius-pill);
+  background: var(--gs-field-fill);
+  border: 1px solid var(--gs-field-line);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.28);
 }
 .hangar-switch button {
-  flex: 1;
-  min-height: 48px;
-  border-radius: var(--wnt-radius-sm);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-sunken);
+  min-width: 0;
+  min-height: 46px;
+  border: 0;
+  border-radius: var(--wnt-radius-pill);
+  background: transparent;
   color: var(--text-muted);
+  font-family: inherit;
   font-weight: 700;
   font-size: 0.85rem;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+  transition: background-color var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
 }
-.hangar-switch button:hover:not(:disabled) {
-  color: var(--text-body);
+.hangar-switch button:hover:not(:disabled):not(.on) {
+  color: var(--text-heading);
 }
 .hangar-switch button:disabled {
   opacity: 0.6;
   cursor: default;
 }
+.hangar-switch button.on:disabled { opacity: 1; }
+.hangar-switch button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.hangar-switch button.on { box-shadow: var(--gs-edge); }
 .hangar-switch button.on.hangar-sw-wings {
-  background: var(--status-ok-bg);
-  border-color: var(--status-ok-solid);
+  background-color: rgba(76, 217, 123, 0.18);
   color: var(--status-ok-fg);
 }
 .hangar-switch button.on.hangar-sw-alnw {
-  background: var(--status-wait-bg);
-  border-color: var(--status-wait-solid);
+  background-color: rgba(240, 168, 50, 0.2);
   color: var(--status-wait-fg);
 }
 .hangar-switch button.on.hangar-sw-out {
-  background: var(--surface-raised);
-  border-color: var(--border-strong);
+  background-color: var(--gs-nest-on);
   color: var(--text-heading);
 }
 .hangar-timer {

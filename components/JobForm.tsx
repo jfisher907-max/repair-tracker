@@ -508,15 +508,14 @@ export default function JobForm({ job }: { job?: Job }) {
         {/* Stage: where the job is in the shop. Three 44px segments. */}
         <div className="sm:col-span-2">
           <span className="label" id="job-stage-label">Stage</span>
-          <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }} role="group" aria-labelledby="job-stage-label">
+          <div className="seg-track" role="group" aria-labelledby="job-stage-label">
             {STAGES.map((s) => (
               <button
                 key={s.value}
                 type="button"
-                className="btn btn-sm !min-h-[44px]"
+                className={`seg-item ${stage === s.value ? 'on' : ''}`}
                 aria-pressed={stage === s.value}
                 disabled={stageLocked && s.value !== stage}
-                style={stage === s.value ? { borderColor: 'var(--accent)', color: 'var(--accent2)' } : undefined}
                 onClick={() => setStage(s.value)}
               >
                 {s.label}

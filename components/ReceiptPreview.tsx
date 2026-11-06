@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Overlay from '@/components/Overlay'
 
 export type ReceiptKind = 'image' | 'pdf' | 'file'
 
@@ -145,20 +146,24 @@ export default function ReceiptPreview({
         )}
       </div>
 
+      {/* Portalled to <body>: the pages that use this wrap it in a .card, and
+          a glass card is a backdrop-filter, which would make itself the
+          containing block for this fixed element. See components/Overlay.tsx. */}
       {full && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col gap-2 p-3"
-          style={{ background: 'rgba(6,8,12,0.94)' }}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Receipt preview"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="truncate text-sm font-semibold">{fileName || 'Receipt'}</span>
-            {controls}
+        <Overlay>
+          <div
+            className="glass-veil fixed inset-0 z-50 flex flex-col gap-2 p-3"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Receipt preview"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="truncate text-sm font-semibold">{fileName || 'Receipt'}</span>
+              {controls}
+            </div>
+            {body}
           </div>
-          {body}
-        </div>
+        </Overlay>
       )}
     </>
   )

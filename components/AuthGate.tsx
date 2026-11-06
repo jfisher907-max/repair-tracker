@@ -29,7 +29,11 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-dvh items-center justify-center">
+      // glass-scope + the lit layer: the splash and the sign-in are the
+      // owner's screens too, and they sit outside AppShell, which is the
+      // only other place either is mounted.
+      <div className="glass-scope relative isolate flex min-h-dvh items-center justify-center">
+        <div className="app-lit" aria-hidden="true" />
         <div className="display flex items-center gap-2 text-2xl" style={{ color: 'var(--text3)' }}>
           <span className="splash-mark"><WingMark size={26} /></span> {BRAND_NAME}
         </div>
@@ -57,7 +61,8 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center p-4">
+    <div className="glass-scope relative isolate flex min-h-dvh items-center justify-center p-4">
+      <div className="app-lit" aria-hidden="true" />
       <form onSubmit={signIn} className="panel-in card w-full max-w-sm space-y-4">
         <div className="text-center">
           <div className="flex justify-center"><WingMark size={44} /></div>

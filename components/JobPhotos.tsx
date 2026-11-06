@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { prepareUpload } from '@/lib/upload'
+import Overlay from '@/components/Overlay'
 
 interface JobPhoto {
   id: string
@@ -274,11 +275,14 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
         </div>
       )}
 
+      {/* Portalled to <body>: this viewer is written inside the .card above,
+          and a glass card is a backdrop-filter, which would make itself the
+          containing block for this fixed element. See components/Overlay.tsx. */}
       {viewing && (
+        <Overlay>
         <div
-          className="fixed inset-0 z-50 flex flex-col gap-2 p-3"
+          className="glass-veil fixed inset-0 z-50 flex flex-col gap-2 p-3"
           style={{
-            background: 'rgba(6,8,12,0.94)',
             // Clear the iPhone notch and home bar: the viewer's buttons sit at its edges.
             paddingTop: 'calc(0.75rem + env(safe-area-inset-top))',
             paddingBottom: 'calc(0.75rem + env(safe-area-inset-bottom))',
@@ -360,6 +364,7 @@ export default function JobPhotos({ jobId }: { jobId: string }) {
             )
           })()}
         </div>
+        </Overlay>
       )}
     </div>
   )

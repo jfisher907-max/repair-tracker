@@ -115,11 +115,25 @@ export default function SwipeableRow({
   }
 
   return (
-    <div className="relative overflow-hidden rounded-xl" style={{ touchAction: 'pan-y' }}>
+    <div
+      className="relative overflow-hidden"
+      style={{ touchAction: 'pan-y', borderRadius: 'var(--wnt-radius-md)' }}
+    >
+      {/* Hidden until the gesture starts. The row on top of it is a pane of
+          glass now, so a delete action parked behind it at rest would show
+          through as a red stain down the right-hand side of every swipeable
+          row in the list. No transition: it must be there the instant the
+          finger moves, and gone the instant the row closes. */}
       <button
         type="button"
         className="absolute inset-y-0 right-0 flex flex-col items-center justify-center text-xs font-bold"
-        style={{ width: REVEAL, background: 'var(--red)', color: '#fff' }}
+        style={{
+          width: REVEAL,
+          background: 'var(--red)',
+          color: '#2b0d0d',
+          opacity: open || dx !== 0 ? 1 : 0,
+          pointerEvents: open ? 'auto' : 'none',
+        }}
         onClick={doDelete}
         disabled={busy}
         aria-label={deleteLabel}
