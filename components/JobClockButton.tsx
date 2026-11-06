@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import type { Job } from '@/lib/types'
-import { clockStartPatch, clockStopPatch, formatClock, runningHours } from '@/lib/labor-time'
+import {
+  clockStartPatch,
+  clockStopPatch,
+  formatClock,
+  notifyClockChanged,
+  runningHours,
+} from '@/lib/labor-time'
 
 /**
  * Start / Stop the job clock from the job's top buttons (2026-11 phone sweep):
@@ -32,6 +38,7 @@ export default function JobClockButton({
     setBusy(true)
     try {
       await onUpdate(running ? clockStopPatch(job) : clockStartPatch(job))
+      notifyClockChanged()
     } finally {
       setBusy(false)
     }

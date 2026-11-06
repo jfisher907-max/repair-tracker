@@ -6,6 +6,7 @@ import {
   actualHours,
   clockStartPatch,
   clockStopPatch,
+  notifyClockChanged,
   efficiencyColor,
   efficiencyPct,
   formatClock,
@@ -50,6 +51,10 @@ export default function JobTimeCard({
     setBusy(true)
     try {
       await onUpdate(patch)
+      // Every write from this card can start or stop the clock (the two
+      // buttons, and saving hours by hand clears it), so the shell's running
+      // clock bar is told from one place.
+      notifyClockChanged()
     } finally {
       setBusy(false)
     }

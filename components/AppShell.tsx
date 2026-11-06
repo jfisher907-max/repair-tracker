@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import RunningClockBar from '@/components/RunningClockBar'
 import WingMark from '@/components/WingMark'
 import { BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand'
 import { usePathname } from 'next/navigation'
@@ -256,6 +257,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* A clock left running follows you off the job page. It sizes the
+          floating stack itself (--clockbar-h), so the tab bar below and the
+          content padding both make room for it. */}
+      <RunningClockBar />
 
       {/* Phone tab bar: a floating pill set in from both edges, with New Job
           as its own round gold button beside it. */}

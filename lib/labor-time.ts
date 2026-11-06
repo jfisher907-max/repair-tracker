@@ -9,10 +9,18 @@ import type { Job } from '@/lib/types'
  * Efficiency = book / actual. 100% = on book, above = beat it.
  */
 
-type TimeFields = Pick<Job, 'labor_hours'> & {
+/**
+ * What the clock functions actually touch. Separate from TimeFields because
+ * only the efficiency maths needs the billed hours: the running-clock bar
+ * reads four columns off a job and must not have to select a fifth it will
+ * never use.
+ */
+type ClockFields = {
   actual_hours?: number | string | null
   clock_started_at?: string | null
 }
+
+type TimeFields = Pick<Job, 'labor_hours'> & ClockFields
 
 /** Hours since the clock started, never negative. 0 when it isn't running. */
 export function runningHours(clockStartedAt: string | null | undefined, now = Date.now()): number {
@@ -22,23 +30,36 @@ export function runningHours(clockStartedAt: string | null | undefined, now = Da
 }
 
 /** Logged hours plus the running clock. Null = time not tracked on this job. */
-export function actualHours(job: TimeFields, now = Date.now()): number | null {
+export function actualHours(job: ClockFields, now = Date.now()): number | null {
   const running = runningHours(job.clock_started_at, now)
   if (job.actual_hours == null && !job.clock_started_at) return null
   return Number(job.actual_hours ?? 0) + running
 }
 
 /** What Start writes: the clock runs from now; an untracked job starts at 0 logged. */
-export function clockStartPatch(job: TimeFields): { clock_started_at: string; actual_hours: number } {
+export function clockStartPatch(job: ClockFields): { clock_started_at: string; actual_hours: number } {
   return { clock_started_at: new Date().toISOString(), actual_hours: Number(job.actual_hours ?? 0) }
 }
 
 /** What Stop writes: the running time is added to the logged hours and the clock clears. */
-export function clockStopPatch(job: TimeFields): { actual_hours: number; clock_started_at: null } {
+export function clockStopPatch(job: ClockFields): { actual_hours: number; clock_started_at: null } {
   return {
     actual_hours: roundHours(Number(job.actual_hours ?? 0) + runningHours(job.clock_started_at)),
     clock_started_at: null,
   }
+}
+
+/**
+ * Fired after a clock is started or stopped anywhere in the app, so the
+ * running-clock bar in the shell can refresh at once instead of waiting for
+ * its backstop poll. A plain window event rather than a store: the bar is the
+ * only listener, and the two buttons that start and stop a clock
+ * (JobClockButton, JobTimeCard) are nowhere near it in the tree.
+ */
+export const CLOCK_CHANGED = 'wnt:clock-changed'
+
+export function notifyClockChanged(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(CLOCK_CHANGED))
 }
 
 /** Rounded to the hundredth the column stores. */

@@ -178,11 +178,20 @@
   --gs-nest: var(--surface-hover);
   --gs-nest-on: var(--surface-selected);
 
-  /* How far content must clear the floating tab bar: the 64px pill, the 14px
-     it is set in from the bottom, the iPhone home bar, and air. */
+  /* The floating stack at the foot of the screen, and how far content must
+     clear it: the 64px tab pill, the running clock bar when there is one, the
+     14px the stack is set in from the bottom, the iPhone home bar, and air.
+
+     --clockbar-h is 0 until components/RunningClockBar.tsx mounts and sets it
+     on the root; everything that has to sit above the stack — the content
+     padding here and .save-bar — reads --tabbar-stack, so the clock bar
+     appearing pushes all of them up together instead of landing on top of
+     them. */
   --tabbar-h: 64px;
   --tabbar-inset: 14px;
-  --tabbar-clear: calc(var(--tabbar-h) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 22px);
+  --clockbar-h: 0px;
+  --tabbar-stack: calc(var(--tabbar-h) + var(--clockbar-h));
+  --tabbar-clear: calc(var(--tabbar-stack) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 22px);
 
   /* --- Motion: 130ms controls, 200ms panels, no bounce --- */
   --ease-standard: cubic-bezier(0.2, 0.6, 0.2, 1);
@@ -1637,6 +1646,72 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .tabbar-new:active { transform: scale(var(--press-scale)); }
 .tabbar-new:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
+/* ---------- The running clock bar ---------- */
+
+/* A clock left running is money, so it follows you off the job page: its own
+   pane of glass riding directly above the tab pill. On a desk, where there is
+   no tab bar, it tucks into the bottom-right corner instead of stretching the
+   width of the window. */
+.clock-bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--tabbar-h) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 8px);
+  z-index: 41;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 52px;
+  padding: 0 6px 0 14px;
+  border-radius: 26px;
+  box-sizing: border-box;
+}
+@media (min-width: 640px) {
+  .clock-bar {
+    left: auto;
+    right: 20px;
+    bottom: 20px;
+    width: max-content;
+    max-width: min(380px, calc(100vw - 40px));
+  }
+}
+@media print { .clock-bar { display: none; } }
+.clock-bar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  color: var(--text-heading);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.clock-bar-link:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 22px; }
+.clock-bar-what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clock-bar-time { font-variant-numeric: tabular-nums; color: var(--accent2); }
+/* The live dot. It breathes rather than blinks — a hard blink in the corner
+   of the eye is the thing you end up covering with your thumb. */
+.clock-bar-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ember-500);
+  box-shadow: 0 0 8px var(--ember-500);
+  animation: clock-pulse 2s var(--ease) infinite;
+}
+@keyframes clock-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.82); }
+}
+
 /* Phone only. The `sm:hidden` utility CANNOT do this: `display: none` from
    @layer utilities loses to the unlayered `display: flex` on .chrome-corner
    and .tabbar, so on a desk the floating chrome and the tab bar both stayed
@@ -1805,7 +1880,7 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   /* Just above the floating tab bar, from the tokens that size it. The phone
      sweep pinned this to a literal 57px — the height of the full-width bar
      that the floating pill replaced — which left it sitting ON the pill. */
-  bottom: calc(var(--tabbar-h) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 8px);
+  bottom: calc(var(--tabbar-stack) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 8px);
   z-index: 30;
   padding: 0.6rem;
   border-radius: var(--wnt-radius-pill);
