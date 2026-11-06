@@ -1802,15 +1802,32 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
    bottom of the window. It sticks only within its own form. */
 .save-bar {
   position: sticky;
-  bottom: calc(57px + env(safe-area-inset-bottom));
+  /* Just above the floating tab bar, from the tokens that size it. The phone
+     sweep pinned this to a literal 57px — the height of the full-width bar
+     that the floating pill replaced — which left it sitting ON the pill. */
+  bottom: calc(var(--tabbar-h) + var(--tabbar-inset) + env(safe-area-inset-bottom) + 8px);
   z-index: 30;
-  margin-inline: -1rem;
-  padding: 0.6rem 1rem;
-  background: var(--surface-page);
-  border-top: 1px solid var(--border-hairline);
+  padding: 0.6rem;
+  border-radius: var(--wnt-radius-pill);
+  /* Glass, and inset from the edges like the bar under it: a full-bleed opaque
+     slab between two floating pills reads as a mistake. It gets the deeper
+     chrome blur because a form scrolls under it. */
+  background-color: var(--gs-fill-chrome);
+  background-image: var(--gs-image-chrome);
+  backdrop-filter: var(--gs-filter-float);
+  border: 1px solid var(--gs-line);
+  box-shadow: var(--gs-shadow-float);
 }
 @media (min-width: 640px) {
-  .save-bar { bottom: 0; margin-inline: -1.5rem; padding-inline: 1.5rem; }
+  /* No floating bar on a desk: the save row sits on the window's bottom edge,
+     full width, as the phone sweep drew it. */
+  .save-bar {
+    bottom: 0;
+    margin-inline: -1.5rem;
+    padding: 0.6rem 1.5rem;
+    border-radius: 0;
+    border-width: 1px 0 0;
+  }
 }
 @media print { .save-bar { display: none; } }
 
