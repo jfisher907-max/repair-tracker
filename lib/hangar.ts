@@ -26,6 +26,60 @@ export interface HangarUnavail {
 
 export const OUT = 'Out'
 
+export interface HangarRate {
+  id: string
+  effective_from: string // 'YYYY-MM-DD'
+  monthly_rate_cents: number
+  note: string
+}
+
+/** A constraint name is not a message. Migration 0069 can refuse a move for two
+ *  reasons a person can actually act on; anything else keeps the caller's own
+ *  wording. */
+export function hangarErrorWords(e: unknown, fallback: string): string {
+  const msg =
+    typeof e === 'object' && e !== null && 'message' in e
+      ? String((e as { message: unknown }).message)
+      : ''
+  if (msg.includes('hangar_sessions_wings_holds_one')) {
+    return 'Wings Hangar already has an aircraft in it, and it only holds one. Move that one out first.'
+  }
+  if (msg.includes('hangar_sessions_one_place_at_a_time')) {
+    return 'That would put the aircraft in two hangars at the same time. Check the times on its other session.'
+  }
+  return fallback
+}
+
+export async function fetchHangarRates(): Promise<HangarRate[]> {
+  const { data, error } = await supabase
+    .from('hangar_rates')
+    .select('*')
+    .order('effective_from', { ascending: false })
+  if (error) throw error
+  return (data ?? []) as HangarRate[]
+}
+
+/** One row per change. Re-saving the same effective_from replaces that row
+ *  rather than stacking another, so a typo is correctable. */
+export async function saveHangarRate(effectiveFrom: string, cents: number): Promise<void> {
+  const { error } = await supabase
+    .from('hangar_rates')
+    .upsert({ effective_from: effectiveFrom, monthly_rate_cents: cents }, { onConflict: 'effective_from' })
+  if (error) throw error
+}
+
+/** The rate in force during a month, i.e. the newest row effective on or before
+ *  that month's first day. Null when no rate covers it - a month before the
+ *  first rate was recorded is not worth a guess. */
+export function rateForMonth(rates: HangarRate[], monthKey: string): number | null {
+  const monthStart = `${monthKey}-01`
+  let best: HangarRate | null = null
+  for (const r of rates) {
+    if (r.effective_from <= monthStart && (!best || r.effective_from > best.effective_from)) best = r
+  }
+  return best ? best.monthly_rate_cents : null
+}
+
 export async function fetchHangarData(): Promise<{
   sessions: HangarSession[]
   unavail: HangarUnavail[]

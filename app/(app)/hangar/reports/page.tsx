@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useDocumentTitle } from '@/lib/title'
-import { fetchHangarData, type HangarSession, type HangarUnavail } from '@/lib/hangar'
+import {
+  fetchHangarData,
+  fetchHangarRates,
+  rateForMonth,
+  saveHangarRate,
+  type HangarRate,
+  type HangarSession,
+  type HangarUnavail,
+} from '@/lib/hangar'
+import { formatCents, parseMoney } from '@/lib/money'
+import { dbErrorWords } from '@/lib/db-errors'
 import {
   HANGARS,
   clipSessionsToRange,
@@ -79,16 +89,18 @@ export default function HangarReportsPage() {
   const [filter, setFilter] = useState<Filter>({ preset: 'all', start: null, end: null })
   const [copied, setCopied] = useState(false)
   const [showMoney, setShowMoney] = useState(false)
-  const [rate, setRate] = useState(12000)
+  const [rates, setRates] = useState<HangarRate[]>([])
+  const [rateInput, setRateInput] = useState('')
+  const [rateMsg, setRateMsg] = useState<string | null>(null)
 
-  // Per-browser display preference — the dollar math is never stored.
+  // Only the show/hide toggle is a per-browser preference. The rate itself is
+  // shop data in integer cents and lives in the database (migration 0069), so
+  // it is the same on every device and a month keeps the rate it was priced at.
   useEffect(() => {
     try {
       const on = localStorage.getItem('wnt_hangar_show_money')
-      const r = localStorage.getItem('wnt_hangar_rate')
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring persisted UI prefs on mount
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring a persisted UI pref on mount
       if (on !== null) setShowMoney(on === '1')
-      if (r !== null && Number(r) > 0) setRate(Number(r))
     } catch {}
   }, [])
 
@@ -101,12 +113,24 @@ export default function HangarReportsPage() {
     })
   }
 
-  function changeRate(v: string) {
-    const n = Number(v)
-    setRate(n)
+  // A rate change takes effect from the first of the current month, so
+  // finished months keep the rate they were reported at.
+  async function saveRate() {
+    const cents = parseMoney(rateInput)
+    if (cents === null || cents <= 0) {
+      setRateMsg('Enter the monthly rate, for example 1200.00')
+      return
+    }
+    const d = new Date()
+    const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
     try {
-      if (n > 0) localStorage.setItem('wnt_hangar_rate', String(n))
-    } catch {}
+      await saveHangarRate(from, cents)
+      setRates(await fetchHangarRates())
+      setRateInput('')
+      setRateMsg(`Saved. ${formatCents(cents)}/month applies from ${from}.`)
+    } catch (e) {
+      setRateMsg(dbErrorWords(e, 'save the rate', 'the hangar rate table (migration 0069)'))
+    }
   }
 
   const load = useCallback(async () => {
@@ -114,6 +138,11 @@ export default function HangarReportsPage() {
       const d = await fetchHangarData()
       setSessions(d.sessions)
       setUnavail(d.unavail)
+      try {
+        setRates(await fetchHangarRates())
+      } catch {
+        setRates([])
+      }
     } catch {
       setSessions([])
       setUnavail([])
@@ -243,24 +272,47 @@ export default function HangarReportsPage() {
             </div>
             {showMoney && (
               <div className="panel-in mt-3">
-                <label className="flex items-center gap-2 text-sm" style={{ color: 'var(--text2)' }}>
-                  Monthly rate $
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    className="input w-32"
-                    value={Number.isFinite(rate) ? rate : ''}
-                    onChange={(e) => changeRate(e.target.value)}
-                  />
-                  /month
-                </label>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-sm" style={{ color: 'var(--text2)' }}>
+                    <span className="label">Monthly rate</span>
+                    <input
+                      className="input w-40"
+                      inputMode="decimal"
+                      placeholder="1200.00"
+                      aria-label="Monthly hangar management rate"
+                      value={rateInput}
+                      onChange={(e) => setRateInput(e.target.value)}
+                    />
+                  </label>
+                  <button type="button" className="btn btn-sm" onClick={() => void saveRate()}>
+                    Set rate
+                  </button>
+                </div>
+                {rates.length > 0 ? (
+                  <div className="mt-1 text-sm" style={{ color: 'var(--text3)' }}>
+                    Current: {formatCents(rates[0].monthly_rate_cents)}/month from {rates[0].effective_from}
+                    {rates.length > 1 && ` · ${rates.length - 1} earlier rate${rates.length > 2 ? 's' : ''} kept`}
+                  </div>
+                ) : (
+                  <div className="mt-1 text-sm" style={{ color: 'var(--text3)' }}>
+                    No rate recorded yet. Set it once; each month below is then priced with the rate in
+                    force during that month, so changing it later never re-prices a month already reported.
+                  </div>
+                )}
+                {rateMsg && (
+                  <div className="mt-1 text-sm" style={{ color: 'var(--text2)' }}>
+                    {rateMsg}
+                  </div>
+                )}
                 <div className="mt-3 grid gap-2">
                   {monthlyUnavailBreakdown(u, new Date()).map((m) => {
-                    const credit = (m.pct / 100) * (rate > 0 ? rate : 0)
-                    const net = (rate > 0 ? rate : 0) - credit
+                    const rc = rateForMonth(rates, m.key)
+                    // Round once, at the end, in cents.
+                    const credit = rc === null ? null : Math.round((m.pct / 100) * rc)
+                    const net = rc === null || credit === null ? null : rc - credit
                     return (
                       <div key={m.key} className="stat-tile">
-                        <div className="flex items-baseline justify-between">
+                        <div className="flex items-baseline justify-between gap-2">
                           <span className="font-semibold">
                             {m.label}
                             {m.current && (
@@ -269,13 +321,19 @@ export default function HangarReportsPage() {
                               </span>
                             )}
                           </span>
-                          <span className="text-lg font-semibold" style={{ color: 'var(--red)' }}>
-                            −{money(credit)}
-                          </span>
+                          {credit === null ? (
+                            <span className="text-sm" style={{ color: 'var(--text3)' }}>
+                              no rate for this month
+                            </span>
+                          ) : (
+                            <span className="text-lg font-semibold" style={{ color: 'var(--red)' }}>
+                              −{formatCents(credit)}
+                            </span>
+                          )}
                         </div>
                         <div className="mt-0.5 text-sm" style={{ color: 'var(--text3)' }}>
-                          {m.unavailHours.toFixed(1)}h unavailable · {m.pct.toFixed(1)}% of the month · net due{' '}
-                          {money(net)}
+                          {m.unavailHours.toFixed(1)}h unavailable · {m.pct.toFixed(1)}% of the month
+                          {net !== null && <> · net due {formatCents(net)}</>}
                         </div>
                       </div>
                     )
@@ -287,8 +345,9 @@ export default function HangarReportsPage() {
                   )}
                 </div>
                 <div className="mt-2 text-sm" style={{ color: 'var(--text3)' }}>
-                  Credit = share of the monthly rate for time Wings was unavailable, split across month
-                  boundaries. Display-only — nothing monetary is stored.
+                  Credit = share of that month’s rate for the time Wings was unavailable, split across
+                  month boundaries. The current month counts hours up to now against the whole month, so
+                  it only settles once the month ends. These figures are not an invoice.
                 </div>
               </div>
             )}
@@ -299,6 +358,3 @@ export default function HangarReportsPage() {
   )
 }
 
-function money(n: number): string {
-  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
-}

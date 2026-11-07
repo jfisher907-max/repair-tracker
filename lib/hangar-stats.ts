@@ -7,6 +7,11 @@ import type { HangarSession, HangarUnavail } from './hangar'
 
 export const AIRCRAFT = ['N254AL', 'N253AL'] as const
 export const HANGARS = ['Wings Hangar', 'ALNW'] as const
+/** How many aircraft each hangar physically holds (Jake, 2026-11-07). The
+ *  database enforces the Wings limit too - migration 0069 refuses a second
+ *  aircraft there - so this is for showing occupancy and for disabling a move
+ *  before it can fail, not the only thing standing between us and a bad row. */
+export const HANGAR_CAPACITY: Record<string, number> = { 'Wings Hangar': 1, ALNW: 2 }
 
 export type HangarPreset = 'all' | 'this_month' | 'last_month' | 'last_30' | 'last_90' | 'custom'
 

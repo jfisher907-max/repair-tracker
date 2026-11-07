@@ -16,12 +16,16 @@ export default function JetCard({
   now,
   onSetLocation,
   busy,
+  fullTargets = [],
 }: {
   aircraft: string
   openSession: HangarSession | undefined
   now: number
   onSetLocation: (target: string) => void
   busy: boolean
+  /** Hangars already at capacity. The jet already in one is never blocked from
+   *  its own hangar - it is the thing filling it. */
+  fullTargets?: string[]
 }) {
   const loc = openSession ? openSession.hangar : OUT
   return (
@@ -38,17 +42,21 @@ export default function JetCard({
         {openSession ? `In ${openSession.hangar} · since ${fmtDT(openSession.entry)}` : 'Not in a hangar'}
       </div>
       <div className="hangar-switch">
-        {SWITCH.map((opt) => (
-          <button
-            key={opt.val}
-            type="button"
-            disabled={busy}
-            className={`${opt.cls} ${loc === opt.val ? 'on' : ''}`}
-            onClick={() => onSetLocation(opt.val)}
-          >
-            {opt.label}
-          </button>
-        ))}
+        {SWITCH.map((opt) => {
+          const full = fullTargets.includes(opt.val) && loc !== opt.val
+          return (
+            <button
+              key={opt.val}
+              type="button"
+              disabled={busy || full}
+              title={full ? `${opt.label} is full` : undefined}
+              className={`${opt.cls} ${loc === opt.val ? 'on' : ''}`}
+              onClick={() => onSetLocation(opt.val)}
+            >
+              {opt.label}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

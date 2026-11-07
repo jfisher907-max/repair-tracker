@@ -7,10 +7,11 @@ import {
   fetchHangarData,
   logUnavail,
   setJetLocation,
+  hangarErrorWords,
   type HangarSession,
   type HangarUnavail,
 } from '@/lib/hangar'
-import { AIRCRAFT } from '@/lib/hangar-stats'
+import { AIRCRAFT, HANGARS, HANGAR_CAPACITY } from '@/lib/hangar-stats'
 import JetCard from '@/components/hangar/JetCard'
 import WingsBlock from '@/components/hangar/WingsBlock'
 import PastMoveModal from '@/components/hangar/PastMoveModal'
@@ -57,6 +58,15 @@ export default function HangarBoardPage() {
   const open = (sessions ?? []).filter((s) => !s.exit)
   const openU = (unavail ?? []).find((u) => !u.end_time)
 
+  // Occupancy now that capacity is known. A hangar at capacity is refused by
+  // the database; disabling the button means nobody has to meet that refusal.
+  const occupancy = HANGARS.map((h) => ({
+    hangar: h,
+    used: open.filter((s) => s.hangar === h).length,
+    cap: HANGAR_CAPACITY[h] ?? 0,
+  }))
+  const fullHangars = occupancy.filter((o) => o.used >= o.cap).map((o) => o.hangar)
+
   async function handleSetLocation(aircraft: string, target: string) {
     const current = open.find((s) => s.aircraft === aircraft)
     if (current && current.hangar === target) return
@@ -65,8 +75,8 @@ export default function HangarBoardPage() {
       await setJetLocation(aircraft, current, target)
       setFlash(`${aircraft} → ${target}`)
       await load()
-    } catch {
-      alert('Save failed — check connection.')
+    } catch (e) {
+      alert(hangarErrorWords(e, 'Save failed — check connection.'))
     } finally {
       setBusy(false)
     }
@@ -107,6 +117,14 @@ export default function HangarBoardPage() {
       ) : (
         <>
           <div className="label mb-2">Live positions — tap to log a move</div>
+          <div className="mb-3 flex flex-wrap gap-2 text-sm" style={{ color: 'var(--text3)' }}>
+            {occupancy.map((o) => (
+              <span key={o.hangar} className="chip">
+                {o.hangar} {o.used}/{o.cap}
+                {o.used >= o.cap && ' · full'}
+              </span>
+            ))}
+          </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {AIRCRAFT.map((ac) => (
               <JetCard
@@ -115,6 +133,7 @@ export default function HangarBoardPage() {
                 openSession={open.find((s) => s.aircraft === ac)}
                 now={now}
                 busy={busy}
+                fullTargets={fullHangars}
                 onSetLocation={(target) => void handleSetLocation(ac, target)}
               />
             ))}
