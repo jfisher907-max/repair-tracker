@@ -1830,6 +1830,23 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .seg-item:disabled { opacity: 0.45; cursor: default; }
 .seg-item:disabled.on { opacity: 1; }
 .seg-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* A WRAPPING tray: the same recessed glass as .seg-track, but the options size
+   to their own labels and flow onto further rows instead of being forced into
+   equal columns. For groups a segmented control cannot hold - six date
+   presets, five colour-coded inspection ratings, three verdicts whose labels
+   are sentences. Without this they stay loose buttons on the card, which is
+   the one place the glass pass visibly stops.
+   The pill radius belongs to a single-row track; a tray two or three rows tall
+   takes the card's radius instead, so the corners do not bow out. */
+.seg-track.seg-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  border-radius: var(--wnt-radius-md);
+}
+.seg-track.seg-wrap > .seg-item {
+  flex: 0 1 auto;
+  padding: 0 0.85rem;
+}
 /* Status-coloured segments (the hangar board's Wings / ALNW / Out switch
    keeps its meaning — mint, gold, neutral). */
 .seg-item.on.seg-ok { color: var(--status-ok-fg); background-color: rgba(76, 217, 123, 0.18); }

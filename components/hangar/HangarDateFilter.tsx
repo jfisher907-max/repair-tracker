@@ -24,12 +24,13 @@ export default function HangarDateFilter({
   return (
     <div className="card mb-4">
       <div className="label mb-2">Date range</div>
-      <div className="flex flex-wrap gap-2">
+      <div className="seg-track seg-wrap" role="group" aria-label="Date range">
         {shown.map((p) => (
           <button
             key={p.key}
             type="button"
-            className={`btn btn-sm ${filter.preset === p.key ? 'btn-primary' : ''}`}
+            className={`seg-item ${filter.preset === p.key ? 'on' : ''}`}
+            aria-pressed={filter.preset === p.key}
             onClick={() => onChange({ ...filter, preset: p.key })}
           >
             {p.label}

@@ -426,17 +426,20 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
                 </div>
               )}
 
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label={`Rating for ${it.label}`}>
+              {/* The rating keeps its own colour: the inline style overrides
+                  .seg-item.on's gold, while the lit edge rides along. */}
+              <div className="seg-track seg-wrap" role="group" aria-label={`Rating for ${it.label}`}>
                 {RATINGS.map((r) => {
                   const on = it.rating === r.value
                   return (
                     <button
                       key={r.value}
-                      className="btn btn-sm min-h-11"
+                      type="button"
+                      className={`seg-item ${on ? 'on' : ''}`}
                       disabled={!draft}
                       aria-pressed={on}
                       title={r.meaning}
-                      style={on ? { background: RATING_STYLE[r.value].bg, color: RATING_STYLE[r.value].fg, borderColor: 'transparent' } : undefined}
+                      style={on ? { background: RATING_STYLE[r.value].bg, color: RATING_STYLE[r.value].fg } : undefined}
                       onClick={() => saveItem(it.id, { rating: on ? null : r.value })}
                     >
                       {r.label}
@@ -500,18 +503,17 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
           {counts.attention} need attention · {counts.watch} to watch · {counts.notChecked} not checked
           {unrated.length > 0 && ` · ${unrated.length} not rated yet`}
         </p>
-        {/* NOT a seg-track, though it is three mutually exclusive options: the
-            labels are sentences, and three 99px columns wrapped "No major
-            concerns found" onto three lines. A wrap row gives each verdict its
-            own full-width line instead. */}
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Overall">
+        {/* seg-wrap, not seg-track: three equal columns wrapped "No major
+            concerns found" onto three lines. The wrapping tray gives it the
+            glass without the equal columns. */}
+        <div className="seg-track seg-wrap" role="group" aria-label="Overall">
           {VERDICTS.map((v) => {
             const on = (ins.verdict ?? suggested) === v.value
             return (
               <button
                 key={v.value}
                 type="button"
-                className={`btn min-h-11 ${on ? 'btn-primary' : ''}`}
+                className={`seg-item ${on ? 'on' : ''}`}
                 aria-pressed={on}
                 disabled={!draft}
                 onClick={() => saveIns({ verdict: v.value })}

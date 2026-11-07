@@ -347,12 +347,13 @@ export default function JobForm({ job }: { job?: Job }) {
       {!editing && templates.length > 0 && (
         <div className="card space-y-2">
           <span className="label !mb-0">Start from a saved job</span>
-          <div className="flex flex-wrap gap-2">
+          <div className="seg-track seg-wrap" role="group" aria-label="Start from a saved job">
             {templates.map((t) => (
               <button
                 key={t.id}
                 type="button"
-                className={`btn btn-sm ${templateName === t.name ? 'btn-primary' : ''}`}
+                className={`seg-item ${templateName === t.name ? 'on' : ''}`}
+                aria-pressed={templateName === t.name}
                 onClick={() => {
                   setTitle(t.title)
                   setWorkPerformed(t.work_performed ?? '')
