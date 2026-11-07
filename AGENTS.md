@@ -4,7 +4,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Project conventions
 
-Single-user car repair tracker for Jake (jfisher907@gmail.com). Next.js App Router + TypeScript + Tailwind v4 + Supabase, deployed on Vercel — same stack and conventions as `aeroair-ops` and `Hangar-Tracker`, but a completely separate system (own repo / Supabase project `kccmalbgfekapedgvhar` / Vercel project).
+Single-user car repair tracker for Jake (jfisher907@gmail.com). Next.js App Router + TypeScript + Tailwind v4 + Supabase, deployed on Vercel — same stack and conventions as `aeroair-ops`, but a completely separate system (own repo / Supabase project `kccmalbgfekapedgvhar` / Vercel project).
 
 - **Money is integer cents everywhere** (`*_cents` columns, `lib/money.ts` helpers). Never floats, never dollars in the DB.
 - **Job money math is defined once** in the `job_totals` Postgres view (server-authoritative) and mirrored in `lib/calc.ts` for optimistic UI. Keep them in sync.
