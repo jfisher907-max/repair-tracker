@@ -113,17 +113,19 @@ export default function HangarHistoryPage() {
             </option>
           ))}
         </select>
-        <div className="ml-auto flex gap-2">
+        <div className="seg-track ml-auto" role="group" aria-label="History view">
           <button
             type="button"
-            className={`btn btn-sm ${tab === 'sessions' ? 'btn-primary' : ''}`}
+            className={`seg-item ${tab === 'sessions' ? 'on' : ''}`}
+            aria-pressed={tab === 'sessions'}
             onClick={() => setTab('sessions')}
           >
             Sessions
           </button>
           <button
             type="button"
-            className={`btn btn-sm ${tab === 'unavail' ? 'btn-primary' : ''}`}
+            className={`seg-item ${tab === 'unavail' ? 'on' : ''}`}
+            aria-pressed={tab === 'unavail'}
             onClick={() => setTab('unavail')}
           >
             Unavailability

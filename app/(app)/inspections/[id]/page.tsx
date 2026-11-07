@@ -329,14 +329,16 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
         </label>
         <div className="space-y-1 sm:col-span-2">
           <span className="label">Road test</span>
-          <div className="flex flex-wrap gap-2">
+          <div className="seg-track" role="group" aria-label="Road test">
             {[
               { v: true, l: 'Driven' },
               { v: false, l: 'Not driven' },
             ].map((o) => (
               <button
                 key={o.l}
-                className={`btn min-h-11 ${ins.road_test_done === o.v ? 'btn-primary' : ''}`}
+                type="button"
+                className={`seg-item ${ins.road_test_done === o.v ? 'on' : ''}`}
+                aria-pressed={ins.road_test_done === o.v}
                 disabled={!draft}
                 onClick={() => saveIns({ road_test_done: o.v })}
               >
@@ -498,13 +500,19 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
           {counts.attention} need attention · {counts.watch} to watch · {counts.notChecked} not checked
           {unrated.length > 0 && ` · ${unrated.length} not rated yet`}
         </p>
+        {/* NOT a seg-track, though it is three mutually exclusive options: the
+            labels are sentences, and three 99px columns wrapped "No major
+            concerns found" onto three lines. A wrap row gives each verdict its
+            own full-width line instead. */}
         <div className="flex flex-wrap gap-2" role="group" aria-label="Overall">
           {VERDICTS.map((v) => {
             const on = (ins.verdict ?? suggested) === v.value
             return (
               <button
                 key={v.value}
+                type="button"
                 className={`btn min-h-11 ${on ? 'btn-primary' : ''}`}
+                aria-pressed={on}
                 disabled={!draft}
                 onClick={() => saveIns({ verdict: v.value })}
               >

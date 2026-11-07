@@ -502,27 +502,41 @@ export default function TaxesPage() {
                 The city requires the same basis as your federal return: confirm with your tax preparer, then set it
                 here once.
               </p>
-              <div className="flex flex-wrap gap-2">
-                <button className={`btn btn-sm ${basis === 'cash' ? 'btn-primary' : ''}`} onClick={() => chooseBasis('cash')}>
-                  Cash (by payment date)
+              <div className="seg-track" role="group" aria-label="Sales tax basis">
+                <button
+                  type="button"
+                  className={`seg-item ${basis === 'cash' ? 'on' : ''}`}
+                  aria-pressed={basis === 'cash'}
+                  onClick={() => chooseBasis('cash')}
+                >
+                  Cash
                 </button>
                 <button
-                  className={`btn btn-sm ${basis === 'accrual' ? 'btn-primary' : ''}`}
+                  type="button"
+                  className={`seg-item ${basis === 'accrual' ? 'on' : ''}`}
+                  aria-pressed={basis === 'accrual'}
                   onClick={() => chooseBasis('accrual')}
                 >
-                  Accrual (by invoice date)
+                  Accrual
                 </button>
-                {basis && (
-                  <>
-                    <button className="btn btn-sm" onClick={() => chooseBasis(null)}>
-                      Not sure yet: show both
-                    </button>
-                    <button className="btn btn-sm" onClick={() => setChangingBasis(false)}>
-                      Keep {basis}
-                    </button>
-                  </>
-                )}
+                <button
+                  type="button"
+                  className={`seg-item ${basis === null ? 'on' : ''}`}
+                  aria-pressed={basis === null}
+                  onClick={() => chooseBasis(null)}
+                >
+                  Show both
+                </button>
               </div>
+              <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                Cash counts a job by its payment date, accrual by its invoice date. Show both leaves
+                it undecided.
+              </p>
+              {basis && (
+                <button type="button" className="btn btn-sm" onClick={() => setChangingBasis(false)}>
+                  Keep {basis}
+                </button>
+              )}
             </div>
           )}
           {basisError && (

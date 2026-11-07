@@ -200,11 +200,13 @@ export default function FollowUpsPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="seg-track" role="group" aria-label="Follow-up filter">
         {(['open', 'booked', 'all'] as Filter[]).map((f) => (
           <button
             key={f}
-            className={`btn btn-sm ${filter === f ? 'btn-primary' : ''}`}
+            type="button"
+            className={`seg-item ${filter === f ? 'on' : ''}`}
+            aria-pressed={filter === f}
             onClick={() => setFilter(f)}
           >
             {f === 'open' ? 'Open' : f === 'booked' ? 'Booked' : 'Everything'} ({counts[f]})
