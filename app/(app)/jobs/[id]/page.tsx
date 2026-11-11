@@ -38,7 +38,7 @@ import {
   type JobAuthorization,
 } from '@/lib/authorization'
 import { listForJob, toMemo, type Recommendation } from '@/lib/recommendations'
-import { markedUpCharge, type MarkupConfig, type MarkupTier } from '@/lib/markup'
+import { isPassThrough, markedUpCharge, type MarkupConfig, type MarkupTier } from '@/lib/markup'
 import {
   proposePrice,
   walkInSearchUrl,
@@ -1835,6 +1835,52 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 // Editing a line the customer already approved. The price is
                 // theirs, not the rule's.
                 const approvedEdit = !!(editingLine && editingLine.quote_line_id)
+                // What this line will actually charge once it saves. The
+                // branches are saveLine's, deliberately - a warning computed
+                // off a different number than the save uses would be worse
+                // than no warning at all. Blank keeps the approved price on an
+                // approved line, falls to cost on any other edit, and takes
+                // the rule's figure on a new one.
+                const draftCost = parseMoney(draft.unit_cost)
+                const typedCharge2 = draft.unit_charge.trim() !== '' ? parseMoney(draft.unit_charge) : undefined
+                const effectiveCharge = offBill
+                  ? 0
+                  : typedCharge2 !== undefined
+                    ? typedCharge2
+                    : editingLine
+                      ? approvedEdit
+                        ? editingLine.unit_charge_cents
+                        : draftCost
+                      : (proposal?.cents ??
+                        markedUpCharge(draftCost ?? 0, markup, draft.description) ??
+                        draftCost)
+                // THE THREE CENTS (J022, 2026-11-11). The city tax the parts
+                // counter charges is the shop's cost, not the customer's - it
+                // raises parts_cost_cents and lowers profit, and the customer
+                // never reimburses it (migration 0027). So a line sold at cost
+                // loses exactly that tax, and a thin markup can lose money
+                // while looking like a profit: a $91.28 strap sold at $95.99
+                // is $4.71 up, against $4.74 of counter tax. Net -$0.03.
+                //
+                // Pass-through lines are exempt because they are SUPPOSED to
+                // sit at cost - freight, fees, cores and discounts are never
+                // marked up anywhere in this app, and warning on them would
+                // teach Jake to ignore the warning.
+                const counterTaxCents =
+                  draftCost != null && draftCost > 0 ? Math.round((draftCost * estimateRateBp) / 10000) : 0
+                const underCost =
+                  !offBill &&
+                  draftCost != null &&
+                  draftCost > 0 &&
+                  effectiveCharge != null &&
+                  !isPassThrough(draft.description) &&
+                  effectiveCharge - draftCost - counterTaxCents < 0
+                    ? {
+                        net: effectiveCharge - draftCost - counterTaxCents,
+                        breakEven: draftCost + counterTaxCents,
+                        charge: effectiveCharge,
+                      }
+                    : null
                 return (
                   <div className="col-span-2 space-y-1">
                     {!editingLine && quotedJob && !lockedByInvoice && (
@@ -1945,6 +1991,15 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                               )}
                             </span>
                           </div>
+                        )}
+                        {underCost && (
+                          <p className="text-xs" style={{ color: 'var(--orange)' }}>
+                            {formatCents(underCost.charge)} doesn’t cover this part.{' '}
+                            {formatCents(counterTaxCents)} of it goes straight back out as the{' '}
+                            {formatTaxRate(estimateRateBp)} the counter charged you, so the job is{' '}
+                            {formatCents(Math.abs(underCost.net))} down on this line. Break even at{' '}
+                            {formatCents(underCost.breakEven)}.
+                          </p>
                         )}
                       </>
                     )}
@@ -2218,6 +2273,26 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             {formatCents(totals.profit_cents)}
           </span>
         </div>
+        {/* J022, 2026-11-11: profit read -$0.03 and the figure alone did not
+            say why. The counter tax is the whole story - $4.74 paid at
+            O'Reilly against $4.71 of markup - and it is invisible here
+            because it is folded into parts cost (0027). Shown only when it is
+            actually the thing holding the job down, i.e. the job would be in
+            the black without it; a job losing money for its own reasons
+            should not get an explanation that points at the wrong cause.
+            Note this can be true while NO single line looks underwater:
+            freight and cores pass through at cost, so their share of the tax
+            is never recovered by anything. */}
+        {receiptTaxCents > 0 &&
+          totals.profit_cents < 0 &&
+          totals.profit_cents + receiptTaxCents >= 0 && (
+            <p className="text-xs" style={{ color: 'var(--orange)' }}>
+              The {formatCents(receiptTaxCents)} of city tax you paid at the parts counter is your
+              cost, not the customer’s — it is already inside the parts cost above. Without it this
+              job would be {formatCents(totals.profit_cents + receiptTaxCents)} up. Freight and core
+              lines pass through at cost, so their share of that tax is never recovered.
+            </p>
+          )}
         {includedTaxCents > 0 && (
           <p className="text-xs" style={{ color: 'var(--text3)' }}>
             {govInvoice?.invoice_number ?? 'The invoice'} went out with no tax line, so the customer
