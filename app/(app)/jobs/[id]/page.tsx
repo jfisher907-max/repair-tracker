@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { use, useCallback, useEffect, useRef, useState } from 'react'
+import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
@@ -38,7 +38,14 @@ import {
   type JobAuthorization,
 } from '@/lib/authorization'
 import { listForJob, toMemo, type Recommendation } from '@/lib/recommendations'
-import { markedUpCharge, type MarkupConfig } from '@/lib/markup'
+import { markedUpCharge, type MarkupConfig, type MarkupTier } from '@/lib/markup'
+import {
+  proposePrice,
+  walkInSearchUrl,
+  type QuotePricing,
+  type WalkInSample,
+} from '@/lib/quote-pricing'
+import { splitPartNumber } from '@/lib/receipt-match'
 import {
   AIRCRAFT_SHOP_RULE,
   PAPER,
@@ -79,10 +86,15 @@ interface LineDraft {
   qty: string
   unit_cost: string
   unit_charge: string
+  /** O'Reilly's own figures. Only Jake sees them; they PRICE the line, they are
+   *  not the price - unit_charge stays the one thing the customer pays. */
+  unit_list: string
+  unit_retail: string
 }
 
 const emptyDraft: LineDraft = {
   purchase_date: '', store: '', part_number: '', description: '', qty: '1', unit_cost: '', unit_charge: '',
+  unit_list: '', unit_retail: '',
 }
 
 /** The three stages (0043), in the order the work moves through them. */
@@ -173,6 +185,39 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const descriptionRef = useRef<HTMLInputElement | null>(null)
   const [storeSuggestions, setStoreSuggestions] = useState<string[]>([])
   const [markup, setMarkup] = useState<MarkupConfig>({ enabled: false, tiers: [] })
+  // The quote screen's pricing rule (Settings > Parts pricing). A part added
+  // straight to a job used to be priced by a different rule than the same part
+  // on a quote - the matrix alone, and only when the matrix was switched on.
+  const [pricing, setPricing] = useState<{ rule: QuotePricing; pct: number; tiers: MarkupTier[] }>({
+    rule: 'walkin',
+    pct: 0,
+    tiers: [],
+  })
+  const [samples, setSamples] = useState<WalkInSample[]>([])
+
+  /**
+   * What the shop's own rule proposes for the part being added or edited -
+   * lib/quote-pricing.ts, the same function and the same learned walk-in
+   * ratios the quote screen prices with. A SUGGESTION only: it fills the
+   * blank box, and the figure Jake types always wins.
+   */
+  const proposal = useMemo(() => {
+    const description = draft.description.trim()
+    if (!description) return null
+    return proposePrice(
+      pricing.rule,
+      pricing.pct,
+      {
+        description,
+        line_code: splitPartNumber(draft.part_number).line_code,
+        unit_cost_cents: parseMoney(draft.unit_cost),
+        unit_list_cents: parseMoney(draft.unit_list),
+        unit_retail_cents: parseMoney(draft.unit_retail),
+      },
+      samples,
+      pricing.tiers,
+    )
+  }, [draft, pricing, samples])
   const [recs, setRecs] = useState<Recommendation[]>([])
   const [editingLabor, setEditingLabor] = useState(false)
   const [savingLabor, setSavingLabor] = useState(false)
@@ -208,7 +253,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       supabase.from('receipts').select('*').eq('job_id', id).order('created_at'),
       supabase
         .from('settings')
-        .select('store_suggestions, parts_markup_enabled, parts_markup_tiers, default_tax_rate_bp')
+        .select('store_suggestions, parts_markup_enabled, parts_markup_tiers, default_tax_rate_bp, quote_pricing, quote_markup_pct')
         .single(),
       supabase.from('invoices').select('*').eq('job_id', id).order('created_at'),
       supabase.from('payments').select('*').eq('job_id', id).order('date'),
@@ -236,6 +281,26 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       enabled: !!settingsRes.data?.parts_markup_enabled,
       tiers: settingsRes.data?.parts_markup_tiers ?? [],
     })
+    setPricing({
+      rule: (settingsRes.data?.quote_pricing as QuotePricing) ?? 'walkin',
+      pct: Number(settingsRes.data?.quote_markup_pct) || 0,
+      tiers: settingsRes.data?.parts_markup_tiers ?? [],
+    })
+    // Every walk-in price the shop has looked up - on a quote OR on a job -
+    // teaches the estimate, through 0070's walkin_samples view. Before that
+    // migration runs the view is absent, so fall back to the quote lines alone
+    // rather than taking the whole job page down over a suggestion.
+    const sampleCols = 'line_code, unit_cost_cents, unit_list_cents, unit_retail_cents'
+    const pool = await supabase.from('walkin_samples').select(sampleCols)
+    if (pool.error) {
+      const fallback = await supabase
+        .from('quote_lines')
+        .select(sampleCols)
+        .not('unit_retail_cents', 'is', null)
+      setSamples((fallback.data as WalkInSample[]) ?? [])
+    } else {
+      setSamples((pool.data as WalkInSample[]) ?? [])
+    }
     setInvoices((invoicesRes.data as Invoice[]) ?? [])
     setPayments((paymentsRes.data as Payment[]) ?? [])
     setOks((oksRes.data as JobOk[]) ?? [])
@@ -631,6 +696,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       // sells at cost — the box was pre-populated, so empty is the state that
       // was loaded, not a request to re-price. Without that split, correcting
       // a store name on an at-cost line silently multiplied what's owed.
+      // A NEW billed line with a blank box still means "price it for me" -
+      // only now the shop's own rule answers, with the same learned walk-in
+      // figure the quote screen would have used. The matrix stays the fallback
+      // for when the rule has nothing to go on (walk-in pricing before any
+      // price has been looked up), so this can only add an answer where there
+      // wasn't one. Every other branch is untouched: off the bill charges
+      // exactly 0, a typed figure is Jake's, and on an EDIT blank still keeps
+      // what was agreed - an approved line keeps the approved price (0030).
       unit_charge_cents: offBill
         ? 0
         : typedCharge !== undefined
@@ -639,7 +712,24 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             ? editing.quote_line_id
               ? editing.unit_charge_cents
               : null
-            : markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup, draft.description),
+            : (proposal?.cents ??
+              markedUpCharge(parseMoney(draft.unit_cost) ?? 0, markup, draft.description)),
+      // O'Reilly's own figures, so a price checked here teaches every later
+      // estimate (0070's walkin_samples) instead of being looked up twice.
+      line_code: splitPartNumber(draft.part_number).line_code,
+      unit_list_cents: parseMoney(draft.unit_list),
+      unit_retail_cents: parseMoney(draft.unit_retail),
+      // Off the bill there is no customer price, so there is no basis to
+      // record. An edit keeps the basis it already had unless Jake retypes.
+      price_basis: offBill
+        ? null
+        : typedCharge !== undefined
+          ? 'manual'
+          : editing
+            ? (editing.price_basis ?? null)
+            : proposal?.cents != null
+              ? pricing.rule
+              : null,
     }
     const result = editingLineId
       ? await supabase.from('part_lines').update(payload).eq('id', editingLineId)
@@ -811,12 +901,28 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }
     // The toggle can't remember a price: off the bill a line must charge
     // exactly 0, so whatever was agreed is gone and coming back it is priced
-    // from the markup. Both directions now say so with the figure.
+    // by the shop's rule - the same rule the add form uses, so a line does not
+    // change price depending on which control put it on the bill. Both
+    // directions still say so with the figure.
     const nextCharge = on
-      ? (markedUpCharge(l.unit_cost_cents, markup, l.description) ?? l.unit_cost_cents)
+      ? (proposePrice(
+          pricing.rule,
+          pricing.pct,
+          {
+            description: l.description,
+            line_code: l.line_code ?? splitPartNumber(l.part_number).line_code,
+            unit_cost_cents: l.unit_cost_cents,
+            unit_list_cents: l.unit_list_cents,
+            unit_retail_cents: l.unit_retail_cents,
+          },
+          samples,
+          pricing.tiers,
+        ).cents ??
+        markedUpCharge(l.unit_cost_cents, markup, l.description) ??
+        l.unit_cost_cents)
       : 0
     if (on) {
-      const priceNote = `It goes back on at ${formatCents(nextCharge)} — your markup on what it cost, not any price it carried before.`
+      const priceNote = `It goes back on at ${formatCents(nextCharge)} — your pricing rule on what it cost, not any price it carried before.`
       const ask = quotedJob
         ? serviceLine === 'aviation'
           ? `“${l.description}” isn’t on what the customer approved. Only bill it if they've OK'd the extra. ${AIRCRAFT_SHOP_RULE} ${priceNote}`
@@ -826,7 +932,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     } else if ((l.unit_charge_cents ?? 0) > 0) {
       if (
         !confirm(
-          `Take “${l.description}” off the bill? Its ${formatCents(l.unit_charge_cents ?? 0)} price is cleared, and putting it back later prices it from your markup instead.`,
+          `Take “${l.description}” off the bill? Its ${formatCents(l.unit_charge_cents ?? 0)} price is cleared, and putting it back later prices it from your pricing rule instead.`,
         )
       ) {
         return
@@ -1068,6 +1174,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       qty: String(l.qty),
       unit_cost: centsToInput(l.unit_cost_cents),
       unit_charge: l.unit_charge_cents != null ? centsToInput(l.unit_charge_cents) : '',
+      unit_list: l.unit_list_cents != null ? centsToInput(l.unit_list_cents) : '',
+      unit_retail: l.unit_retail_cents != null ? centsToInput(l.unit_retail_cents) : '',
     })
   }
 
@@ -1757,13 +1865,70 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                               ? editingLine.quote_line_id
                                 ? 'Blank = keep the approved price'
                                 : 'Blank = same as cost'
-                              : markup.enabled
-                                ? 'Blank = your markup matrix (tax and freight at cost)'
-                                : 'Blank = same as cost'
+                              : proposal?.cents != null
+                                ? `Blank = ${formatCents(proposal.cents)}, your pricing rule`
+                                : markup.enabled
+                                  ? 'Blank = your markup matrix (tax and freight at cost)'
+                                  : 'Blank = same as cost'
                           }
                           value={draft.unit_charge}
                           onChange={(e) => setDraft({ ...draft, unit_charge: e.target.value })}
                         />
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <input
+                            className="input"
+                            inputMode="decimal"
+                            placeholder="Walk-in $"
+                            aria-label="O'Reilly walk-in price per unit"
+                            value={draft.unit_retail}
+                            onChange={(e) => setDraft({ ...draft, unit_retail: e.target.value })}
+                          />
+                          <input
+                            className="input"
+                            inputMode="decimal"
+                            placeholder="List $"
+                            aria-label="O'Reilly list price per unit"
+                            value={draft.unit_list}
+                            onChange={(e) => setDraft({ ...draft, unit_list: e.target.value })}
+                          />
+                        </div>
+                        {proposal && (
+                          <div
+                            className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"
+                            style={{ color: 'var(--text3)' }}
+                          >
+                            <span className="min-w-0">
+                              {proposal.basis
+                                ? `Suggested${proposal.cents != null ? ` ${formatCents(proposal.cents)}` : ''}: ${proposal.basis}`
+                                : 'Only you see these'}
+                            </span>
+                            <span className="flex flex-none items-center gap-3">
+                              {proposal.cents != null && parseMoney(draft.unit_charge) !== proposal.cents && (
+                                <button
+                                  type="button"
+                                  className="underline"
+                                  style={{ color: 'var(--blue)' }}
+                                  onClick={() =>
+                                    setDraft({ ...draft, unit_charge: centsToInput(proposal.cents as number) })
+                                  }
+                                >
+                                  Use {formatCents(proposal.cents)}
+                                </button>
+                              )}
+                              {draft.part_number.trim() && (
+                                <a
+                                  href={walkInSearchUrl(draft.part_number)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="underline"
+                                  style={{ color: 'var(--blue)' }}
+                                >
+                                  Check walk-in ↗
+                                </a>
+                              )}
+                            </span>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

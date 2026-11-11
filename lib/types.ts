@@ -127,6 +127,14 @@ export interface PartLine {
   on_invoice: boolean
   /** The quoted part number when the part actually installed differs. Owner-only. */
   substituted_from: string | null
+  /** O'Reilly's list price per unit (0070). An input to the price suggestion, never the price. */
+  unit_list_cents: number | null
+  /** The O'Reilly WALK-IN price Jake looked up (0070). This is what teaches the estimate. */
+  unit_retail_cents: number | null
+  /** O'Reilly's product line code (0070). Pricing follows the product line. */
+  line_code: string | null
+  /** How unit_charge_cents was arrived at (0070). Null = priced before this existed. */
+  price_basis: string | null
   /** The store's wording as printed on the receipt. Owner-only. */
   receipt_description: string | null
   /** The one "Adjustment to approved estimate" line (migration 0032). */

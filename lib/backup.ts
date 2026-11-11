@@ -64,6 +64,7 @@ const TABLES: Record<string, string[]> = {
     'core_returned_at', 'core_credited_at', 'core_denied_at', 'core_deposit_cents',
     'quote_line_id', 'awaiting_cost', 'on_invoice', 'substituted_from',
     'receipt_description', 'is_adjustment', 'condition', 'notes', 'created_at', 'updated_at',
+    'unit_list_cents', 'unit_retail_cents', 'line_code', 'price_basis',
   ],
   receipts: [
     'id', 'job_id', 'storage_path', 'store', 'purchase_date', 'receipt_total_cents',
