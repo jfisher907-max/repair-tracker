@@ -1832,6 +1832,9 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                 const offBill = editingLine
                   ? editingLine.on_invoice === false
                   : lockedByInvoice || newCore || (quotedJob && !billNewPart)
+                // Editing a line the customer already approved. The price is
+                // theirs, not the rule's.
+                const approvedEdit = !!(editingLine && editingLine.quote_line_id)
                 return (
                   <div className="col-span-2 space-y-1">
                     {!editingLine && quotedJob && !lockedByInvoice && (
@@ -1892,18 +1895,32 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                             onChange={(e) => setDraft({ ...draft, unit_list: e.target.value })}
                           />
                         </div>
-                        {proposal && (
+                        {/* On an APPROVED line the suggested figure and its
+                            one-tap "Use $X" are withheld: the customer agreed to
+                            a price, Alaska allows no charge over an approved
+                            estimate without a fresh OK, and a button beside the
+                            box made overriding it the easiest thing on the
+                            screen. Correcting one is still possible by typing
+                            the figure, exactly as before any of this existed.
+                            What stays either way is everything that only
+                            RECORDS what O'Reilly charges - the walk-in and list
+                            boxes, and the link to go and look the price up -
+                            because that teaches the estimate without touching
+                            what is owed. */}
+                        {((proposal && !approvedEdit) || draft.part_number.trim()) && (
                           <div
                             className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs"
                             style={{ color: 'var(--text3)' }}
                           >
                             <span className="min-w-0">
-                              {proposal.basis
-                                ? `Suggested${proposal.cents != null ? ` ${formatCents(proposal.cents)}` : ''}: ${proposal.basis}`
-                                : 'Only you see these'}
+                              {proposal && !approvedEdit
+                                ? proposal.basis
+                                  ? `Suggested${proposal.cents != null ? ` ${formatCents(proposal.cents)}` : ''}: ${proposal.basis}`
+                                  : 'Only you see these'
+                                : ''}
                             </span>
                             <span className="flex flex-none items-center gap-3">
-                              {proposal.cents != null && parseMoney(draft.unit_charge) !== proposal.cents && (
+                              {proposal && !approvedEdit && proposal.cents != null && parseMoney(draft.unit_charge) !== proposal.cents && (
                                 <button
                                   type="button"
                                   className="underline"
