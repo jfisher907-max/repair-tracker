@@ -202,6 +202,26 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   if (!invoice) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
   const publicUrl = `${window.location.origin}/i/${invoice.public_token}`
+  /**
+   * What the share sheet puts in the message. Jake, 2026-11-13: the job title
+   * alone made the customer open the link to find out what it was worth, and
+   * the amount is the thing they want before they tap.
+   *
+   * total_cents is this invoice's OWN frozen figure, not a balance. An invoice
+   * is an immutable snapshot, a deposit already taken does not change what the
+   * document says, and the page the customer opens shows the same number — a
+   * message quoting anything else would disagree with the invoice it links to.
+   *
+   * The separator is a plain ASCII hyphen on purpose. An em dash drops an SMS
+   * out of GSM-7 into UCS-2, which cuts a segment from 160 characters to 70,
+   * so a long job title would start costing a second message.
+   *
+   * Falls back to the invoice number when a job has no title, rather than
+   * sending "Invoice for  - $487.87".
+   */
+  const shareText = invoice.job_title.trim()
+    ? `Invoice for ${invoice.job_title.trim()} - ${formatCents(invoice.total_cents)}`
+    : `Invoice ${invoice.invoice_number} - ${formatCents(invoice.total_cents)}`
   /** The rate this invoice owes the city: the rate pinned when it was issued
    *  (0047; a paid invoice that fell back to draft keeps it), else Settings'
    *  default, else 5% — and what that comes to on this price. The same
@@ -282,7 +302,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       if (navigator.share) {
         await navigator.share({
           title: `Invoice ${invoice!.invoice_number}`,
-          text: `Invoice for ${invoice!.job_title}`,
+          text: shareText,
           url: publicUrl,
         })
         setShareMsg('Shared ✓')
