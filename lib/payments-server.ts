@@ -15,6 +15,20 @@ export function cardPaymentsConfigured(): boolean {
 }
 
 /**
+ * Off switch for customer card payments, independent of the keys. While true,
+ * invoice and quote links show no "Pay by card" button and /api/pay/session
+ * refuses to open a checkout. The webhook and return-reconcile paths keep
+ * working so anything already in flight still records.
+ * Flip to false (one line) to turn card payments back on.
+ */
+export const CARD_PAYMENTS_PAUSED = true
+
+/** Whether customers may start a card payment right now. */
+export function cardPaymentsOffered(): boolean {
+  return cardPaymentsConfigured() && !CARD_PAYMENTS_PAUSED
+}
+
+/**
  * Which Stripe keys the site runs on, read from the key's own prefix: 'test'
  * keys take no real money. null = no key, or a prefix Stripe doesn't document.
  * The key itself never leaves the server.
