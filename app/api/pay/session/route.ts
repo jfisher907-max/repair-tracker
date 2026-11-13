@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import {
+  CARD_PAYMENTS_PAUSED,
   cardPaymentsConfigured,
   missingConfig,
   publicBaseUrl,
@@ -40,6 +41,9 @@ const SESSION_TTL_SECONDS = 30 * 60
  */
 export async function POST(request: Request) {
   if (!cardPaymentsConfigured()) return missingConfig()
+  if (CARD_PAYMENTS_PAUSED) {
+    return Response.json({ error: 'card payments are not available right now' }, { status: 503 })
+  }
   const stripe = stripeClient()
   if (!stripe) return missingConfig()
 

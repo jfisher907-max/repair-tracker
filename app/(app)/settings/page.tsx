@@ -43,6 +43,7 @@ export default function SettingsPage() {
   const [cardPay, setCardPay] = useState<boolean | null>(null)
   /** Stripe's test keys take no real money; the prefix says which (null = unknown). */
   const [cardMode, setCardMode] = useState<'live' | 'test' | null>(null)
+  const [cardPaused, setCardPaused] = useState(false)
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
   const [aiTest, setAiTest] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
@@ -111,6 +112,7 @@ export default function SettingsPage() {
       .then((x) => {
         setCardPay(!!x.enabled)
         setCardMode(x.mode === 'live' || x.mode === 'test' ? x.mode : null)
+        setCardPaused(!!x.paused)
       })
       .catch(() => setCardPay(false))
     loadDeleted()
@@ -487,7 +489,9 @@ export default function SettingsPage() {
         <p className="text-sm" style={{ color: 'var(--text2)' }}>
           {cardPay == null
             ? 'Checking…'
-            : cardPay && cardMode === 'test'
+            : cardPaused
+              ? 'Paused — the Stripe keys are in place, but card payments are switched off in the code (CARD_PAYMENTS_PAUSED in lib/payments-server.ts), so customers see no “Pay by card” button. Invoices are paid by cash, check or Venmo for now.'
+              : cardPay && cardMode === 'test'
               ? 'Test mode — the site is on Stripe’s test keys, so a customer who taps “Pay by card” can’t really pay. To take real cards, Stripe’s live keys and a live webhook go in the Vercel project settings.'
               : cardPay
                 ? 'Live — invoices you send show a “Pay by card” button, and paid invoices land in the ledger automatically.'

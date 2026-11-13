@@ -1,4 +1,4 @@
-import { cardPaymentsConfigured, cardPaymentsMode } from '@/lib/payments-server'
+import { CARD_PAYMENTS_PAUSED, cardPaymentsConfigured, cardPaymentsMode, cardPaymentsOffered } from '@/lib/payments-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,5 +8,9 @@ export const dynamic = 'force-dynamic'
  * — never a key.
  */
 export async function GET() {
-  return Response.json({ enabled: cardPaymentsConfigured(), mode: cardPaymentsMode() })
+  return Response.json({
+    enabled: cardPaymentsOffered(),
+    paused: CARD_PAYMENTS_PAUSED && cardPaymentsConfigured(),
+    mode: cardPaymentsMode(),
+  })
 }
