@@ -143,6 +143,25 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
 
   const totals = computeQuoteTotals(quote, lines)
   const publicUrl = `${window.location.origin}/q/${quote.public_token}`
+  /**
+   * What the share sheet puts in the message, matching the invoice screen
+   * (4d741f5). Jake, 2026-11-13: "it makes sense for the send link function to
+   * show the price in the text for both estimates and invoices."
+   *
+   * totals.total_cents is the figure the document itself prints - the same one
+   * fed to doc.totalCents below - so a customer-declined line is already out
+   * of it and the message cannot disagree with the estimate it links to.
+   *
+   * The word stays paper.quote: "estimate" on a car, "quote" only on aircraft
+   * paper. AS 45.45 is written about estimates and this app never calls a car
+   * job a quote.
+   *
+   * ASCII hyphen, as on the invoice: an em dash would drop an SMS out of
+   * GSM-7 into UCS-2 and halve the characters a segment holds.
+   */
+  const shareText = quote.title.trim()
+    ? `${paper.quote} for ${quote.title.trim()} - ${formatCents(totals.total_cents)}`
+    : `${paper.quote} ${quote.quote_number} - ${formatCents(totals.total_cents)}`
 
   const doc: DocData = {
     docType: 'Quote',
@@ -287,7 +306,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           // The customer's words: an estimate, never a "quote" (AS 45.45) —
           // except on aircraft paper, which is a quote (AVN-3).
           title: `${doc.business.name || paper.quote} ${quote!.quote_number}`,
-          text: `${paper.quote} for ${quote!.title}`,
+          text: shareText,
           url: publicUrl,
         })
         setShareMsg('Shared ✓')
