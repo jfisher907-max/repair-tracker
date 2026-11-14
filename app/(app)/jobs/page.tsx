@@ -263,8 +263,38 @@ function JobsInner() {
                 <option value="partial">Partial</option>
                 <option value="paid">Paid</option>
               </select>
-              <input className="input min-w-0" type="date" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From date" />
-              <input className="input min-w-0" type="date" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To date" />
+              {/* Jake, 2026-11-14, on his iPhone: these two read as a pair
+                  of blank boxes. An EMPTY input[type=date] renders nothing at
+                  all in iOS Safari - Chrome draws "mm/dd/yyyy", which is why
+                  checking on a desktop never shows it - and the only name
+                  they carried was an aria-label, which nobody can see. So:
+                  visible micro-labels, the pattern HangarDateFilter and the
+                  tax form already use, which says what the control is on
+                  every engine and whether or not it holds a value. */}
+              <div className="min-w-0">
+                <label className="label" htmlFor="jobs-from">
+                  From
+                </label>
+                <input
+                  id="jobs-from"
+                  className="input min-w-0"
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                />
+              </div>
+              <div className="min-w-0">
+                <label className="label" htmlFor="jobs-to">
+                  To
+                </label>
+                <input
+                  id="jobs-to"
+                  className="input min-w-0"
+                  type="date"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                />
+              </div>
             </div>
           </div>
 
