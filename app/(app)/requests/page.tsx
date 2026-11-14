@@ -19,6 +19,9 @@ interface ServiceRequest {
   // Which side of the public page it came from (migration 0046). Optional:
   // before 0046 is applied select('*') has no such key — read as automotive.
   service_line?: 'automotive' | 'aviation'
+  // The customer said the aircraft is on the ground (0071). Optional for the
+  // same reason: absent before 0071 is applied, which reads as not AOG.
+  aog?: boolean
   created_at: string
 }
 
@@ -94,6 +97,11 @@ export default function RequestsPage() {
               <span className="ml-2 text-sm" style={{ color: 'var(--text2)' }}>{r.vehicle}</span>
             </div>
             <div className="flex flex-none items-center gap-2">
+              {/* AOG first and loudest (0071): on a row that also says
+                  Aviation, this is the word that decides what he does next. */}
+              {r.aog && (
+                <span className="chip" style={{ background: 'var(--red)', color: '#fff' }}>AOG</span>
+              )}
               {r.service_line === 'aviation' && (
                 <span className="chip" style={{ background: 'var(--bg3)' }}>Aviation</span>
               )}

@@ -72,6 +72,9 @@ export default function RequestForm() {
   const [pref, setPref] = useState<'call' | 'text' | 'email' | ''>('')
   const [vehicle, setVehicle] = useState('')
   const [message, setMessage] = useState('')
+  /** AOG (0071): aviation only. Sent only when the aviation side is active,
+   *  so ticking it and then switching to Automotive cannot send a stale true. */
+  const [aog, setAog] = useState(false)
   const [company, setCompany] = useState('') // honeypot
   const line = useServiceLine()
   const copy = LINE_COPY[line]
@@ -127,6 +130,7 @@ export default function RequestForm() {
           message,
           source,
           serviceLine: line,
+          aog: line === 'aviation' && aog,
           company,
         }),
       })
@@ -271,6 +275,44 @@ export default function RequestForm() {
           required
         />
       </div>
+
+      {/* AOG (0071) — the aircraft is on the ground. Aviation only, so
+          LineOnly hides it on the car side, and the submit above re-checks
+          the active line rather than trusting this state. This is the only
+          control on the public site that reaches the owner's phone directly,
+          which is why the copy says so plainly: someone who ticks it should
+          know they are calling him out, and someone who does not need it
+          should have no reason to tick it. */}
+      <LineOnly line="aviation">
+        <label
+          htmlFor="rq-aog"
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+            minHeight: 44,
+            padding: '12px 14px',
+            borderRadius: 10,
+            border: '1px solid #222a38',
+            background: '#1a202c',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            id="rq-aog"
+            type="checkbox"
+            checked={aog}
+            onChange={(e) => setAog(e.target.checked)}
+            style={{ width: 20, height: 20, flex: 'none', marginTop: 2 }}
+          />
+          <span style={{ fontSize: 14, lineHeight: 1.45 }}>
+            <strong style={{ display: 'block', fontWeight: 600 }}>The aircraft is AOG</strong>
+            <span style={{ color: '#8b94a7' }}>
+              On the ground and not airworthy. This reaches us straight away, day or night.
+            </span>
+          </span>
+        </label>
+      </LineOnly>
 
       {/* Honeypot — hidden from people, irresistible to bots. The id and
           label are deliberately meaningless: "Company"-style wording matches
