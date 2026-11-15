@@ -73,19 +73,26 @@ export default function RequestsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="text-2xl">Service requests</h1>
-        {closed.length > 0 && (
-          <button className="btn btn-sm" onClick={() => setShowClosed(!showClosed)}>
-            {showClosed ? 'Hide closed' : `Closed (${closed.length})`}
-          </button>
-        )}
+        <div className="flex flex-none items-center gap-2">
+          {/* The way IN to this inbox, kept next to it: the screen that hands
+              someone the form, by QR code in person or by text. */}
+          <Link href="/share" className="btn btn-sm">
+            Share form
+          </Link>
+          {closed.length > 0 && (
+            <button className="btn btn-sm" onClick={() => setShowClosed(!showClosed)}>
+              {showClosed ? 'Hide closed' : `Closed (${closed.length})`}
+            </button>
+          )}
+        </div>
       </div>
 
       {requests.length === 0 && (
         <div className="card text-sm" style={{ color: 'var(--text3)' }}>
           Nothing yet. Requests from the website&apos;s &ldquo;Request service&rdquo; form land
-          here — and later, the same form behind your QR codes and NFC tags.
+          here. Share form hands someone the link, or a QR code to scan off your phone.
         </div>
       )}
 
