@@ -69,6 +69,8 @@ const METHOD_LABEL: Record<string, string> = {
   phone: 'by phone',
   in_person: 'in person',
   text: 'by text',
+  // A quote approved by replying to the emailed estimate (quote_approvals only).
+  email: 'by email',
 }
 
 /** AS 45.45.170(d) wants the date AND the time of an OK — in shop time. */

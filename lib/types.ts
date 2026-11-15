@@ -322,7 +322,7 @@ export interface AuthorizationEntry {
   /** e.g. "Estimate Q008 approved" or "Additional work OK'd: rear pads". */
   label: string
   by_name: string | null
-  /** online / phone / in_person / text */
+  /** online / phone / in_person / text, or email for a quote approved by reply */
   method: string | null
   /** Full on the owner's copy; last four digits only on the public link. */
   phone_called: string | null

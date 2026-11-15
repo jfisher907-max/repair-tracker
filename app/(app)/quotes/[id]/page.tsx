@@ -24,6 +24,27 @@ import {
   type Vehicle,
 } from '@/lib/types'
 
+/**
+ * How a decision that arrived outside the link reached the shop. 'email' is
+ * for a customer who answered the emailed estimate by replying (2026-11-15)
+ * rather than through the link. quote_approvals.method is free text, so this
+ * list is the only place it is defined. Job OKs past the estimate are a
+ * separate list (BillingCheck), held to phone / in person / text by the
+ * job_authorizations_method_check constraint.
+ */
+type OkVia = 'phone' | 'in_person' | 'text' | 'email'
+
+function OkViaOptions() {
+  return (
+    <>
+      <option value="phone">By phone call</option>
+      <option value="in_person">In person</option>
+      <option value="text">By text message</option>
+      <option value="email">By email</option>
+    </>
+  )
+}
+
 export default function QuoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const router = useRouter()
@@ -42,7 +63,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   /** Recording a customer decision that arrived off-line (phone, in person, text). */
   const [recording, setRecording] = useState<'approved' | 'declined' | null>(null)
   const [recordName, setRecordName] = useState('')
-  const [recordMethod, setRecordMethod] = useState<'phone' | 'in_person' | 'text'>('phone')
+  const [recordMethod, setRecordMethod] = useState<OkVia>('phone')
   const [recordBusy, setRecordBusy] = useState(false)
   const [lastMethod, setLastMethod] = useState<string | null>(null)
   /** Money already put down against this quote (any method), from the ledger. */
@@ -52,7 +73,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const [depKind, setDepKind] = useState<DepositKind>('none')
   const [depFixed, setDepFixed] = useState('')
   const [depName, setDepName] = useState('')
-  const [depMethod, setDepMethod] = useState<'phone' | 'in_person' | 'text'>('phone')
+  const [depMethod, setDepMethod] = useState<OkVia>('phone')
   const [depBusy, setDepBusy] = useState(false)
   const [depMsg, setDepMsg] = useState('')
   /** Attaching a vehicle to an approved-but-vehicleless quote so it can convert. */
@@ -755,9 +776,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
               {recording === 'approved' ? 'Record the customer’s OK' : 'Record the decline'}
             </span>
             <p className="text-xs" style={{ color: 'var(--text3)' }}>
-              For an OK that came by phone or in person: who said yes, and how. The date, time,
-              and itemized cost are written down with it — that’s the record that settles
-              arguments later.
+              For an OK that came by phone, in person, by text or by email: who said yes, and how.
+              The date, time, and itemized cost are written down with it — that’s the record that
+              settles arguments later.
             </p>
             <input
               className="input"
@@ -768,12 +789,15 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             <select
               className="select"
               value={recordMethod}
-              onChange={(e) => setRecordMethod(e.target.value as 'phone' | 'in_person' | 'text')}
+              onChange={(e) => setRecordMethod(e.target.value as OkVia)}
             >
-              <option value="phone">By phone call</option>
-              <option value="in_person">In person</option>
-              <option value="text">By text message</option>
+              <OkViaOptions />
             </select>
+            {recordMethod === 'email' && (
+              <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                Keep their email — it’s their answer in writing.
+              </p>
+            )}
             <div className="flex gap-2">
               <button className="btn btn-primary btn-sm" disabled={recordBusy} onClick={recordDecision}>
                 {recordBusy ? 'Saving…' : recording === 'approved' ? 'Save the OK' : 'Save the decline'}
@@ -947,11 +971,9 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
                     <select
                       className="select"
                       value={depMethod}
-                      onChange={(e) => setDepMethod(e.target.value as 'phone' | 'in_person' | 'text')}
+                      onChange={(e) => setDepMethod(e.target.value as OkVia)}
                     >
-                      <option value="phone">By phone call</option>
-                      <option value="in_person">In person</option>
-                      <option value="text">By text message</option>
+                      <OkViaOptions />
                     </select>
                   </>
                 )}
@@ -988,6 +1010,7 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
             {lastMethod === 'phone' && <> by phone</>}
             {lastMethod === 'in_person' && <> in person</>}
             {lastMethod === 'text' && <> by text message</>}
+            {lastMethod === 'email' && <> by email</>}
             {quote.decided_at && <> on {new Date(quote.decided_at).toLocaleString()}</>}
             {quote.approval_consent && <> and ticked the authorization box</>}.
           </p>
