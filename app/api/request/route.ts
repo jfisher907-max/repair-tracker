@@ -1,3 +1,4 @@
+import { notify } from '@/lib/notify'
 import { serviceClient } from '@/lib/payments-server'
 
 export const runtime = 'nodejs'
@@ -115,17 +116,26 @@ export async function POST(request: Request) {
   // Owner notification — only for a REAL insert (result.id present; honeypot
   // drops return ok with no id), and only when configured. Best effort: a
   // mail hiccup must never fail the customer's submission.
-  if (result.id && process.env.RESEND_API_KEY && process.env.OWNER_NOTIFY_EMAIL) {
-    try {
-      await fetch('https://api.resend.com/emails', {
+  //
+  // Read into consts first. A narrowed `process.env.X` does NOT stay narrowed
+  // inside the callbacks below — TypeScript cannot prove a property has not
+  // changed by the time the closure runs — so the `if` guards these instead.
+  const resendKey = process.env.RESEND_API_KEY
+  const notifyTo = process.env.OWNER_NOTIFY_EMAIL
+  const pushToken = process.env.PUSHOVER_TOKEN
+  const pushUser = process.env.PUSHOVER_USER
+
+  if (result.id && resendKey && notifyTo) {
+    await notify('email', () =>
+      fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+          Authorization: `Bearer ${resendKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           from: process.env.NOTIFY_FROM_EMAIL ?? 'onboarding@resend.dev',
-          to: process.env.OWNER_NOTIFY_EMAIL,
+          to: notifyTo,
           subject: result.aog
             ? `*** AOG *** ${serviceLine} service request — ${name} (${vehicle})`
             : lineRecorded
@@ -134,10 +144,8 @@ export async function POST(request: Request) {
           text: `A new service request just came in.\n\nOpen it: https://wingsnthings.repair/requests\n\n(Details are in the app, not this email.)`,
         }),
         signal: AbortSignal.timeout(4000),
-      })
-    } catch {
-      // The request is safely stored; the dashboard banner still shows it.
-    }
+      }),
+    )
   }
 
   // AOG push (0071). Email is the record; this is the thing that wakes him.
@@ -159,14 +167,14 @@ export async function POST(request: Request) {
   // lists, no third parties", and whatever is in this body is read by
   // Pushover and sits on a lock screen. The aircraft is enough to know which
   // one is down and whether to get up; the rest is one tap away.
-  if (result.id && result.page && process.env.PUSHOVER_TOKEN && process.env.PUSHOVER_USER) {
-    try {
-      await fetch('https://api.pushover.net/1/messages.json', {
+  if (result.id && result.page && pushToken && pushUser) {
+    await notify('push', () =>
+      fetch('https://api.pushover.net/1/messages.json', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({
-          token: process.env.PUSHOVER_TOKEN,
-          user: process.env.PUSHOVER_USER,
+          token: pushToken,
+          user: pushUser,
           title: `AOG — ${vehicle}`.slice(0, 250),
           message: 'Aircraft on ground. Open the request for the details.',
           url: 'https://wingsnthings.repair/requests',
@@ -176,10 +184,20 @@ export async function POST(request: Request) {
           expire: '1800',
         }),
         signal: AbortSignal.timeout(4000),
-      })
-    } catch {
-      // The request is safely stored; the dashboard banner still shows it.
-    }
+      }),
+    )
+  }
+
+  // An AOG with nowhere to go. The public form tells the customer that ticking
+  // the box "reaches us straight away, day or night", and with neither channel
+  // configured that is only true of /requests — which nobody is watching at
+  // 2am. The request is stored safely either way; this says so out loud, in the
+  // one place that can be read afterwards, instead of looking like a success.
+  if (result.id && result.aog && !(resendKey && notifyTo) && !(pushToken && pushUser)) {
+    console.error(
+      '[notify] AOG stored with NO channel configured — nothing left the server. ' +
+        'Set RESEND_API_KEY + OWNER_NOTIFY_EMAIL, or PUSHOVER_TOKEN + PUSHOVER_USER.',
+    )
   }
 
   return Response.json({ ok: true })
