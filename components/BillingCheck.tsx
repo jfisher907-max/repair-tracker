@@ -30,7 +30,13 @@ import type { Customer, PartLine } from '@/lib/types'
  */
 export type BillingSheet = null | 'over' | 'plan' | 'ok' | 'conditions' | 'conditions-only'
 
-export type OkMethod = 'phone' | 'in_person' | 'text'
+/** 'email' (0072): a written OK, given by replying to an emailed estimate. */
+export type OkMethod = 'phone' | 'in_person' | 'text' | 'email'
+
+/** Only a call or a text has a number to put on record. */
+function okHasNumber(m: OkMethod): boolean {
+  return m === 'phone' || m === 'text'
+}
 
 /**
  * One recorded OK (public.job_authorizations) as the OWNER sees it.
@@ -100,6 +106,7 @@ const METHOD_WORDS: Record<OkMethod, string> = {
   phone: 'by phone',
   in_person: 'in person',
   text: 'by text',
+  email: 'by email',
 }
 
 /** How far ahead of now an OK may be recorded. The database allows five
@@ -129,6 +136,10 @@ function plainDbError(message: string, line: ServiceLine): string {
   if (message.includes('job_authorizations_never_lowers'))
     return 'An OK can’t lower the approved total — bill less instead.'
   if (message.includes('job_authorizations_phone_needs_number')) return phoneNumberWords(line)
+  // An email OK on a database that predates 0072, which widened this list.
+  if (message.includes('job_authorizations_method_check') || message.includes('or by text'))
+    // Never "record it as a text": the record has to say how the OK really came.
+    return 'This copy of the database doesn’t take email OKs yet — the change that adds them (0072) hasn’t been applied. Keep their email and record it here once it has.'
   if (message.includes('job_authorizations_description_check'))
     return 'What did they OK? Put it in words — it prints on the invoice.'
   // Correcting and deleting an OK (migration 0044). update_job_ok and
@@ -281,7 +292,7 @@ function OkFields({
         <div>
           <label className="label">How</label>
           <div className="flex flex-wrap gap-1">
-            {(['phone', 'in_person', 'text'] as const).map((m) => (
+            {(['phone', 'in_person', 'text', 'email'] as const).map((m) => (
               <button
                 key={m}
                 type="button"
@@ -293,12 +304,17 @@ function OkFields({
                 }}
                 onClick={() => setDraft({ ...draft, method: m })}
               >
-                {m === 'phone' ? 'Phone' : m === 'in_person' ? 'In person' : 'Text'}
+                {m === 'phone' ? 'Phone' : m === 'in_person' ? 'In person' : m === 'text' ? 'Text' : 'Email'}
               </button>
             ))}
           </div>
+          {draft.method === 'email' && (
+            <p className="mt-1 text-xs" style={{ color: 'var(--text3)' }}>
+              Keep their email — it’s their OK in writing.
+            </p>
+          )}
         </div>
-        {draft.method !== 'in_person' && (
+        {okHasNumber(draft.method) && (
           <div>
             <label className="label">
               {draft.method === 'phone' ? 'Number you called' : 'Number texted'}
@@ -478,7 +494,7 @@ export function RecordedOks({
       p_authorized_at: new Date(draft.when).toISOString(),
       p_by_name: draft.name.trim(),
       p_method: draft.method,
-      p_phone: draft.method === 'in_person' ? null : draft.phone.trim() || null,
+      p_phone: okHasNumber(draft.method) ? draft.phone.trim() || null : null,
       p_description: draft.what.trim(),
       p_new_total_cents: total,
     })
@@ -825,7 +841,7 @@ export default function BillingCheck({
       p_description: okDraft.what.trim(),
       p_method: okDraft.method,
       p_by_name: okDraft.name.trim(),
-      p_phone: okDraft.method === 'in_person' ? null : okDraft.phone.trim() || null,
+      p_phone: okHasNumber(okDraft.method) ? okDraft.phone.trim() || null : null,
       p_authorized_at: new Date(okDraft.when).toISOString(),
     })
     setBusy(false)
