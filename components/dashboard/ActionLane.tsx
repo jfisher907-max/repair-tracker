@@ -43,6 +43,7 @@ export default function ActionLane({
   cores,
   docAlerts,
   newRequests,
+  aogRequests = 0,
   billing,
   taxes = null,
   resaleCard = false,
@@ -52,6 +53,8 @@ export default function ActionLane({
   cores: CoreOut[]
   docAlerts: BusinessDocument[]
   newRequests: number
+  /** How many open requests say the aircraft is on the ground (0071). */
+  aogRequests?: number
   billing: BillingCounts
   /** The sales-tax return coming due, when one is inside 30 days or late (lib/sales-tax taxReminder). */
   taxes?: TaxReminder | null
@@ -275,6 +278,36 @@ export default function ActionLane({
         .map((d) => `${d.name} ${docState(d) === 'expired' ? 'expired' : 'expires soon'}`)
         .join(' · '),
       edge: expired.length > 0 ? 'stop' : 'wait',
+    })
+  }
+  // AOG (0071) goes to the FRONT, unlike every other conditional door above,
+  // which appends. The lane is a two-column grid on the phone, so DOM order is
+  // reading order and the front is top-left — the first thing on the board. An
+  // aircraft on the ground is the one thing in this app that outranks money.
+  //
+  // Its own door rather than a louder Requests door, so neither count has to
+  // lie: Requests goes on counting everything waiting, and this counts what is
+  // down. The edge is the existing 'stop' red (--ember-500), the same word the
+  // board already uses for an overdue invoice or an expired license — a new
+  // colour would only give the owner a second red to learn.
+  //
+  // This door matters most on a shop where RESEND_API_KEY / PUSHOVER_* are
+  // unset: then nothing reaches a phone at all, and this is the only place an
+  // AOG announces itself before someone thinks to open /requests.
+  if (aogRequests > 0) {
+    doors.unshift({
+      href: '/requests',
+      n: aogRequests,
+      label: 'AOG',
+      title: 'AOG',
+      // Short on purpose, and measured rather than guessed. The sub is one
+      // nowrap line that ellipsises, and the room it gets is whatever the door
+      // has left after the count: ~123px at 375px wide, ~95px at 320px. The
+      // obvious wording, "aircraft on the ground", renders 112.8px — fine on a
+      // 375px phone, clipped to "aircraft on the gro…" on a 320px one, which is
+      // the last door that should go vague. This is 71.6px and clears both.
+      sub: 'on the ground',
+      edge: 'stop',
     })
   }
 

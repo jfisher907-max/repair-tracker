@@ -26,6 +26,13 @@ export default function Dashboard() {
   const [docAlerts, setDocAlerts] = useState<BusinessDocument[]>([])
   /** Open requests from the public site's form — the shop's only inbound channel. */
   const [newRequests, setNewRequests] = useState(0)
+  /**
+   * Of those, the ones where the customer said the aircraft is on the ground
+   * (0071). Counted separately because the lane gives AOG its own door: email
+   * and push are both optional env vars, so on a shop with neither configured
+   * this door is the ONLY thing that says an aircraft is down.
+   */
+  const [aogRequests, setAogRequests] = useState(0)
   const [billing, setBilling] = useState<BillingCounts>({ openQuotes: 0, unpaidInvoices: 0, overdue: 0 })
   const [businessName, setBusinessName] = useState('')
   /** Tax filings recorded (0053): undefined while loading, null when the read failed. */
@@ -49,6 +56,16 @@ export default function Dashboard() {
       .select('id', { count: 'exact', head: true })
       .eq('status', 'new')
       .then(({ count }) => setNewRequests(count ?? 0))
+    // Before 0071 there is no `aog` column, so this filter errors and `count`
+    // comes back null — which reads as "none down", the same as a shop that has
+    // never had one. The AOG door simply does not appear, and the Requests
+    // door above is unaffected.
+    supabase
+      .from('service_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'new')
+      .eq('aog', true)
+      .then(({ count }) => setAogRequests(count ?? 0))
     // `*`, not a column list: sales_tax_basis (0053) is read when it exists,
     // and a database without it still gives the business name.
     supabase
@@ -113,6 +130,7 @@ export default function Dashboard() {
       cores={cores}
       docAlerts={docAlerts}
       newRequests={newRequests}
+      aogRequests={aogRequests}
       billing={billing}
       businessName={businessName}
       taxFilings={taxFilings}

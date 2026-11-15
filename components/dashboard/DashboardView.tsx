@@ -58,6 +58,7 @@ export default function DashboardView({
   cores,
   docAlerts,
   newRequests,
+  aogRequests = 0,
   billing,
   businessName,
   taxFilings,
@@ -69,6 +70,8 @@ export default function DashboardView({
   cores: CoreOut[]
   docAlerts: BusinessDocument[]
   newRequests: number
+  /** How many of those open requests are AOG (0071); defaults to none. */
+  aogRequests?: number
   billing: BillingCounts
   businessName: string
   /** Recorded tax filings (0053). undefined = still loading; null = could not be read. */
@@ -276,6 +279,7 @@ export default function DashboardView({
         cores={cores}
         docAlerts={docAlerts}
         newRequests={newRequests}
+        aogRequests={aogRequests}
         billing={billing}
         taxes={taxes}
         resaleCard={resaleCard}
