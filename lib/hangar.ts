@@ -124,18 +124,23 @@ export async function setJetLocation(
   }
 }
 
+// The forms below hand over STORED times — ISO strings already read back from
+// the typed minutes by resolveStayTimes / fromLocalInput (lib/hangar-stats).
+// They are written as given: re-parsing them here is where precision used to
+// be lost.
+
 export async function logPastSession(input: {
   aircraft: string
   hangar: string
-  entry: string // datetime-local value
-  exit: string // datetime-local value or ''
+  entry: string // ISO
+  exit: string | null // ISO, or null while still there
   note: string
 }): Promise<void> {
   const { error } = await supabase.from('hangar_sessions').insert({
     aircraft: input.aircraft,
     hangar: input.hangar,
-    entry: new Date(input.entry).toISOString(),
-    exit: input.exit ? new Date(input.exit).toISOString() : null,
+    entry: input.entry,
+    exit: input.exit,
     reason: '',
     note: input.note || '',
     exit_reason: '',
@@ -146,7 +151,7 @@ export async function logPastSession(input: {
 
 export async function confirmExit(
   session: HangarSession,
-  exitTime: string,
+  exitTime: string, // ISO
   reason: string,
   note: string,
 ): Promise<void> {
@@ -154,7 +159,7 @@ export async function confirmExit(
   const { error } = await supabase
     .from('hangar_sessions')
     .update({
-      exit: new Date(exitTime).toISOString(),
+      exit: exitTime,
       exit_reason: reason || session.reason || '',
       exit_note,
     })
@@ -164,15 +169,15 @@ export async function confirmExit(
 
 export async function updateSession(
   id: string,
-  input: { aircraft: string; hangar: string; entry: string; exit: string; reason: string; note: string },
+  input: { aircraft: string; hangar: string; entry: string; exit: string | null; reason: string; note: string },
 ): Promise<void> {
   const { error } = await supabase
     .from('hangar_sessions')
     .update({
       aircraft: input.aircraft,
       hangar: input.hangar,
-      entry: new Date(input.entry).toISOString(),
-      exit: input.exit ? new Date(input.exit).toISOString() : null,
+      entry: input.entry,
+      exit: input.exit,
       reason: input.reason || '',
       exit_reason: input.reason || '',
       note: input.note || '',
@@ -206,13 +211,13 @@ export async function endUnavailNow(id: string): Promise<void> {
 
 export async function updateUnavail(
   id: string,
-  input: { start: string; end: string; note: string },
+  input: { start: string; end: string | null; note: string }, // ISO
 ): Promise<void> {
   const { error } = await supabase
     .from('hangar_unavailability')
     .update({
-      start_time: new Date(input.start).toISOString(),
-      end_time: input.end ? new Date(input.end).toISOString() : null,
+      start_time: input.start,
+      end_time: input.end,
       note: input.note || '',
     })
     .eq('id', id)

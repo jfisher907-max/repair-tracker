@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import HangarModal from './HangarModal'
-import { confirmExit, type HangarSession } from '@/lib/hangar'
-import { toLocalInput } from '@/lib/hangar-stats'
+import { confirmExit, hangarErrorWords, type HangarSession } from '@/lib/hangar'
+import { fromLocalInput, toLocalInput } from '@/lib/hangar-stats'
 
 // Rendered with a key tied to the session id so each open remounts fresh.
 export default function ExitModal({
@@ -25,11 +25,11 @@ export default function ExitModal({
     if (!time) return setError('Please enter an exit time.')
     if (new Date(time) <= new Date(session.entry)) return setError('Exit must be after the entry time.')
     try {
-      await confirmExit(session, time, reason.trim(), note.trim())
+      await confirmExit(session, fromLocalInput(time, []), reason.trim(), note.trim())
       onSaved()
       onClose()
-    } catch {
-      setError('Save failed — check connection.')
+    } catch (e) {
+      setError(hangarErrorWords(e, 'Save failed — check connection.'))
     }
   }
 

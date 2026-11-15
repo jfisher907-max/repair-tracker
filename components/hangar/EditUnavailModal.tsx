@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import HangarModal from './HangarModal'
 import { updateUnavail, type HangarUnavail } from '@/lib/hangar'
-import { fmtDur, toLocalInput } from '@/lib/hangar-stats'
+import { fmtDur, fromLocalInput, toLocalInput } from '@/lib/hangar-stats'
 
 export default function EditUnavailModal({
   period,
@@ -32,7 +32,12 @@ export default function EditUnavailModal({
     if (!start) return setError('Start time is required.')
     if (end && new Date(end) <= new Date(start)) return setError('Until must be after the start time.')
     try {
-      await updateUnavail(period.id, { start, end, note: note.trim() })
+      // A field left alone saves exactly as stored, not rounded to the minute.
+      await updateUnavail(period.id, {
+        start: fromLocalInput(start, [period.start_time]),
+        end: end ? fromLocalInput(end, [period.end_time]) : null,
+        note: note.trim(),
+      })
       onSaved()
       onClose()
     } catch {

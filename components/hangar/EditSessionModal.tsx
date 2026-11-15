@@ -2,15 +2,27 @@
 
 import { useState } from 'react'
 import HangarModal from './HangarModal'
-import { updateSession, type HangarSession } from '@/lib/hangar'
-import { AIRCRAFT, HANGARS, fmtDur, toLocalInput } from '@/lib/hangar-stats'
+import { hangarErrorWords, updateSession, type HangarSession } from '@/lib/hangar'
+import {
+  AIRCRAFT,
+  HANGARS,
+  clashWords,
+  findClash,
+  fmtDur,
+  resolveStayTimes,
+  toLocalInput,
+} from '@/lib/hangar-stats'
 
 export default function EditSessionModal({
   session,
+  sessions,
   onClose,
   onSaved,
 }: {
   session: HangarSession
+  /** Every stay on record, so a clash is caught here in words before the
+   *  database refuses it with a constraint name. */
+  sessions: HangarSession[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -34,12 +46,18 @@ export default function EditSessionModal({
     setError('')
     if (!entry) return setError('Entry time is required.')
     if (exit && new Date(exit) <= new Date(entry)) return setError('Exit must be after the entry time.')
+    // A field left alone saves exactly as stored (to the millisecond), and a
+    // typed minute that holds a neighbouring move lands on that move.
+    const times = resolveStayTimes(sessions, { id: session.id, aircraft, hangar }, entry, exit, session)
+    const draft = { id: session.id, aircraft, hangar, ...times }
+    const clash = findClash(sessions, draft)
+    if (clash) return setError(clashWords(clash, draft))
     try {
-      await updateSession(session.id, { aircraft, hangar, entry, exit, reason: reason.trim(), note: note.trim() })
+      await updateSession(session.id, { aircraft, hangar, ...times, reason: reason.trim(), note: note.trim() })
       onSaved()
       onClose()
-    } catch {
-      setError('Save failed — check connection.')
+    } catch (e) {
+      setError(hangarErrorWords(e, 'Save failed — check connection.'))
     }
   }
 

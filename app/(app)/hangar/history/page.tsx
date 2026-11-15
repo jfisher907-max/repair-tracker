@@ -269,6 +269,7 @@ export default function HangarHistoryPage() {
         <EditSessionModal
           key={editSession.id}
           session={editSession}
+          sessions={sessions ?? []}
           onClose={() => setEditSession(null)}
           onSaved={() => void load()}
         />

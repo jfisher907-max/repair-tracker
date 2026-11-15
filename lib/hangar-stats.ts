@@ -165,6 +165,92 @@ export function toLocalInput(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
+// ── Typed times ──────────────────────────────────────────────────
+// A datetime-local box holds whole minutes; the board records the second it
+// was tapped. Reading a typed minute back as :00 silently moved a time by up to
+// 59 seconds on every save — enough to overlap the stay the board closed with
+// the same tap, which the database refuses (0069). That made every stay that
+// began with a board move uneditable, even for a note (2026-11-15: three
+// refused saves of N254AL's Wings stay, each reported as "check connection").
+//
+// So a typed minute means a recorded moment inside that minute when there is
+// one: first the field's own saved value, so an untouched field saves exactly
+// as it was, then the moment the neighbouring stay ends or begins, so typing
+// the minute a move happened lands on the move. A minute with no recorded
+// moment in it reads as :00, as before. The string is returned as stored, not
+// re-parsed, so no precision is lost on the way back.
+export function fromLocalInput(local: string, moments: (string | null | undefined)[]): string {
+  const start = new Date(local).getTime()
+  for (const m of moments) {
+    if (!m) continue
+    const t = new Date(m).getTime()
+    if (t >= start && t < start + 60_000) return m
+  }
+  return new Date(start).toISOString()
+}
+
+/** The proposed stay, in stored (ISO) times. `id` is set when editing. */
+export interface StayDraft {
+  id?: string
+  aircraft: string
+  hangar: string
+  entry: string
+  exit: string | null
+}
+
+/** The other stays a draft is bound by — the same two rules the database
+ *  enforces (0069): an aircraft is in one place at a time, and Wings Hangar
+ *  holds one aircraft. ALNW holds two, which the two-jet fleet cannot exceed. */
+function boundBy(sessions: HangarSession[], d: StayDraft): HangarSession[] {
+  return sessions.filter(
+    (s) => s.id !== d.id && (s.aircraft === d.aircraft || (d.hangar === 'Wings Hangar' && s.hangar === 'Wings Hangar')),
+  )
+}
+
+/** Typed arrival/departure minutes read back against the stays around them
+ *  (see fromLocalInput). `saved` is the stay being edited, if any. */
+export function resolveStayTimes(
+  sessions: HangarSession[],
+  d: { id?: string; aircraft: string; hangar: string },
+  entryLocal: string,
+  exitLocal: string,
+  saved?: { entry: string; exit: string | null },
+): { entry: string; exit: string | null } {
+  const others = boundBy(sessions, { ...d, entry: '', exit: null })
+  return {
+    entry: fromLocalInput(entryLocal, [saved?.entry, ...others.map((s) => s.exit)]),
+    exit: exitLocal ? fromLocalInput(exitLocal, [saved?.exit, ...others.map((s) => s.entry)]) : null,
+  }
+}
+
+/** The stay a draft would overlap, or null. Overlap is half-open like the
+ *  database's tstzrange: a stay ending at the instant the next begins is a
+ *  move, not an overlap. An open stay (no exit) runs on forever. */
+export function findClash(
+  sessions: HangarSession[],
+  d: StayDraft,
+): { other: HangarSession; rule: 'aircraft' | 'wings' } | null {
+  const end = (x: string | null) => (x ? new Date(x).getTime() : Infinity)
+  const aS = new Date(d.entry).getTime()
+  const aE = end(d.exit)
+  const hits = boundBy(sessions, d).filter((s) => aS < end(s.exit) && new Date(s.entry).getTime() < aE)
+  const same = hits.find((s) => s.aircraft === d.aircraft)
+  if (same) return { other: same, rule: 'aircraft' }
+  return hits[0] ? { other: hits[0], rule: 'wings' } : null
+}
+
+/** What a clash means, in the words the history list uses for that stay. */
+export function clashWords(c: { other: HangarSession; rule: 'aircraft' | 'wings' }, d: StayDraft): string {
+  const o = c.other
+  const who = c.rule === 'aircraft' ? d.aircraft : o.aircraft
+  const was = o.exit
+    ? `${who} was in ${o.hangar} from ${fmtDT(o.entry)} to ${fmtDT(o.exit)}`
+    : `${who} has been in ${o.hangar} since ${fmtDT(o.entry)}`
+  const why =
+    c.rule === 'aircraft' ? 'and one aircraft can’t be in two places at once' : 'and Wings Hangar only holds one aircraft'
+  return `${was}, ${why}. Change these times, or edit that stay first.`
+}
+
 // ── Range clipping ───────────────────────────────────────────────
 // For hour AGGREGATES, filtering rows by their start date skews windows:
 // a months-old open "assignment" session (see the operator's model — jets

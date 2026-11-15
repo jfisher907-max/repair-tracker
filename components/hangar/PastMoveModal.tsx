@@ -2,8 +2,17 @@
 
 import { useState } from 'react'
 import HangarModal from './HangarModal'
-import { logPastSession, type HangarSession } from '@/lib/hangar'
-import { AIRCRAFT, HANGARS, fmtDT, fmtDur, toLocalInput } from '@/lib/hangar-stats'
+import { hangarErrorWords, logPastSession, type HangarSession } from '@/lib/hangar'
+import {
+  AIRCRAFT,
+  HANGARS,
+  clashWords,
+  findClash,
+  fmtDT,
+  fmtDur,
+  resolveStayTimes,
+  toLocalInput,
+} from '@/lib/hangar-stats'
 
 export default function PastMoveModal({
   sessions,
@@ -40,12 +49,18 @@ export default function PastMoveModal({
           `${aircraft} already has an open session in ${already.hangar}. Add a left time, or close the current one first.`,
         )
     }
+    // Typing the minute a board move happened lands on that move, instead of
+    // the :00 that overlapped it by up to 59 seconds (the 0069 seam).
+    const times = resolveStayTimes(sessions, { aircraft, hangar }, arrived, left)
+    const draft = { aircraft, hangar, ...times }
+    const clash = findClash(sessions, draft)
+    if (clash) return setError(clashWords(clash, draft))
     try {
-      await logPastSession({ aircraft, hangar, entry: arrived, exit: left, note: note.trim() })
+      await logPastSession({ aircraft, hangar, ...times, note: note.trim() })
       onSaved()
       onClose()
-    } catch {
-      setError('Save failed — check connection.')
+    } catch (e) {
+      setError(hangarErrorWords(e, 'Save failed — check connection.'))
     }
   }
 
