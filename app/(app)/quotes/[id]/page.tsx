@@ -11,6 +11,7 @@ import { computeQuoteTotals, statusChipClass, depositForRule, depositRuleLabel, 
 import { syncJobPayment } from '@/lib/payments'
 import { formatCents } from '@/lib/money'
 import { todayLocalIso } from '@/lib/date'
+import { buildQuoteEmail } from '@/lib/quote-email'
 import { PAPER, lineOf, marksOf, paperErrorWords, serviceMarkText } from '@/lib/service-line'
 import {
   vehicleLabel,
@@ -33,6 +34,10 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
   const [settings, setSettings] = useState<Settings | null>(null)
   const [editing, setEditing] = useState(false)
   const [shareMsg, setShareMsg] = useState('')
+  /** The mail app was opened with the estimate filled in. */
+  const [emailOpened, setEmailOpened] = useState(false)
+  /** The tap that opened it also moved the quote from draft to sent. */
+  const [emailMarkedSent, setEmailMarkedSent] = useState(false)
   const [converting, setConverting] = useState(false)
   /** Recording a customer decision that arrived off-line (phone, in person, text). */
   const [recording, setRecording] = useState<'approved' | 'declined' | null>(null)
@@ -209,6 +214,37 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
     // AOG / Nights & weekends (0065): the same words the customer's link prints.
     marks: marksOf(quote),
   }
+
+  /**
+   * The same estimate as an email, for customers who only use email: opens
+   * Jake's mail app with the To, Subject and Body filled in, the way Send link
+   * fills a text. Built from `doc`, the figures the estimate itself prints, so
+   * the email cannot disagree with it or show anything the link does not.
+   */
+  const email = buildQuoteEmail({
+    status: quote.status,
+    quoteNumber: quote.quote_number,
+    title: quote.title,
+    description: quote.description,
+    validUntil: quote.valid_until,
+    customerName: customer?.name ?? '',
+    customerEmail: customer?.email ?? null,
+    vehicleLabel: vehicle ? doc.vehicleLabel : '',
+    serviceLine: line,
+    marks: marksOf(quote),
+    lines: doc.lines,
+    linesCents: doc.linesCents,
+    laborHours: doc.laborHours,
+    laborRateCents: doc.laborRateCents,
+    laborCents: doc.laborCents,
+    taxRateBp: doc.taxRateBp,
+    taxCents: doc.taxCents,
+    totalCents: doc.totalCents,
+    depositCents: doc.depositCents ?? null,
+    businessName: doc.business.name,
+    businessPhone: doc.business.phone,
+    link: publicUrl,
+  })
 
   /**
    * A decision that arrived outside the link — phone call, at the counter, a
@@ -580,6 +616,34 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn btn-sm btn-primary" onClick={shareLink}>Send link</button>
+          {/* A real link, not a script: the mail app opens from a plain tap. */}
+          <a
+            className="btn btn-sm"
+            href={email.href}
+            onClick={(e) => {
+              if (needsAircraft) {
+                e.preventDefault()
+                alert(paperErrorWords('quote_needs_aircraft'))
+                return
+              }
+              setEmailOpened(true)
+              // The customer's link only takes an approval once the quote is
+              // SENT (respond_public_quote), so a draft is marked sent on the
+              // tap, not after: an email that asks for an approval its link
+              // then refuses is the worse mistake. A mailto: can't report
+              // whether the email went, so the card below offers Undo.
+              // Opening a mailto: doesn't unload the page, so this save
+              // finishes while the mail app opens.
+              if (quote!.status === 'draft') {
+                setEmailMarkedSent(true)
+                void setStatus('sent')
+              } else {
+                setEmailMarkedSent(false)
+              }
+            }}
+          >
+            Email
+          </a>
           <button className="btn btn-sm" onClick={() => window.print()}>Print</button>
           <button
             className="btn btn-sm"
@@ -646,6 +710,45 @@ export default function QuoteDetailPage({ params }: { params: Promise<{ id: stri
           <button className="btn btn-sm btn-danger" onClick={softDelete}>Delete</button>
         </div>
         {shareMsg && <p className="text-sm" style={{ color: 'var(--green)' }}>{shareMsg}</p>}
+        {emailOpened && (emailMarkedSent || !email.to) && (
+          <div className="card space-y-2" role="status">
+            {!email.to && (
+              <p className="text-sm" style={{ color: 'var(--orange)' }}>
+                No email on file for {customer?.name || 'this customer'}. Type it into the To line, and add it to
+                their page for next time.
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {emailMarkedSent && quote.status === 'sent' && (
+                <>
+                  <span className="text-sm">
+                    Marked as sent, so {customer?.name?.split(/\s+/)[0] || 'the customer'} can approve it from the
+                    link. Didn’t send the email?
+                  </span>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      setEmailOpened(false)
+                      setEmailMarkedSent(false)
+                      await setStatus('draft')
+                    }}
+                  >
+                    Undo
+                  </button>
+                </>
+              )}
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  setEmailOpened(false)
+                  setEmailMarkedSent(false)
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
         {recording && (
           <div className="card space-y-2">
             <span className="label !mb-0">
