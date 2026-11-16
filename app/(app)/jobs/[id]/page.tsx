@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import JobSectionBar from '@/components/JobSectionBar'
 import {
   billedTaxRateBp,
   collectedForJob,
@@ -355,6 +356,38 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   useEffect(() => {
     load()
   }, [load])
+
+  /** Opens the new-part form and brings it to the thumb. */
+  function openPartForm() {
+    setAddingPart(true)
+    setEditingLineId(null)
+    setDraft(emptyDraft)
+    // The panel lives in the Parts card far below the fold — a tap
+    // that visibly does nothing gets tapped twice.
+    setTimeout(() => {
+      descriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      descriptionRef.current?.focus({ preventScroll: true })
+    }, 60)
+  }
+
+  // A link can name where on this page it is going (2026-11-16): #parts or
+  // #money lands on that section, and #add-part opens the part form, which is
+  // what the "+ Part" button on a Home bench card asks for. The browser cannot
+  // do this itself: the sections do not exist until the job has loaded. Once
+  // per visit, so a later reload of the job's rows never yanks the page.
+  const hashHandled = useRef(false)
+  const loaded = job !== null
+  useEffect(() => {
+    if (!loaded || hashHandled.current) return
+    hashHandled.current = true
+    const hash = window.location.hash.slice(1)
+    if (!hash) return
+    // After this render has painted the sections.
+    setTimeout(() => {
+      if (hash === 'add-part') openPartForm()
+      else document.getElementById(`sec-${hash}`)?.scrollIntoView({ block: 'start' })
+    }, 80)
+  }, [loaded])
 
   if (error) return <p style={{ color: 'var(--red)' }}>{error}</p>
   if (!job) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
@@ -1181,8 +1214,27 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
+      {/* The page's sections, one tap each (2026-11-16). Only the ones that
+          are on the page: Receipts, Invoices and Notes come and go. */}
+      <JobSectionBar
+        sections={[
+          // The header first: its buttons (scan, invoice, mark paid) are what
+          // you come back up for after reading a section further down.
+          { id: 'sec-job', label: 'Job' },
+          { id: 'sec-labor', label: 'Labor' },
+          { id: 'sec-parts', label: 'Parts' },
+          { id: 'sec-photos', label: 'Photos' },
+          ...(receipts.length > 0 ? [{ id: 'sec-receipts', label: 'Receipts' }] : []),
+          { id: 'sec-money', label: 'Money' },
+          ...(invoices.length > 0 ? [{ id: 'sec-invoices', label: 'Invoices' }] : []),
+          { id: 'sec-payments', label: 'Payments' },
+          { id: 'sec-recommendations', label: 'Recommendations' },
+          ...(job.notes ? [{ id: 'sec-notes', label: 'Notes' }] : []),
+        ]}
+      />
+
       {/* Header */}
-      <div className="card space-y-2">
+      <div id="sec-job" data-sec className="card space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1342,20 +1394,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
         <div className="flex flex-wrap gap-2">
           <Link href={`/jobs/${id}/scan`} className="btn btn-sm btn-primary">Scan receipt</Link>
-          <button
-            className="btn btn-sm"
-            onClick={() => {
-              setAddingPart(true)
-              setEditingLineId(null)
-              setDraft(emptyDraft)
-              // The panel lives in the Parts card far below the fold — a tap
-              // that visibly does nothing gets tapped twice.
-              setTimeout(() => {
-                descriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                descriptionRef.current?.focus({ preventScroll: true })
-              }, 60)
-            }}
-          >
+          <button className="btn btn-sm" onClick={openPartForm}>
             + Add part manually
           </button>
           {/* Hidden on a finished job unless it is still running: nobody
@@ -1564,7 +1603,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       )}
 
       {/* Labor — adjusted right here, no trip through Edit job. */}
-      <div className="card space-y-2">
+      <div id="sec-labor" data-sec className="card space-y-2">
         <div className="flex items-center justify-between">
           <span className="label !mb-0">Labor</span>
           {!editingLabor && (
@@ -1652,7 +1691,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       <JobTimeCard job={job} onUpdate={(patch) => updateJob(patch)} />
 
       {/* Parts */}
-      <div className="card space-y-2">
+      <div id="sec-parts" data-sec className="card space-y-2">
         <div className="label">Parts</div>
         {lines.length === 0 && !addingPart && (
           <p className="text-sm" style={{ color: 'var(--text3)' }}>
@@ -2045,11 +2084,13 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
       {/* Photos: under Parts since the 2026-11 phone sweep — parts are
           what gets added most, so nothing that is rarely touched sits above them. */}
-      <JobPhotos jobId={id} />
+      <div id="sec-photos" data-sec>
+        <JobPhotos jobId={id} />
+      </div>
 
       {/* Receipts */}
       {receipts.length > 0 && (
-        <div className="card space-y-2">
+        <div id="sec-receipts" data-sec className="card space-y-2">
           <div className="label">Receipts</div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {receipts.map((r) => {
@@ -2158,7 +2199,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       )}
 
       {/* Money summary */}
-      <div className="card space-y-1">
+      <div id="sec-money" data-sec className="card space-y-1">
         <div className="label">Money</div>
         <Row label={`Labor (${Number(job.labor_hours)} hr × ${formatCents(job.labor_rate_cents)})`} value={totals.labor_charge_cents} />
         <Row label="Parts cost (what you paid)" value={totals.parts_cost_cents} />
@@ -2311,7 +2352,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
       {/* Invoices */}
       {invoices.length > 0 && (
-        <div className="card space-y-1">
+        <div id="sec-invoices" data-sec className="card space-y-1">
           <div className="label">Invoices</div>
           {invoices.map((inv) => (
             <Link
@@ -2331,7 +2372,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       )}
 
       {/* Payments ledger */}
-      <div className="card space-y-2">
+      <div id="sec-payments" data-sec className="card space-y-2">
         <div className="flex items-center justify-between">
           <span className="label !mb-0">Payments</span>
           <span
@@ -2760,7 +2801,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
       {/* Recommendations — trackable items that follow the vehicle and seed
           the invoice the customer receives. */}
-      <div className="card space-y-2">
+      <div id="sec-recommendations" data-sec className="card space-y-2">
         <span className="label !mb-0">Recommendations</span>
         <RecommendationList
           jobId={id}
@@ -2775,7 +2816,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
 
       {/* Notes + danger zone */}
       {job.notes && (
-        <div className="card">
+        <div id="sec-notes" data-sec className="card">
           <div className="label">Private notes</div>
           <p className="whitespace-pre-wrap text-sm">{job.notes}</p>
         </div>

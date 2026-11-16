@@ -48,7 +48,18 @@ export default function ActionLane({
   taxes = null,
   resaleCard = false,
   now = new Date(),
+  listed = [],
 }: {
+  /**
+   * Doors (by label) the page already shows as the records themselves, and so
+   * leaves out here. Home's Today lists (2026-11-16) are the requests, the
+   * unbilled jobs, the invoices and the quotes, one row each: a door that only
+   * counts them is a second tap to the same thing. With them listed, a door
+   * with nothing behind it is left out as well, so the lane holds only what is
+   * not on the page any other way: an aircraft on the ground, booked work and
+   * its money, cores out, a tax return, the resale card, paperwork expiring.
+   */
+  listed?: readonly string[]
   f: Finances
   cores: CoreOut[]
   docAlerts: BusinessDocument[]
@@ -311,9 +322,14 @@ export default function ActionLane({
     })
   }
 
+  const shown =
+    listed.length === 0 ? doors : doors.filter((d) => !listed.includes(d.label) && d.edge !== 'idle')
+  // An empty <nav> would still take the lane's row in the board's grid.
+  if (shown.length === 0) return null
+
   return (
     <nav className="lane" aria-label="Needs attention">
-      {doors.map((d, i) => (
+      {shown.map((d, i) => (
         <Link
           key={d.label}
           href={d.href}

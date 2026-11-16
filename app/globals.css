@@ -1362,6 +1362,124 @@ a.card:focus-visible {
   .board, .lane { gap: 12px; }
 }
 
+/* ---------- Home: Today | Money (owner, 2026-11-16) ---------- */
+/* The lane was a row of doors: a count, then a tap to the list holding the
+   thing. Today's two sections are the things themselves. A phone shows one
+   half at a time (the URL's ?view= picks it, on .board[data-view]); a desk
+   has the room, so it shows both and drops the switch. */
+.board-switch { grid-column: 1 / -1; order: 0; }
+.today-sec {
+  grid-column: 1 / -1;
+  order: 1;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  animation: board-rise 0.32s var(--ease) both;
+  animation-delay: 60ms;
+}
+.today-sec > *, .today-group > * { min-width: 0; }
+.today-head { display: flex; align-items: center; min-height: 20px; }
+.today-head .section-title { flex: 1; font-size: 11px; line-height: 14px; }
+.today-group { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+.today-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text3);
+}
+.today-meta .wnt-id { font-size: 12px; }
+.today-basis { margin-left: 4px; font-size: 0.65rem; font-weight: 400; color: var(--text3); }
+.today-empty { font-size: 14px; line-height: 20px; color: var(--text2); }
+.today-failed { display: block; color: var(--status-wait-fg); text-decoration: none; }
+.today-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  font-size: 13px;
+  color: var(--accent2);
+}
+/* A bench card is a job row with its three all-day actions underneath. The
+   row is the link; the buttons are siblings, never inside it. */
+.bench-card { display: flex; flex-direction: column; gap: 8px; padding-block: 10px; }
+.bench-open {
+  display: block;
+  min-width: 0;
+  min-height: 44px;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 10px;
+}
+.bench-open:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.bench-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.bench-actions .btn { flex: 1 1 auto; white-space: nowrap; }
+@media (max-width: 899px) {
+  .board[data-view='today'] > .board-tiles,
+  .board[data-view='today'] > .board-chart,
+  .board[data-view='today'] .board-year { display: none; }
+  .board[data-view='money'] > .today-sec,
+  .board[data-view='money'] > .lane,
+  .board[data-view='money'] > .cal,
+  .board[data-view='money'] > .recent { display: none; }
+}
+@media (min-width: 900px) {
+  /* .board > : .seg-track sets its own display further down this file, and at
+     equal weight the later rule wins. */
+  .board > .board-switch { display: none; }
+  /* Bench on the left, waiting on the right, above the lane. */
+  .today-sec { grid-column: span 2; order: 0; }
+}
+
+/* ---------- Job page: the section bar (owner, 2026-11-16) ---------- */
+/* A job page is about three phone screens. This strip stays under the top
+   corner buttons and jumps to a section; the one in view is lit. It sticks
+   rather than floats: it belongs to the job page's column, so on a desk it is
+   as wide as the job, and it never needs to know the sidebar is there. Above
+   the cards (which each make their own layer), under the corner buttons and
+   the tab bar. */
+.secbar {
+  position: sticky;
+  top: calc(env(safe-area-inset-top) + 60px);
+  z-index: 35;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--wnt-radius-pill);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.secbar::-webkit-scrollbar { display: none; }
+.secbar-item {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--wnt-radius-pill);
+  background: transparent;
+  color: var(--text-body);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.secbar-item:hover { color: var(--text-heading); }
+.secbar-item.on { color: var(--accent2); background-color: rgba(255, 255, 255, 0.14); }
+.secbar-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* A jump lands the section's top just under the bar, not behind it. */
+[data-sec] { scroll-margin-top: calc(env(safe-area-inset-top) + 60px + 50px + 10px); }
+@media (min-width: 640px) {
+  .secbar { top: 8px; }
+  [data-sec] { scroll-margin-top: 68px; }
+}
+@media print { .secbar { display: none; } }
+
 /* Board motion: one orchestrated arrival, then only data moves. Blocks arrive
    from a near-visible state (never opacity 0); tiles stagger 30ms, bars grow
    with a 22ms stagger, numbers count up over 600ms (JS). Off under

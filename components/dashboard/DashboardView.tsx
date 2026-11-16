@@ -7,13 +7,21 @@ import MonthlyChart, { type MonthlyJob } from '@/components/MonthlyChart'
 import type { BusinessDocument } from '@/components/BusinessDocuments'
 import type { CoreOut } from '@/lib/cores'
 import { resalePromptDue, salesTaxPaid, taxReminder } from '@/lib/sales-tax'
-import type { Settings, TaxBasis, TaxFiling } from '@/lib/types'
-import { computeFinances, financeYears, isBookedJob, type FinanceRows, type MonthFigures } from '@/lib/finances'
+import type { Job, Settings, TaxBasis, TaxFiling } from '@/lib/types'
+import {
+  computeFinances,
+  financeYears,
+  isBookedJob,
+  jobsToInvoice,
+  type FinanceRows,
+  type MonthFigures,
+} from '@/lib/finances'
 import ActionLane, { type BillingCounts } from './ActionLane'
 import EarnedBar from './EarnedBar'
 import MoneyLedger from './MoneyLedger'
 import MonthVsStrip from './MonthVsStrip'
 import ScheduleCalendar from './ScheduleCalendar'
+import { Bench, Waiting, type Loaded, type NewRequest, type OpenInvoice, type OpenQuote } from './TodayLists'
 import TrendTile, { type TrendScope } from './TrendTile'
 import { ageWords, daysSince, money, plural, shortDate } from './format'
 
@@ -49,9 +57,22 @@ function subscribeLedger(listener: () => void) {
 }
 
 /**
+ * The doors Today's lists stand in for; the lane leaves them out. Scheduled
+ * stays: it carries the booked money and leads to work booked further out
+ * than the bench shows.
+ */
+const LISTED_ON_TODAY = ['Billing', 'Requests', 'Quotes'] as const
+
+/**
  * The shop board. Presentational: everything it shows comes in as props, so a
  * throwaway route can render it with fixture data. It owns only the year
  * select and whether the ledger is open.
+ *
+ * Two views on a phone (owner, 2026-11-16), switched by the URL so a link can
+ * name either: Today is the work itself (on the bench, waiting on him, the
+ * calendar, recent jobs) and Money is the figures (the tiles, the ledger, the
+ * month chart). A desk has the room for both, so there the switch is hidden
+ * and the board shows everything, Today's lists first.
  */
 export default function DashboardView({
   rows,
@@ -65,7 +86,22 @@ export default function DashboardView({
   taxBasis = null,
   resaleCardPrompt,
   now: nowProp,
+  view = 'today',
+  requests,
+  openInvoices,
+  openQuotes,
+  onJobPatch,
 }: {
+  /** Which half a phone shows. A desk shows both. */
+  view?: 'today' | 'money'
+  /** Unanswered requests, for Today's list. undefined = loading; null = the read failed. */
+  requests?: Loaded<NewRequest>
+  /** Invoices out or in draft, for Today's list. */
+  openInvoices?: Loaded<OpenInvoice>
+  /** Quotes out or in draft, for Today's list. */
+  openQuotes?: Loaded<OpenQuote>
+  /** Saves a clock start or stop from a bench card. */
+  onJobPatch?: (jobId: string, patch: Partial<Job>) => Promise<void>
   rows: FinanceRows
   cores: CoreOut[]
   docAlerts: BusinessDocument[]
@@ -156,6 +192,15 @@ export default function DashboardView({
   )
   const recent = scopedJobs.slice(0, 6)
 
+  // Today's lists read every job and every payment, whatever year the money
+  // figures are showing: work on the bench and a bill unpaid are about now.
+  const toInvoice = useMemo(() => jobsToInvoice(rows), [rows])
+  const paidByJob = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const p of rows.payments) m.set(p.job_id, (m.get(p.job_id) ?? 0) + p.amount_cents)
+    return m
+  }, [rows])
+
   const today = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const yearWords = year === 'all' ? 'all time' : year === thisYear ? 'this year' : String(year)
 
@@ -242,7 +287,7 @@ export default function DashboardView({
       : `collected${tipsTerm} − parts${restWords || ', before overhead'}`
 
   return (
-    <div className="board">
+    <div className="board" data-view={view}>
       <div className="board-head">
         <div>
           <div className="board-eyebrow">{today}</div>
@@ -254,7 +299,7 @@ export default function DashboardView({
           </label>
           <select
             id="dash-year"
-            className="select"
+            className="select board-year"
             value={String(year)}
             onChange={(e) => setYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
           >
@@ -274,6 +319,29 @@ export default function DashboardView({
         </div>
       </div>
 
+      {/* Links, not buttons: the URL is the view, as on Jobs | Quotes. Both
+          carry their value explicitly; a link that only drops a param does not
+          navigate from inside a static page. Hidden on a desk, which shows
+          both halves. */}
+      <nav className="seg-track board-switch" aria-label="Today or money">
+        <Link
+          href="/dashboard?view=today"
+          aria-current={view === 'today' ? 'page' : undefined}
+          className={`seg-item ${view === 'today' ? 'on' : ''}`}
+        >
+          Today
+        </Link>
+        <Link
+          href="/dashboard?view=money"
+          aria-current={view === 'money' ? 'page' : undefined}
+          className={`seg-item ${view === 'money' ? 'on' : ''}`}
+        >
+          Money
+        </Link>
+      </nav>
+
+      {/* Above the lists on purpose: an aircraft on the ground and a return
+          that is due outrank whatever is on the bench. */}
       <ActionLane
         f={f}
         cores={cores}
@@ -283,6 +351,17 @@ export default function DashboardView({
         billing={billing}
         taxes={taxes}
         resaleCard={resaleCard}
+        now={now}
+        listed={LISTED_ON_TODAY}
+      />
+
+      <Bench jobs={rows.jobs} now={now} onJobPatch={onJobPatch} />
+      <Waiting
+        requests={requests}
+        toInvoice={toInvoice}
+        invoices={openInvoices}
+        quotes={openQuotes}
+        paidByJob={paidByJob}
         now={now}
       />
 
