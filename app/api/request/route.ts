@@ -1,4 +1,5 @@
 import { notify } from '@/lib/notify'
+import { AOG_SUBJECT_PREFIX, ownerEmailChannel, sendOwnerEmail } from '@/lib/owner-alert'
 import { serviceClient } from '@/lib/payments-server'
 
 export const runtime = 'nodejs'
@@ -120,31 +121,23 @@ export async function POST(request: Request) {
   // Read into consts first. A narrowed `process.env.X` does NOT stay narrowed
   // inside the callbacks below — TypeScript cannot prove a property has not
   // changed by the time the closure runs — so the `if` guards these instead.
-  const resendKey = process.env.RESEND_API_KEY
-  const notifyTo = process.env.OWNER_NOTIFY_EMAIL
+  //
+  // The email request itself is built in lib/owner-alert, which the Settings
+  // test button shares: what the test sends is what this sends.
+  const email = ownerEmailChannel()
   const pushToken = process.env.PUSHOVER_TOKEN
   const pushUser = process.env.PUSHOVER_USER
 
-  if (result.id && resendKey && notifyTo) {
-    await notify('email', () =>
-      fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${resendKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from: process.env.NOTIFY_FROM_EMAIL ?? 'onboarding@resend.dev',
-          to: notifyTo,
-          subject: result.aog
-            ? `*** AOG *** ${serviceLine} service request — ${name} (${vehicle})`
-            : lineRecorded
-              ? `New ${serviceLine} service request — ${name} (${vehicle})`
-              : `New service request — ${name} (${vehicle})`,
-          text: `A new service request just came in.\n\nOpen it: https://wingsnthings.repair/requests\n\n(Details are in the app, not this email.)`,
-        }),
-        signal: AbortSignal.timeout(4000),
-      }),
+  if (result.id && email) {
+    await sendOwnerEmail(
+      'email',
+      email,
+      result.aog
+        ? `${AOG_SUBJECT_PREFIX} ${serviceLine} service request — ${name} (${vehicle})`
+        : lineRecorded
+          ? `New ${serviceLine} service request — ${name} (${vehicle})`
+          : `New service request — ${name} (${vehicle})`,
+      `A new service request just came in.\n\nOpen it: https://wingsnthings.repair/requests\n\n(Details are in the app, not this email.)`,
     )
   }
 
@@ -193,7 +186,7 @@ export async function POST(request: Request) {
   // configured that is only true of /requests — which nobody is watching at
   // 2am. The request is stored safely either way; this says so out loud, in the
   // one place that can be read afterwards, instead of looking like a success.
-  if (result.id && result.aog && !(resendKey && notifyTo) && !(pushToken && pushUser)) {
+  if (result.id && result.aog && !email && !(pushToken && pushUser)) {
     console.error(
       '[notify] AOG stored with NO channel configured — nothing left the server. ' +
         'Set RESEND_API_KEY + OWNER_NOTIFY_EMAIL, or PUSHOVER_TOKEN + PUSHOVER_USER.',

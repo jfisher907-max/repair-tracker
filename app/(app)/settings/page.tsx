@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getAccessToken, supabase } from '@/lib/supabase'
 import BusinessDocuments from '@/components/BusinessDocuments'
 import { BRAND_SLUG } from '@/lib/brand'
 import { DEFAULT_TIERS, type MarkupTier } from '@/lib/markup'
+// Types only: lib/owner-alert reads the Resend key and stays on the server.
+import type { AlertTestResult, OwnerAlertStatus } from '@/lib/owner-alert'
 import { QUOTE_PRICING_CHOICES, type QuotePricing } from '@/lib/quote-pricing'
 import { centsToInput, parseMoney } from '@/lib/money'
 import { vehicleLabel, type Customer, type Job, type Quote, type Vehicle } from '@/lib/types'
@@ -47,6 +49,11 @@ export default function SettingsPage() {
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null)
   const [aiTest, setAiTest] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
+  // null while checking; 'error' when the check itself could not be made.
+  const [alerts, setAlerts] = useState<OwnerAlertStatus | 'error' | null>(null)
+  const [alertTest, setAlertTest] = useState<AlertTestResult | null>(null)
+  const [alertBusy, setAlertBusy] = useState(false)
+  const alertSending = useRef(false)
   const [exporting, setExporting] = useState(false)
   /** What the backup is doing, then how it went. */
   const [exportMsg, setExportMsg] = useState<{ tone: 'busy' | 'ok' | 'warn' | 'error'; text: string } | null>(null)
@@ -107,6 +114,15 @@ export default function SettingsPage() {
         setAiConfigured(false)
       }
     })
+    getAccessToken().then(async (token) => {
+      try {
+        const res = await fetch('/api/alert-test', { headers: { Authorization: `Bearer ${token}` } })
+        const body = res.ok ? await res.json() : null
+        setAlerts(body && typeof body.email === 'object' && body.email ? (body as OwnerAlertStatus) : 'error')
+      } catch {
+        setAlerts('error')
+      }
+    })
     fetch('/api/pay/status')
       .then((r) => r.json())
       .then((x) => {
@@ -164,6 +180,48 @@ export default function SettingsPage() {
       setAiTest(`Failed: ${e instanceof Error ? e.message : String(e)}`)
     }
     setTesting(false)
+  }
+
+  /**
+   * Sends one test alert down the same path a real AOG request takes, and shows
+   * what the mail provider did with it. A refusal by the site (signed out) and
+   * a dead connection are told apart: "check your connection" over a refusal
+   * sends you looking in the wrong place.
+   */
+  async function sendTestAlert() {
+    // The disabled button only takes effect at the next paint, and every send
+    // is a real email: a fast double tap must not become two.
+    if (alertSending.current) return
+    alertSending.current = true
+    setAlertBusy(true)
+    setAlertTest(null)
+    try {
+      const token = await getAccessToken()
+      const res = await fetch('/api/alert-test', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const body = await res.json().catch(() => null)
+      if (res.status === 401) {
+        setAlertTest({ ok: false, headline: 'Not sent. Your sign-in has expired. Sign in again, then try once more.' })
+      } else if (res.status === 403) {
+        setAlertTest({ ok: false, headline: 'Not sent. Only the owner’s account can send a test alert.' })
+      } else if (!res.ok || typeof body?.headline !== 'string') {
+        setAlertTest({
+          ok: false,
+          headline: `Not sent. The site answered with an error (${res.status}) instead of running the test. Try again in a minute.`,
+        })
+      } else {
+        setAlertTest({ ok: body.ok === true, headline: body.headline, detail: typeof body.detail === 'string' ? body.detail : undefined })
+      }
+    } catch {
+      setAlertTest({
+        ok: false,
+        headline: 'Not sent. The site could not be reached from this device. Check your connection and try again.',
+      })
+    }
+    alertSending.current = false
+    setAlertBusy(false)
   }
 
   async function exportAll() {
@@ -318,6 +376,63 @@ export default function SettingsPage() {
               <span className="text-sm" style={{ color: aiTest.startsWith('Working') ? 'var(--green)' : 'var(--red)' }}>
                 {aiTest}
               </span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* The real alert only fires when a stranger submits the public form, and
+          a mail setup that has quietly stopped working looks the same as one
+          that works. This asks the question on demand. */}
+      <div className="card space-y-2">
+        <div className="label">Request alerts</div>
+        <p className="text-sm" style={{ color: 'var(--text2)' }}>
+          When someone sends a service request, the site emails you. An aircraft-on-ground
+          request arrives with a subject starting <b>*** AOG ***</b>.
+        </p>
+        {alerts == null ? (
+          <p className="text-sm" style={{ color: 'var(--text2)' }}>Checking…</p>
+        ) : alerts === 'error' ? (
+          <p className="text-sm" style={{ color: 'var(--orange)' }}>
+            Couldn’t check how alerts are set up. Reload this page to try again.
+          </p>
+        ) : !alerts.email.configured ? (
+          <p className="text-sm" style={{ color: 'var(--text2)', overflowWrap: 'anywhere' }}>
+            <b style={{ color: 'var(--orange)' }}>
+              Email alerts are not set up, so nothing is sent when a request comes in.
+            </b>{' '}
+            Missing in the Vercel project settings: {alerts.email.missing.join(' and ')}. After adding
+            a setting there, the site has to be redeployed before it takes effect.
+          </p>
+        ) : (
+          <>
+            <p className="text-sm" style={{ color: 'var(--text2)', overflowWrap: 'anywhere' }}>
+              Alerts go to <b>{alerts.email.to}</b>, sent from {alerts.email.from}.
+            </p>
+            {alerts.email.testSender && (
+              <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                That sender is Resend’s test address. It can only reach the address the Resend
+                account was opened with.
+              </p>
+            )}
+            {alerts.push && (
+              <p className="text-xs" style={{ color: 'var(--text3)' }}>
+                Pushover is set up too: the first AOG request in 10 minutes also pushes to your
+                phone, and repeats until you acknowledge it. The test below is email only.
+              </p>
+            )}
+            <button className="btn btn-sm" onClick={sendTestAlert} disabled={alertBusy}>
+              {alertBusy ? 'Sending…' : 'Send test alert'}
+            </button>
+          </>
+        )}
+        {alertTest && (
+          <div role={alertTest.ok ? 'status' : 'alert'} className="space-y-1" style={{ overflowWrap: 'anywhere' }}>
+            <p className="text-sm" style={{ color: alertTest.ok ? 'var(--green)' : 'var(--red)' }}>
+              {alertTest.headline}
+            </p>
+            {alertTest.detail && (
+              <p className="text-xs" style={{ color: 'var(--text3)' }}>{alertTest.detail}</p>
             )}
           </div>
         )}
