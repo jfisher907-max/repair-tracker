@@ -1,42 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Barlow, Barlow_Condensed, IBM_Plex_Mono, Inter, Space_Grotesk } from "next/font/google";
+// The typefaces are files in app/fonts, not a download from Google during the
+// build: a build that depends on Google's font server fails when that server
+// answers differently, and it did (app/fonts/README.md).
+//
+// fonts.css declares the faces and sets five variables on <body>:
+//   --font-body         Barlow            the app's text
+//   --font-display      Barlow Condensed  headings and labels
+//   --font-doc-body     Inter             customer paper (quotes, invoices), which
+//   --font-doc-display  Space Grotesk     uses its own faces so it reads distinct
+//                                         from the app chrome
+//   --font-mono         IBM Plex Mono     ids only: J007, Q012, VINs. Money is NOT
+//                                         mono; it is bold display, tabular figures
+import "./fonts/fonts.css";
 import "./globals.css";
+import PreloadFonts from "./fonts/PreloadFonts";
 import SWRegister from "@/components/SWRegister";
 import { BRAND_NAME } from "@/lib/brand";
-
-const barlow = Barlow({
-  variable: "--font-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const barlowCondensed = Barlow_Condensed({
-  variable: "--font-display",
-  subsets: ["latin"],
-  weight: ["500", "600", "700"],
-});
-
-// Customer-facing documents (quotes/invoices) use their own faces so the
-// paper reads distinct from the app chrome.
-const inter = Inter({
-  variable: "--font-doc-body",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-doc-display",
-  subsets: ["latin"],
-  weight: ["500", "700"],
-});
-
-// Ids only — J007, Q012, VINs. The design system's one mono face; money is
-// NOT mono (bold display with tabular figures).
-const plexMono = IBM_Plex_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: ["400", "600"],
-});
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://wingsnthings.repair'),
@@ -68,7 +47,8 @@ export default function RootLayout({
   // covers this element's own attributes only, not anything inside it.
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${barlow.variable} ${barlowCondensed.variable} ${inter.variable} ${spaceGrotesk.variable} ${plexMono.variable}`}>
+      <body className="app-fonts">
+        <PreloadFonts />
         <SWRegister />
         {children}
       </body>
