@@ -1,5 +1,5 @@
 import { isMissingSchema } from './db-errors'
-import type { Job, Vehicle } from './types'
+import type { Job, PartCondition, Vehicle } from './types'
 
 /**
  * Aircraft paperwork (AVN-3, migration 0055): which paper a vehicle, quote or
@@ -158,6 +158,20 @@ export function needsPartConditions(line: ServiceLine): boolean {
 /** The AS 45.45.210 notice: motor-vehicle paper only. */
 export function printsRepairActNotice(line: ServiceLine): boolean {
   return line === 'automotive'
+}
+
+/** AS 45.45.210: printed conspicuously on the invoice, word for word. Here so
+ *  the printed invoice (DocView) and the emailed one (lib/invoice-email) carry
+ *  the one sentence. */
+export const REPAIR_ACT_NOTICE =
+  'Motor vehicle repair trade practices are regulated by Alaska Statutes 45.45.130 - 45.45.240, administered by the Alaska Department of Law.'
+
+/** AS 45.45.190's word for each part, as the paper and the email print it. */
+export const CONDITION_LABEL: Record<PartCondition, string> = {
+  new: 'New',
+  used: 'Used',
+  rebuilt: 'Rebuilt',
+  reconditioned: 'Reconditioned',
 }
 
 /** Whether the job is held to what the customer approved (cars: the law; aircraft: CHOICE 4). */

@@ -14,11 +14,15 @@
 // that link does not show: no notes, no costs, no profit. The link is still
 // where the customer approves, because only the link records who approved,
 // when, and which lines.
+//
+// The invoice has the same email (lib/invoice-email); the parts they share
+// live in lib/mailto.
 
 import { BRAND_NAME } from './brand'
 import { formatCents } from './money'
 import { formatDate } from './date'
 import { formatTaxRate } from './billing'
+import { forWhatText, greetingFor, lineText, mailtoHref, qtyText } from './mailto'
 import { PAPER, serviceMarkText, type ServiceLine, type ServiceMarks } from './service-line'
 import type { QuoteStatus } from './types'
 
@@ -59,11 +63,6 @@ export interface QuoteEmail {
   href: string
 }
 
-/** "2" not "2.00", "1.5" not "1.50". */
-function qtyText(n: number): string {
-  return String(Number(n.toFixed(2)))
-}
-
 export function buildQuoteEmail(q: QuoteEmailInput): QuoteEmail {
   const paper = PAPER[q.serviceLine]
   const business = q.businessName.trim() || BRAND_NAME
@@ -73,17 +72,8 @@ export function buildQuoteEmail(q: QuoteEmailInput): QuoteEmail {
   // Still waiting on the customer: ask them to approve. Otherwise this is a copy.
   const asking = q.status === 'draft' || q.status === 'sent'
 
-  // A car customer is a person; an aircraft customer is often an operator,
-  // where "Hi Airlift," would read wrong. Jake can change it before sending.
-  const name = q.customerName.trim()
-  const greeting =
-    q.serviceLine === 'automotive' && name ? `Hi ${name.split(/\s+/)[0]},` : name ? `Hello ${name},` : 'Hello,'
-
-  const forWhat = q.vehicleLabel.trim()
-    ? q.serviceLine === 'automotive'
-      ? ` for your ${q.vehicleLabel.trim()}`
-      : ` for ${q.vehicleLabel.trim()}`
-    : ''
+  const greeting = greetingFor(q.customerName, q.serviceLine)
+  const forWhat = forWhatText(q.vehicleLabel, q.serviceLine)
   const opening = asking
     ? `Here's your ${paper.quoteLower} from ${business}${forWhat}.`
     : q.status === 'approved'
@@ -103,14 +93,7 @@ export function buildQuoteEmail(q: QuoteEmailInput): QuoteEmail {
 
   if (q.lines.length > 0) {
     out.push('')
-    for (const l of q.lines) {
-      const qty = Number(l.qty)
-      out.push(
-        qty === 1
-          ? `- ${l.description}: ${formatCents(l.line_total_cents)}`
-          : `- ${l.description} (${qtyText(qty)} x ${formatCents(l.unit_charge_cents)}): ${formatCents(l.line_total_cents)}`,
-      )
-    }
+    for (const l of q.lines) out.push(lineText(l))
   }
 
   // The totals, row for row as the estimate prints them (DocView).
@@ -146,12 +129,5 @@ export function buildQuoteEmail(q: QuoteEmailInput): QuoteEmail {
   const subject = `${paper.quote} ${q.quoteNumber} from ${business}${title ? `: ${title}` : ''} - ${total}`
   const to = q.customerEmail?.trim() ?? ''
 
-  // RFC 6068: percent-encoded UTF-8, CRLF line breaks. The address keeps its @
-  // and + literal (both are legal there) so no mail app has to decode it.
-  const href =
-    `mailto:${encodeURIComponent(to).replace(/%40/g, '@').replace(/%2B/g, '+')}` +
-    `?subject=${encodeURIComponent(subject)}` +
-    `&body=${encodeURIComponent(body.replace(/\n/g, '\r\n'))}`
-
-  return { to, subject, body, href }
+  return { to, subject, body, href: mailtoHref(to, subject, body) }
 }

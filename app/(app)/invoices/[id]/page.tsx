@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { buildInvoiceSnapshot, formatTaxRate, statusChipClass } from '@/lib/billing'
 import { effectiveTaxRateBp } from '@/lib/calc'
 import { buildAuthorizationTrail, isOverApproval, loadJobAuthorization } from '@/lib/authorization'
+import { buildInvoiceEmail } from '@/lib/invoice-email'
 import { PAYMENT_METHODS, recordPayment, syncJobPayment } from '@/lib/payments'
 import { formatDate } from '@/lib/date'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
@@ -36,6 +37,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const [settings, setSettings] = useState<Settings | null>(null)
   const [payments, setPayments] = useState<Payment[]>([])
   const [shareMsg, setShareMsg] = useState('')
+  /** The customer's email address, for the Email button's To line. */
+  const [customerEmail, setCustomerEmail] = useState<string | null>(null)
+  /** Whether the customer's link offers Pay by card right now. */
+  const [cardOffered, setCardOffered] = useState(false)
+  /** The Email button was tapped: show what it did (and Undo). */
+  const [emailOpened, setEmailOpened] = useState(false)
+  /** ...and that tap marked a draft as sent. Holds the sent date it replaced,
+   *  so Undo puts back a draft that had been issued before (a paid invoice that
+   *  fell back to draft keeps its sent_at) instead of making it look unsent. */
+  const [emailMarkedSent, setEmailMarkedSent] = useState<{ prevSentAt: string | null } | null>(null)
   const [payOpen, setPayOpen] = useState(false)
   const [payAmount, setPayAmount] = useState('')
   const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
@@ -59,20 +70,33 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     // Every payment on the JOB counts toward this invoice — invoices are
     // whole-job snapshots, so a deposit or a payment on a prior (now void)
     // invoice belongs to this one too (mirrors SQL invoice_paid_cents).
-    const [{ data: s }, paysRes] = await Promise.all([
+    const [{ data: s }, paysRes, custRes] = await Promise.all([
       supabase.from('settings').select('*').single(),
       loaded
         ? supabase.from('payments').select('*').eq('job_id', loaded.job_id).order('date')
         : Promise.resolve({ data: [] as Payment[] }),
+      loaded
+        ? supabase.from('customers').select('email').eq('id', loaded.customer_id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ])
     setInvoice(loaded)
     setSettings(s as Settings)
     setPayments(((paysRes.data as Payment[]) ?? []))
+    setCustomerEmail((custRes.data as { email: string | null } | null)?.email ?? null)
   }, [id])
 
   useEffect(() => {
     load()
   }, [load])
+
+  // The same answer the customer's link gets, so the email only says "pay by
+  // card there" when the link really offers it.
+  useEffect(() => {
+    fetch('/api/pay/status')
+      .then((r) => r.json())
+      .then((b) => setCardOffered(!!b.enabled))
+      .catch(() => {})
+  }, [])
 
   /**
    * Never sent and no payment booked against THIS invoice = nobody has seen it,
@@ -274,6 +298,42 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     marks: marksOf(invoice),
   }
 
+  /**
+   * The same invoice as an email, the invoice-side twin of the estimate's
+   * Email button: opens Jake's mail app with the To, Subject and Body filled
+   * in. Built from `doc`, the figures this invoice prints, so the email cannot
+   * disagree with it or show anything the customer's link does not.
+   */
+  const email = buildInvoiceEmail({
+    status: invoice.status,
+    invoiceNumber: invoice.invoice_number,
+    title: invoice.job_title,
+    workPerformed: invoice.work_performed,
+    issueDate: invoice.issue_date,
+    dueDate: invoice.due_date,
+    customerName: invoice.customer_name,
+    customerEmail,
+    vehicleLabel: invoice.vehicle_label,
+    serviceLine: doc.serviceLine,
+    marks: marksOf(invoice),
+    lines: doc.lines,
+    linesCents: doc.linesCents,
+    laborHours: doc.laborHours,
+    laborRateCents: doc.laborRateCents,
+    laborCents: doc.laborCents,
+    taxRateBp: doc.taxRateBp,
+    taxCents: doc.taxCents,
+    totalCents: doc.totalCents,
+    paidCents: doc.paidCents ?? 0,
+    paidDate: doc.paidDate,
+    memo: doc.memo,
+    paymentInstructions: doc.paymentInstructions,
+    cardOffered,
+    businessName: doc.business.name,
+    businessPhone: doc.business.phone,
+    link: publicUrl,
+  })
+
   async function patch(fields: Partial<Invoice>, alsoJob?: 'paid') {
     const { error } = await supabase.from('invoices').update(fields).eq('id', id)
     if (error) {
@@ -332,6 +392,31 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button className="btn btn-sm btn-primary" onClick={shareLink}>Send link</button>
+          {/* A void invoice's link no longer opens, so there is nothing to email. */}
+          {invoice.status !== 'void' && (
+            // A real link, not a script: the mail app opens from a plain tap.
+            <a
+              className="btn btn-sm"
+              href={email.href}
+              onClick={() => {
+                setEmailOpened(true)
+                // Send link marks a draft sent once the share goes, but a
+                // mailto: can't report whether the email went. So the tap
+                // marks it sent, as the estimate's Email button does, and
+                // the card below offers Undo. Opening a mailto: doesn't
+                // unload the page, so this save finishes while the mail app
+                // opens.
+                if (invoice.status === 'draft') {
+                  setEmailMarkedSent({ prevSentAt: invoice.sent_at })
+                  void patch({ status: 'sent', sent_at: new Date().toISOString() })
+                } else {
+                  setEmailMarkedSent(null)
+                }
+              }}
+            >
+              Email
+            </a>
+          )}
           <button className="btn btn-sm" onClick={() => window.print()}>Print</button>
           {invoice.status === 'paid' && settings?.google_review_url && (
             <button
@@ -688,6 +773,46 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           </div>
         )}
         {shareMsg && <p className="text-sm" style={{ color: 'var(--green)' }}>{shareMsg}</p>}
+        {emailOpened && (emailMarkedSent || !email.to) && (
+          <div className="card space-y-2" role="status">
+            {!email.to && (
+              <p className="text-sm" style={{ color: 'var(--orange)' }}>
+                No email on file for {invoice.customer_name || 'this customer'}. Type it into the To line, and add it
+                to their page for next time.
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {emailMarkedSent && invoice.status === 'sent' && (
+                <>
+                  <span className="text-sm">
+                    Marked as sent, so this is now {invoice.customer_name.split(/\s+/)[0] || 'the customer'}&apos;s
+                    copy and stays as it is. Didn’t send the email?
+                  </span>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      const prevSentAt = emailMarkedSent.prevSentAt
+                      setEmailOpened(false)
+                      setEmailMarkedSent(null)
+                      await patch({ status: 'draft', sent_at: prevSentAt })
+                    }}
+                  >
+                    Undo
+                  </button>
+                </>
+              )}
+              <button
+                className="btn btn-sm"
+                onClick={() => {
+                  setEmailOpened(false)
+                  setEmailMarkedSent(null)
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
         <p className="text-xs" style={{ color: 'var(--text3)' }}>
           {invoice.status === 'draft' ? (
             <>

@@ -5,7 +5,9 @@ import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import { formatTaxRate } from '@/lib/billing'
 import {
+  CONDITION_LABEL,
   PAPER,
+  REPAIR_ACT_NOTICE,
   SERVICE_MARK_LABEL,
   aircraftMeta,
   needsPartConditions,
@@ -15,7 +17,7 @@ import {
   type ServiceLine,
   type ServiceMarks,
 } from '@/lib/service-line'
-import type { AuthorizationEntry, DocLine, PartCondition } from '@/lib/types'
+import type { AuthorizationEntry, DocLine } from '@/lib/types'
 
 export interface DocData {
   docType: 'Quote' | 'Invoice'
@@ -57,19 +59,12 @@ export interface DocData {
   marks?: Partial<ServiceMarks> | null
 }
 
-const CONDITION_LABEL: Record<PartCondition, string> = {
-  new: 'New',
-  used: 'Used',
-  rebuilt: 'Rebuilt',
-  reconditioned: 'Reconditioned',
-}
-
 const METHOD_LABEL: Record<string, string> = {
   online: 'online',
   phone: 'by phone',
   in_person: 'in person',
   text: 'by text',
-  // A quote approved by replying to the emailed estimate (quote_approvals only).
+  // An estimate approved, or an OK past it given, by replying to an email.
   email: 'by email',
 }
 
@@ -86,10 +81,6 @@ function formatWhen(iso: string): string {
     minute: '2-digit',
   })
 }
-
-/** AS 45.45.210: printed conspicuously on the invoice, word for word. */
-const REPAIR_ACT_NOTICE =
-  'Motor vehicle repair trade practices are regulated by Alaska Statutes 45.45.130 - 45.45.240, administered by the Alaska Department of Law.'
 
 /**
  * The customer-facing quote/invoice document ("Bold Brand" template).
