@@ -59,9 +59,10 @@ function subscribeLedger(listener: () => void) {
 /**
  * The doors Today's lists stand in for; the lane leaves them out. Scheduled
  * stays: it carries the booked money and leads to work booked further out
- * than the bench shows.
+ * than the bench shows. Requests stays too, always (see ActionLane): Billing
+ * and Quotes each have a tab to fall back on, and Requests has none.
  */
-const LISTED_ON_TODAY = ['Billing', 'Requests', 'Quotes'] as const
+const LISTED_ON_TODAY = ['Billing', 'Quotes'] as const
 
 /**
  * The shop board. Presentational: everything it shows comes in as props, so a

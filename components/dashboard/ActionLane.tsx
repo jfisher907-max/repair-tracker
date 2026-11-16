@@ -322,8 +322,15 @@ export default function ActionLane({
     })
   }
 
+  // Requests is the exception to both rules, and is always here. It has no
+  // tab on the phone: this door is the only way to the Requests page and to
+  // the Share button on it. Leaving it out whenever nobody was waiting took
+  // the form's QR code off the phone entirely (owner, 2026-11-16: "where did
+  // the share page go").
   const shown =
-    listed.length === 0 ? doors : doors.filter((d) => !listed.includes(d.label) && d.edge !== 'idle')
+    listed.length === 0
+      ? doors
+      : doors.filter((d) => d.label === 'Requests' || (!listed.includes(d.label) && d.edge !== 'idle'))
   // An empty <nav> would still take the lane's row in the board's grid.
   if (shown.length === 0) return null
 
