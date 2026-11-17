@@ -16,7 +16,7 @@ import {
   type FinanceRows,
   type MonthFigures,
 } from '@/lib/finances'
-import ActionLane, { type BillingCounts } from './ActionLane'
+import ActionLane, { type BillingCounts, type FollowUpCounts } from './ActionLane'
 import EarnedBar from './EarnedBar'
 import MoneyLedger from './MoneyLedger'
 import MonthVsStrip from './MonthVsStrip'
@@ -91,8 +91,11 @@ export default function DashboardView({
   requests,
   openInvoices,
   openQuotes,
+  followUps,
   onJobPatch,
 }: {
+  /** The Follow-ups door: undefined = loading; null = the read failed. */
+  followUps?: FollowUpCounts | null
   /** Which half a phone shows. A desk shows both. */
   view?: 'today' | 'money'
   /** Unanswered requests, for Today's list. undefined = loading; null = the read failed. */
@@ -350,6 +353,7 @@ export default function DashboardView({
         newRequests={newRequests}
         aogRequests={aogRequests}
         billing={billing}
+        followUps={followUps}
         taxes={taxes}
         resaleCard={resaleCard}
         now={now}

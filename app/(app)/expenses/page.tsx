@@ -21,6 +21,7 @@ import { prepareUpload } from '@/lib/upload'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
 import { formatDate } from '@/lib/date'
 import type { Expense } from '@/lib/types'
+import { useHashAction } from '@/lib/use-hash-action'
 
 function todayIso(): string {
   const d = new Date()
@@ -137,6 +138,15 @@ export default function ExpensesPage() {
   // form (only interest differs: 16b through 2025, 16c on the 2026 draft).
   const lineYear = year === 'all' ? years[0] : year
   const byLine = useMemo(() => totalsByLine(scoped, lineYear), [scoped, lineYear])
+
+  // Search's "New expense" lands here with the form already open (#new).
+  const openNew = useCallback(() => {
+    setEditingId(null)
+    setPreview(null)
+    setFormMsg('')
+    setAdding(true)
+  }, [])
+  useHashAction('new', openNew)
 
   function startEdit(e: Expense) {
     setEditingId(e.id)

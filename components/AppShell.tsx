@@ -1,25 +1,29 @@
 'use client'
 
 import Link from 'next/link'
+import Icon, { type IconName } from '@/components/icons'
 import RunningClockBar from '@/components/RunningClockBar'
+import SearchEverything from '@/components/SearchEverything'
 import WingMark from '@/components/WingMark'
 import { BRAND_NAME, BRAND_TAGLINE } from '@/lib/brand'
+import { noteVisit, visitFor } from '@/lib/search'
 import { usePathname } from 'next/navigation'
-import { useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 
-// Five tabs in the pill. New Job is NOT one of them any more: it is its own
-// round gold button beside the pill (owner, 2026-11-05), so the pill holds
-// only the five places you go, evenly spaced.
-const tabs = [
-  { href: '/dashboard', label: 'Home', icon: '🏠' },
-  { href: '/jobs', label: 'Jobs', icon: '📁' },
-  { href: '/customers', label: 'People', icon: '👤' },
-  { href: '/billing', label: 'Billing', icon: '🧾' },
-  { href: '/followups', label: 'Follow-ups', icon: '🔔' },
+// Four places in the pill, then two round buttons beside it: Search, and the
+// gold New Job (its own button since 2026-11-05). Follow-ups left the pill on
+// 2026-11-16 to make the room: it is a door on Home and a "Go to" in Search.
+// The icons are the app's own drawings (components/icons.tsx), which replaced
+// the emoji the owner's 2026-09-12 rule had allowed here and nowhere else.
+const tabs: { href: string; label: string; icon: IconName }[] = [
+  { href: '/dashboard', label: 'Home', icon: 'home' },
+  { href: '/jobs', label: 'Jobs', icon: 'jobs' },
+  { href: '/customers', label: 'People', icon: 'people' },
+  { href: '/billing', label: 'Billing', icon: 'billing' },
 ]
 
-// The desktop sidebar is text-led: no icons. The phone tab bar (below) keeps
-// its emoji — the one place in the app they are allowed (owner rule 2026-09-12).
+// The desktop sidebar's links are text-led: no icons. Its Search field is the
+// one exception, because a magnifier is what says "this is a search field".
 const sideNav: { label: string; items: { href: string; label: string }[] }[] = [
   {
     label: 'Overview',
@@ -159,6 +163,36 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const back = backFor(pathname)
   const action = actionFor(pathname)
 
+  // Search belongs to the page it was opened on. Any change of page closes it:
+  // a result followed, but also the phone's Back gesture, which no button of
+  // ours hears. The page is kept beside the flag and the flag is dropped
+  // during render when the two disagree, so coming BACK to that page later
+  // never finds Search still open on it.
+  const [search, setSearch] = useState({ open: false, at: pathname })
+  if (search.at !== pathname) setSearch({ open: false, at: pathname })
+  const searchOpen = search.open && search.at === pathname
+  const openSearch = () => setSearch({ open: true, at: pathname })
+  const closeSearch = () => setSearch({ open: false, at: pathname })
+
+  // Ctrl+K (Cmd+K on a Mac) opens and closes it from anywhere in the app.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearch((s) => ({ open: !(s.open && s.at === pathname), at: pathname }))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pathname])
+
+  // Every record he opens is remembered for Search's Recent list (the kind
+  // and the id only, on this device).
+  useEffect(() => {
+    const visit = visitFor(pathname)
+    if (visit) noteVisit(visit)
+  }, [pathname])
+
   // The bottom clearance for the floating bar is .app-frame's own rule in
   // globals.css, not a utility here: it has to switch off at sm:, and an
   // inline style could not be overridden.
@@ -183,7 +217,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         >
           {BRAND_TAGLINE}
         </div>
-        <nav className="mt-2 flex-1">
+        <button type="button" className="side-search" onClick={openSearch} aria-haspopup="dialog">
+          <Icon name="search" size={16} />
+          <span>Search</span>
+          <kbd>Ctrl K</kbd>
+        </button>
+        <nav className="flex-1">
           <SideNavLinks pathname={pathname} />
         </nav>
         <Link
@@ -263,8 +302,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           content padding both make room for it. */}
       <RunningClockBar />
 
-      {/* Phone tab bar: a floating pill set in from both edges, with New Job
-          as its own round gold button beside it. */}
+      {searchOpen && <SearchEverything onClose={closeSearch} />}
+
+      {/* Phone tab bar: a floating pill set in from both edges, then Search
+          and New Job as their own round buttons beside it. */}
       <nav className="tabbar" aria-label="Main">
         <div className="glass-float tabbar-pill">
           {tabs.map((t) => {
@@ -276,16 +317,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 className={`tab-item ${active ? 'active' : ''}`}
                 aria-current={active ? 'page' : undefined}
               >
-                <span className="tab-icon" aria-hidden="true">
-                  {t.icon}
-                </span>
+                <Icon name={t.icon} className="tab-icon" />
                 {t.label}
               </Link>
             )
           })}
         </div>
+        <button
+          type="button"
+          className="glass-float tabbar-search"
+          aria-label="Search everything"
+          aria-haspopup="dialog"
+          onClick={openSearch}
+        >
+          <Icon name="search" size={24} />
+        </button>
         <Link href="/jobs/new" className="tabbar-new" aria-label="New job">
-          <span aria-hidden="true">+</span>
+          <Icon name="plus" size={28} />
         </Link>
       </nav>
     </div>

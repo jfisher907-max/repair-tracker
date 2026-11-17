@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { SkeletonList } from '@/components/Skeleton'
@@ -13,6 +13,7 @@ import VehicleFields, {
   vehiclePayload,
 } from '@/components/VehicleFields'
 import { paperErrorWords } from '@/lib/service-line'
+import { useHashAction } from '@/lib/use-hash-action'
 
 export default function CustomersPage() {
   const router = useRouter()
@@ -23,6 +24,8 @@ export default function CustomersPage() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', phone: '', email: '', notes: '' })
   const [veh, setVeh] = useState(emptyVehicleDraft)
+  // Search's "New customer" lands here with the form already open (#new).
+  useHashAction('new', useCallback(() => setAdding(true), []))
 
   useEffect(() => {
     Promise.all([

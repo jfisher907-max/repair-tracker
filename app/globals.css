@@ -1759,9 +1759,14 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   text-decoration: none;
   transition: color var(--dur-med) var(--ease), background-color var(--dur-med) var(--ease);
 }
+/* The app's own icons (components/icons.tsx): lines in the text colour over
+   one soft filled shape. --icon-tone is how strong that shape is; the lit tab
+   turns it up, so the selected icon reads as filled without a second drawing. */
+.icon { flex: none; display: block; }
+.icon-tone { opacity: var(--icon-tone, 0.16); }
 .tab-item .tab-icon {
-  font-size: 1.05rem;
-  line-height: 1;
+  width: 22px;
+  height: 22px;
   transition: transform var(--dur-med) var(--ease);
 }
 /* The selected tab is a lit lozenge inside the pill, as the mockup draws it.
@@ -1770,12 +1775,33 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   color: var(--accent2);
   background-color: var(--gs-nest-on);
   box-shadow: var(--gs-edge);
+  --icon-tone: 0.34;
 }
 .tab-item.active .tab-icon {
   transform: translateY(-1px) scale(1.1);
 }
 .tab-item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
+/* Search: a round pane of the same glass as the pill, set apart from it at
+   the trailing end the way a tab bar's search is. It opens a sheet; it is not
+   a place, so it never lights. */
+.tabbar-search {
+  flex: none;
+  width: var(--tabbar-h);
+  height: var(--tabbar-h);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-heading);
+  cursor: pointer;
+  --icon-tone: 0.1;
+  transition: transform var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.tabbar-search:hover { background-color: var(--gs-nest-on); }
+.tabbar-search:active { transform: scale(var(--press-scale)); }
+.tabbar-search:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 /* New Job: its own round pane of gold glass beside the pill, never a tab. */
 .tabbar-new {
   flex: none;
@@ -1800,6 +1826,14 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .tabbar-new:hover { background-color: var(--action-primary-hover); }
 .tabbar-new:active { transform: scale(var(--press-scale)); }
 .tabbar-new:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* A 320px phone: two full-size round buttons would squeeze the four tabs
+   under 44px each, so the buttons give up the width instead. After both buttons' own rules:
+   a media query adds no specificity, so the later rule is the one that wins. */
+@media (max-width: 359px) {
+  .tabbar { gap: 6px; }
+  .tabbar-search,
+  .tabbar-new { width: 48px; height: 48px; }
+}
 
 /* ---------- The running clock bar ---------- */
 
@@ -2019,6 +2053,40 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   outline: none;
   box-shadow: var(--focus-ring);
 }
+/* Search, drawn as the field it opens. */
+.side-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 0.9rem;
+  padding: 0 0.6rem 0 0.7rem;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--gs-line);
+  background: var(--gs-nest);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.side-search > span { flex: 1; }
+.side-search:hover { background: var(--gs-nest-on); color: var(--text-heading); }
+.side-search:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.side-search kbd,
+.search-cancel-key {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
+  padding: 4px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--gs-line);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 
 /* A control the phone gets from the floating chrome instead (a back link, the
    job's Edit). It CANNOT be Tailwind's `hidden sm:inline-flex`: `hidden` lives
@@ -2133,6 +2201,237 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   background: rgba(6, 8, 12, 0.88);
   backdrop-filter: blur(18px) saturate(140%);
 }
+
+/* ---------- Search everything ---------- */
+
+/* One field over every record, and a launcher before anything is typed. A
+   full sheet on a phone; a panel a little way down on a desk. Above the tab
+   bar (40), the corner buttons (45) and the offline banner (50). */
+.search-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+.search-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  border-width: 0;
+  border-radius: 0;
+  animation: panel-in var(--dur-med) var(--ease) both;
+}
+.search-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 10px 12px;
+  border-bottom: 1px solid var(--gs-line);
+}
+.search-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 6px 0 12px;
+  border-radius: var(--wnt-radius-pill);
+  border: 1px solid var(--gs-line);
+  background: var(--gs-nest);
+  color: var(--text-muted);
+  cursor: text;
+}
+.search-field:focus-within { border-color: var(--accent2); }
+.search-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-heading);
+  /* 16px exactly: an iPhone zooms the page into any smaller field. */
+  font-size: 16px;
+}
+.search-field input::placeholder { color: var(--text-muted); opacity: 1; }
+/* The browser's own clear cross is drawn for a light page; the field has its own. */
+.search-field input::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+.search-clear {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.search-clear:hover { background: var(--gs-nest-on); color: var(--text-heading); }
+.search-clear:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.search-cancel {
+  flex: none;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent2);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--wnt-radius-sm);
+}
+.search-cancel:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.search-cancel-key { display: none; }
+.search-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* A desk shows a scrollbar; the browser draws its own in white. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--gs-line-strong) transparent;
+  /* --kb is the height the phone's keyboard covers (set by the component). */
+  padding: 0 12px calc(24px + env(safe-area-inset-bottom) + var(--kb, 0px));
+}
+.search-sec { margin-top: 16px; }
+.search-heading {
+  margin: 0 0 6px;
+  padding: 0 4px;
+  font-family: var(--font-display), sans-serif;
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.search-rows { display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 6px 8px;
+  border-radius: var(--wnt-radius-sm);
+  color: var(--text-body);
+  text-decoration: none;
+}
+.search-row-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: var(--gs-nest);
+  color: var(--accent2);
+}
+.search-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.search-row-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 600;
+  line-height: 20px;
+  color: var(--text-heading);
+}
+.search-row-title .wnt-id { flex: none; font-size: 12px; }
+.search-row-sub {
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-tiles { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.search-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 70px;
+  padding: 8px 4px;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--gs-line);
+  background: var(--gs-nest);
+  color: var(--text-body);
+  text-align: center;
+  text-decoration: none;
+}
+.search-tile-icon { color: var(--text-heading); }
+.search-tile-label { font-size: 11.5px; line-height: 13px; font-weight: 600; }
+/* The things he starts wear the accent, like every primary action. */
+.search-tile.is-accent .search-tile-icon { color: var(--accent2); --icon-tone: 0.26; }
+.search-row:hover,
+.search-tile:hover,
+.search-row[data-active='true'],
+.search-tile[data-active='true'] {
+  background: var(--gs-nest-on);
+  box-shadow: var(--gs-edge);
+}
+.search-row:active,
+.search-tile:active { transform: scale(var(--press-scale)); }
+.search-row:focus-visible,
+.search-tile:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.search-more {
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--accent2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.search-more:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--wnt-radius-sm); }
+.search-note {
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: var(--wnt-radius-sm);
+  background: var(--gs-nest);
+  color: var(--text2);
+  font-size: 14px;
+  line-height: 20px;
+}
+.search-note.is-failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  color: var(--status-wait-fg);
+}
+@media (min-width: 640px) {
+  .search-scrim { padding: 8vh 24px 24px; }
+  .search-panel {
+    width: min(640px, 100%);
+    height: auto;
+    /* Tall enough that Recent, Go to and New all show on an 800px screen. */
+    max-height: min(calc(100dvh - 8vh - 24px), 760px);
+    padding-top: 0;
+    border-width: 1px;
+    border-radius: var(--wnt-radius-lg);
+  }
+  .search-head { padding: 12px; }
+  .search-cancel-word { display: none; }
+  .search-cancel-key { display: inline-block; }
+  .search-tiles { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+@media print { .search-scrim { display: none; } }
 
 @keyframes flash-in {
   from { opacity: 0; transform: translateX(-8px); }

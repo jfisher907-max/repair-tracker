@@ -25,6 +25,24 @@ export interface BillingCounts {
   overdue: number
 }
 
+/**
+ * What is on the Follow-ups page, counted (2026-11-16, when Follow-ups left
+ * the phone's bottom bar): work flagged on a job and not yet sold, and
+ * vehicles coming due for service.
+ */
+export interface FollowUpCounts {
+  /** Open recommendations. */
+  open: number
+  /** Their estimates, summed; a recommendation with no estimate adds nothing. */
+  cents: number
+  /** Service reminders due inside 30 days or already past. */
+  due: number
+}
+
+/** Doors that are always in the lane, however empty: each is the phone's only
+ *  standing route to a page that has no tab. */
+const ALWAYS = new Set(['Requests', 'Follow-ups'])
+
 /** A purchase date plus the supplier's return window, as YYYY-MM-DD. */
 function returnBy(purchaseDate: string): string {
   const d = new Date(`${purchaseDate}T12:00:00`)
@@ -45,11 +63,18 @@ export default function ActionLane({
   newRequests,
   aogRequests = 0,
   billing,
+  followUps,
   taxes = null,
   resaleCard = false,
   now = new Date(),
   listed = [],
 }: {
+  /**
+   * The Follow-ups door's figures. undefined while they load; null when the
+   * read failed, which the door says in words: a failed read is never shown
+   * as "nothing open".
+   */
+  followUps?: FollowUpCounts | null
   /**
    * Doors (by label) the page already shows as the records themselves, and so
    * leaves out here. Home's Today lists (2026-11-16) are the requests, the
@@ -209,6 +234,36 @@ export default function ActionLane({
       sub: newRequests > 0 ? 'a customer is waiting' : 'nothing waiting',
       edge: newRequests > 0 ? 'wait' : 'idle',
     },
+    // Follow-ups had a tab until Search took its place in the bar
+    // (2026-11-16). The door carries what the tab could not: how much flagged
+    // work is still unsold.
+    {
+      href: '/followups',
+      n: followUps ? followUps.open + followUps.due : 0,
+      label: 'Follow-ups',
+      title:
+        followUps && followUps.cents > 0 ? (
+          <>
+            Follow-ups <span className="money">{money(followUps.cents)}</span>
+          </>
+        ) : (
+          'Follow-ups'
+        ),
+      sub:
+        followUps === undefined
+          ? 'checking…'
+          : followUps === null
+            ? 'could not be read'
+            : followUps.open + followUps.due === 0
+              ? 'nothing open'
+              : [
+                  followUps.open > 0 ? `${followUps.open} not yet sold` : '',
+                  followUps.due > 0 ? `${followUps.due} due for service` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+      edge: followUps === null || (followUps && followUps.open + followUps.due > 0) ? 'wait' : 'idle',
+    },
   ]
   // A quote out is a customer who has not answered yet; the door only exists
   // while there is one to chase.
@@ -322,15 +377,16 @@ export default function ActionLane({
     })
   }
 
-  // Requests is the exception to both rules, and is always here. It has no
-  // tab on the phone: this door is the only way to the Requests page and to
-  // the Share button on it. Leaving it out whenever nobody was waiting took
-  // the form's QR code off the phone entirely (owner, 2026-11-16: "where did
-  // the share page go").
+  // Requests and Follow-ups are the exception to both rules, and are always
+  // here. Neither has a tab on the phone: the Requests door is the way to the
+  // Requests page and to the Share button on it, and leaving it out whenever
+  // nobody was waiting took the form's QR code off the phone entirely (owner,
+  // 2026-11-16: "where did the share page go"). Follow-ups gave its tab to
+  // Search the same week, and gets the same standing door for the same reason.
   const shown =
     listed.length === 0
       ? doors
-      : doors.filter((d) => d.label === 'Requests' || (!listed.includes(d.label) && d.edge !== 'idle'))
+      : doors.filter((d) => ALWAYS.has(d.label) || (!listed.includes(d.label) && d.edge !== 'idle'))
   // An empty <nav> would still take the lane's row in the board's grid.
   if (shown.length === 0) return null
 

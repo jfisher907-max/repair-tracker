@@ -4,12 +4,13 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Suspense, useCallback, useEffect, useState } from 'react'
 import DashboardView from '@/components/dashboard/DashboardView'
-import type { BillingCounts } from '@/components/dashboard/ActionLane'
+import type { BillingCounts, FollowUpCounts } from '@/components/dashboard/ActionLane'
 import type { Loaded, NewRequest, OpenInvoice, OpenQuote } from '@/components/dashboard/TodayLists'
 import { SkeletonDashboard } from '@/components/Skeleton'
 import { docState, listBusinessDocuments, type BusinessDocument } from '@/components/BusinessDocuments'
 import { listCores, type CoreOut } from '@/lib/cores'
 import { loadFinanceRows, type FinanceRows } from '@/lib/finances'
+import { listDueSoon } from '@/lib/reminders'
 import { loadTaxFilings } from '@/lib/sales-tax'
 import type { Job, Settings, TaxBasis, TaxFiling } from '@/lib/types'
 import { supabase } from '@/lib/supabase'
@@ -38,6 +39,8 @@ function DashboardInner() {
   const [requests, setRequests] = useState<Loaded<NewRequest>>(undefined)
   const [openInvoices, setOpenInvoices] = useState<Loaded<OpenInvoice>>(undefined)
   const [openQuotes, setOpenQuotes] = useState<Loaded<OpenQuote>>(undefined)
+  /** The Follow-ups door (2026-11-16). undefined = loading; null = the read failed. */
+  const [followUps, setFollowUps] = useState<FollowUpCounts | null | undefined>(undefined)
   const [rows, setRows] = useState<FinanceRows | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** Core deposits out of the shop — the lane counts the ones not yet credited. */
@@ -123,6 +126,30 @@ function DashboardInner() {
         .lt('due_date', todayIso),
     ]).then(([q, i, o]) =>
       setBilling({ openQuotes: q.count ?? 0, unpaidInvoices: i.count ?? 0, overdue: o.count ?? 0 }),
+    )
+
+    // The Follow-ups door: the same two reads its page makes (the embeds and
+    // their deleted_at filters are that page's, so the count is of what it
+    // lists), counted. Either one failing is a failed door, not a zero.
+    Promise.all([
+      supabase
+        .from('recommendations')
+        .select('id, estimate_cents, job:jobs!recommendations_job_id_fkey!inner(deleted_at), vehicle:vehicles!inner(deleted_at)')
+        .eq('status', 'open')
+        .is('job.deleted_at', null)
+        .is('vehicle.deleted_at', null),
+      listDueSoon(30),
+    ]).then(
+      ([recs, due]) => {
+        if (recs.error) return setFollowUps(null)
+        const open = (recs.data ?? []) as { estimate_cents: number | null }[]
+        setFollowUps({
+          open: open.length,
+          cents: open.reduce((s, r) => s + (r.estimate_cents ?? 0), 0),
+          due: due.length,
+        })
+      },
+      () => setFollowUps(null),
     )
 
     // Today's lists: the records behind those counts. Each read stands alone,
@@ -224,6 +251,7 @@ function DashboardInner() {
       requests={requests}
       openInvoices={openInvoices}
       openQuotes={openQuotes}
+      followUps={followUps}
       onJobPatch={patchJob}
     />
   )
