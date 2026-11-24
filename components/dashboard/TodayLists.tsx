@@ -5,7 +5,8 @@ import type { ReactNode } from 'react'
 import JobClockButton from '@/components/JobClockButton'
 import type { JobWithContext } from '@/lib/data'
 import { formatCents } from '@/lib/money'
-import { lineOf, serviceMarkText } from '@/lib/service-line'
+import { needsReading } from '@/lib/reading'
+import { READING, lineOf, serviceMarkText } from '@/lib/service-line'
 import { vehicleLabel, type Job } from '@/lib/types'
 import { plural, shortDate } from './format'
 
@@ -107,8 +108,9 @@ function localIso(d: Date): string {
 
 /**
  * Work in progress, with the three things done to a job all day on the card:
- * the clock, a part, a receipt. Below it, anything booked whose drop-off day
- * has arrived and has not been started.
+ * the clock, a part, a receipt; and, until it has one, a reminder to record
+ * the mileage. Below it, anything booked whose drop-off day has arrived and
+ * has not been started.
  */
 export function Bench({
   jobs,
@@ -145,7 +147,11 @@ export function Bench({
 
       {working.map((it) => {
         const { job, vehicle, customer } = it
-        const mark = lineOf(vehicle) === 'aviation' ? serviceMarkText(job) : null
+        const line = lineOf(vehicle)
+        const mark = line === 'aviation' ? serviceMarkText(job) : null
+        // On the lift with no mileage (airframe hours on an aircraft): the
+        // card keeps saying so until it is in (owner, 2026-11-23).
+        const remind = needsReading(job, line)
         return (
           <div
             key={job.id}
@@ -171,6 +177,14 @@ export function Bench({
                 {customer?.name ?? 'Unknown customer'} · {vehicleLabel(vehicle)}
               </div>
             </Link>
+            {/* #reading opens the job with the reminder's field under the thumb. */}
+            {remind && (
+              <Link href={`/jobs/${job.id}#reading`} className="bench-remind">
+                <span className="bench-remind-dot" aria-hidden="true" />
+                <span className="min-w-0 flex-1">{READING[line].ask}</span>
+                <span aria-hidden="true">→</span>
+              </Link>
+            )}
             <div className="bench-actions">
               {onJobPatch && <JobClockButton job={job} onUpdate={(patch) => onJobPatch(job.id, patch)} />}
               {/* #add-part opens the job's part form; the scan page is its own route. */}

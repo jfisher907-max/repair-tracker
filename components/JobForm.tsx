@@ -543,6 +543,11 @@ export default function JobForm({ job }: { job?: Job }) {
               value={airframeHours}
               onChange={(e) => setAirframeHours(e.target.value)}
             />
+            {stage === 'in_progress' && airframeHours.trim() === '' && (
+              <p className="mt-1 text-xs" style={{ color: 'var(--status-wait-fg)' }}>
+                Not recorded yet. The job keeps asking until it is.
+              </p>
+            )}
           </div>
         ) : (
           <div>
@@ -554,6 +559,13 @@ export default function JobForm({ job }: { job?: Job }) {
               value={odometer}
               onChange={(e) => setOdometer(e.target.value)}
             />
+            {/* The job page and its Home bench card carry the reminder
+                (lib/reading); this says the same thing where the field is. */}
+            {stage === 'in_progress' && odometer.trim() === '' && (
+              <p className="mt-1 text-xs" style={{ color: 'var(--status-wait-fg)' }}>
+                Not recorded yet. The job keeps asking until it is.
+              </p>
+            )}
           </div>
         )}
         <div>

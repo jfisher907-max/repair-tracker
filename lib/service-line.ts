@@ -230,6 +230,73 @@ export function parseAirframeHours(input: string): number | null {
 }
 
 /**
+ * The reading a job takes off the vehicle while it is in the shop: the
+ * odometer on a car, airframe hours on an aircraft (CHOICE 3). These are the
+ * words of the owner's reminder (owner, 2026-11-23: "a reminder when I start a
+ * job to record the vehicle mileage before the job gets completed"). Owner
+ * screens only: nothing here prints on a customer's paper.
+ */
+export interface ReadingWords {
+  /** The jobs column that holds it. */
+  column: 'odometer_miles' | 'airframe_hours'
+  /** Mid-sentence: "the mileage", "the airframe hours". */
+  noun: string
+  /** The field's own label. */
+  label: string
+  /** The reminder's title while the job is in progress. */
+  ask: string
+  /** Its title when the job is about to be marked done without one. */
+  missing: string
+  /** Why now, while the job is in progress. */
+  why: string
+  /** Why now, at the last ask. */
+  lastCall: string
+  /** Ends the button that goes on with none: "Mark done without it". */
+  without: string
+  /** After the number. */
+  unit: string
+  placeholder: string
+  inputMode: 'numeric' | 'decimal'
+  /** Told to an entry that is blank. */
+  blank: string
+  /** Told to an entry that is not a plain number. */
+  bad: string
+}
+
+export const READING: Record<ServiceLine, ReadingWords> = {
+  automotive: {
+    column: 'odometer_miles',
+    noun: 'the mileage',
+    label: 'Odometer (miles)',
+    ask: 'Record the mileage',
+    missing: 'No mileage on this job yet',
+    why: 'Read it off the dash before the car leaves.',
+    lastCall: 'Record it now, before the car leaves.',
+    without: 'without it',
+    unit: 'mi',
+    placeholder: '123,456',
+    inputMode: 'numeric',
+    blank: 'Type the mileage first.',
+    bad: 'Mileage needs a plain whole number of miles, like 123456.',
+  },
+  aviation: {
+    column: 'airframe_hours',
+    noun: 'the airframe hours',
+    label: AIRCRAFT_HOURS_LABEL,
+    ask: 'Record the airframe hours',
+    missing: 'No airframe hours on this job yet',
+    why: 'Take them off the aircraft before it leaves. The invoice prints them.',
+    lastCall: 'Record them now, before the aircraft leaves. The invoice prints them.',
+    without: 'without them',
+    unit: 'hrs',
+    placeholder: '1234.5',
+    inputMode: 'decimal',
+    blank: 'Type the airframe hours first.',
+    bad: 'Airframe hours need a plain number with at most one decimal place, like 1234.5.',
+  },
+}
+
+/**
  * A tail number as stored: uppercase, whitespace removed, dashes kept (C-GABC,
  * G-ABCD). No format check — foreign-registered aircraft carry other marks
  * than N-numbers.

@@ -1417,6 +1417,66 @@ a.card:focus-visible {
 .bench-open:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .bench-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .bench-actions .btn { flex: 1 1 auto; white-space: nowrap; }
+/* The mileage reminder on a bench card (owner, 2026-11-23): one line that
+   stays until the reading is in. A link, so the tap lands on the job with the
+   field under the thumb. Gold is the system's "waiting on you". */
+.bench-remind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--gs-line);
+  background: var(--gs-nest);
+  color: var(--status-wait-fg);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.bench-remind:hover { background: var(--gs-nest-on); }
+.bench-remind:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.bench-remind-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-wait-solid);
+}
+
+/* The same reminder on the job page (components/ReadingPrompt): a nested
+   panel under the stage control with the field in it. Nested fill, not a gold
+   tint: the body text here is measured against --gs-nest everywhere else. */
+.reading-ask {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--gs-line);
+  border-left: var(--edge-width) solid var(--status-wait-solid);
+  background: var(--gs-nest);
+}
+.reading-ask.is-last { border-left-color: var(--status-stop-solid); }
+.reading-ask-title {
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 17px;
+  line-height: 22px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-heading);
+}
+.reading-ask-sub { margin: 0; font-size: 13px; line-height: 18px; color: var(--text-body); }
+.reading-ask-row { display: flex; flex-wrap: wrap; gap: 8px; }
+/* 16px: a smaller field makes the iPhone zoom the page when it takes focus. */
+.reading-ask-row .input { flex: 1 1 130px; width: auto; min-width: 0; font-size: 16px; }
+.reading-ask-row .btn { flex: 0 1 auto; white-space: nowrap; }
+.reading-ask-use { justify-self: start; }
+.reading-ask-note { margin: 0; font-size: 13px; line-height: 18px; }
+.reading-ask-note.is-error { color: var(--status-stop-fg); }
+.reading-ask-note.is-doubt { display: grid; gap: 6px; justify-items: start; color: var(--text-heading); }
+.reading-ask-note.is-doubt p { margin: 0; }
+.reading-ask-other { display: flex; flex-wrap: wrap; gap: 8px; }
 @media (max-width: 899px) {
   .board[data-view='today'] > .board-tiles,
   .board[data-view='today'] > .board-chart,

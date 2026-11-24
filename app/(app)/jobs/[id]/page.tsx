@@ -31,6 +31,8 @@ import JobInspection, { StartQuickCheck } from '@/components/JobInspection'
 import JobTimeCard from '@/components/JobTimeCard'
 import JobClockButton from '@/components/JobClockButton'
 import RecommendationList from '@/components/RecommendationList'
+import ReadingPrompt, { type ReadingSaved } from '@/components/ReadingPrompt'
+import { formatReading, jobReading } from '@/lib/reading'
 import BillingCheck, { RecordedOks, type BillingSheet, type JobOk } from '@/components/BillingCheck'
 import {
   buildAuthorizationTrail,
@@ -57,6 +59,7 @@ import {
   marksPayload,
   needsPartConditions,
   paperErrorWords,
+  READING,
   serviceMarkText,
 } from '@/lib/service-line'
 import {
@@ -231,6 +234,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [stageBusy, setStageBusy] = useState(false)
   /** The "Booked for" date while it is being changed; null = show job.date. */
   const [bookedDraft, setBookedDraft] = useState<string | null>(null)
+  /** The last ask for the mileage (airframe hours on an aircraft) before the
+   *  job is marked done without one: which tap is waiting on the answer. */
+  const [doneAsk, setDoneAsk] = useState<null | 'stage' | 'invoice'>(null)
+  /** The reminder's field, so a tap that calls for it can bring it to the thumb. */
+  const readingInput = useRef<HTMLInputElement>(null)
   /** Settings' sales tax rate: what a new invoice on this job will carry. Null until read. */
   const [defaultTaxRateBp, setDefaultTaxRateBp] = useState<number | null>(null)
 
@@ -370,9 +378,25 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     }, 60)
   }
 
+  /** Brings the mileage reminder's field into view and puts the cursor in it.
+   *  With no reminder showing (the reading is already in), lands on the job's
+   *  top card, where the reading is printed. After the render that shows it. */
+  function focusReading() {
+    setTimeout(() => {
+      const field = readingInput.current
+      if (!field) {
+        document.getElementById('sec-job')?.scrollIntoView({ block: 'start' })
+        return
+      }
+      field.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      field.focus({ preventScroll: true })
+    }, 120)
+  }
+
   // A link can name where on this page it is going (2026-11-16): #parts or
   // #money lands on that section, and #add-part opens the part form, which is
-  // what the "+ Part" button on a Home bench card asks for. The browser cannot
+  // what the "+ Part" button on a Home bench card asks for. #reading is the
+  // bench card's mileage reminder. The browser cannot
   // do this itself: the sections do not exist until the job has loaded. Once
   // per visit, so a later reload of the job's rows never yanks the page.
   const hashHandled = useRef(false)
@@ -385,6 +409,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     // After this render has painted the sections.
     setTimeout(() => {
       if (hash === 'add-part') openPartForm()
+      else if (hash === 'reading') focusReading()
       else document.getElementById(`sec-${hash}`)?.scrollIntoView({ block: 'start' })
     }, 80)
   }, [loaded])
@@ -601,6 +626,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  before the migration counts as done, the same as the books. */
   const stage: JobStage = job.stage ?? 'done'
   const notDone = stage !== 'done'
+  /** The odometer reading on a car, airframe hours on an aircraft; null = none
+   *  recorded. An in-progress job without one shows the reminder. */
+  const reading = jobReading(job, serviceLine)
+  const readingWords = READING[serviceLine]
   /** Collected money pins a done job; paperwork alone never does. */
   const stageLocked = !notDone && collectedCents > 0
 
@@ -612,6 +641,8 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
    *  Void the invoice first; then the job can go back on the lift. */
   async function setStage(next: JobStage) {
     if (stageBusy || next === stage) return
+    // Another stage was tapped: the last ask for a reading no longer applies.
+    if (next !== 'done') setDoneAsk(null)
     // THE LOCK IS MONEY, NOT PAPERWORK (owner, 2026-09-12): "Once an invoice is
     // finalized on a job, it shouldn't be moveable. Up until the money is
     // collected, we should be able to move jobs to whatever state we want."
@@ -627,9 +658,75 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       )
       return
     }
+    // THE MILEAGE REMINDER (owner, 2026-11-23: "a reminder when I start a job
+    // to record the vehicle mileage before the job gets completed"). The
+    // reading can only be taken while the vehicle is here, so a job going to
+    // done without one is asked once more first. The ask has its own way past.
+    if (next === 'done' && reading == null) {
+      setDoneAsk('stage')
+      focusReading()
+      return
+    }
+    await moveStage(next)
+  }
+
+  /** The stage write itself, past every check above. */
+  async function moveStage(next: JobStage) {
     setStageBusy(true)
     await updateJob({ stage: next, stage_changed_at: new Date().toISOString() })
     setStageBusy(false)
+    // Starting the job is the moment the reminder is for: put the field under
+    // the thumb. (It renders once the job reads in progress with no reading.)
+    if (next === 'in_progress' && reading == null) focusReading()
+  }
+
+  /**
+   * Saves a reading typed into the reminder, with whatever else the tap that
+   * asked for it needs written in the same change. Answers in plain words: a
+   * refusal carries a database code, a dead connection does not, and an
+   * update that reaches no row is a failure too, not a quiet success.
+   */
+  async function saveReading(patch: Partial<Job>): Promise<ReadingSaved> {
+    const { data, error } = await supabase.from('jobs').update(patch).eq('id', id).select('id')
+    if (error) {
+      return {
+        ok: false,
+        message: error.code
+          ? `The job would not take that number, so nothing was saved. Check it and try again.`
+          : 'It did not save. Check your connection and try again.',
+      }
+    }
+    if (!data || data.length === 0) {
+      return { ok: false, message: 'It did not save: this job could not be changed. Reload the page and try again.' }
+    }
+    await load()
+    return { ok: true }
+  }
+
+  /** What the last ask does once it has its answer, with or without a reading. */
+  async function finishDoneAsk(patch: Partial<Job> | null): Promise<ReadingSaved> {
+    const then = doneAsk
+    if (then === 'stage') {
+      if (patch) {
+        setStageBusy(true)
+        const saved = await saveReading({ ...patch, stage: 'done', stage_changed_at: new Date().toISOString() })
+        setStageBusy(false)
+        if (!saved.ok) return saved
+        setDoneAsk(null)
+        return saved
+      }
+      setDoneAsk(null)
+      await moveStage('done')
+      return { ok: true }
+    }
+    // 'invoice': createInvoice marks the job done itself, then runs its checks.
+    if (patch) {
+      const saved = await saveReading(patch)
+      if (!saved.ok) return saved
+    }
+    setDoneAsk(null)
+    void createInvoice()
+    return { ok: true }
   }
 
   /** The booked drop-off day IS the job's date (0043); saving it moves the
@@ -1031,6 +1128,14 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       router.push(`/invoices/${govInvoice.id}`)
       return
     }
+    // "Mark done, then invoice" on a job with no mileage: the same last ask
+    // the Done button gets, before the job is marked done. An aircraft's
+    // invoice freezes its airframe hours, so this is the moment for those too.
+    if (notDone && reading == null) {
+      setDoneAsk('invoice')
+      focusReading()
+      return
+    }
     void createInvoice()
   }
 
@@ -1390,6 +1495,44 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             {job.stage_changed_at &&
               ` Moved ${new Date(job.stage_changed_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.`}
           </p>
+        )}
+
+        {/* THE MILEAGE REMINDER (owner, 2026-11-23). A job on the lift with no
+            reading asks for one here until it has it; a job being marked done
+            without one is asked once more, with a way past. Airframe hours on
+            an aircraft. Finished jobs are never asked: the car has gone. */}
+        {doneAsk && notDone ? (
+          <ReadingPrompt
+            key={`done-${doneAsk}`}
+            job={job}
+            line={serviceLine}
+            mode="done"
+            inputRef={readingInput}
+            saveLabel={doneAsk === 'stage' ? 'Save and mark done' : 'Save and continue'}
+            skipLabel={`${doneAsk === 'stage' ? 'Mark done' : 'Continue'} ${readingWords.without}`}
+            onSave={(patch) => finishDoneAsk(patch)}
+            onSkip={() => void finishDoneAsk(null)}
+            onCancel={() => setDoneAsk(null)}
+          />
+        ) : (
+          stage === 'in_progress' &&
+          reading == null && (
+            <ReadingPrompt
+              key="start"
+              job={job}
+              line={serviceLine}
+              mode="start"
+              inputRef={readingInput}
+              onSave={async (patch, value) => {
+                const saved = await saveReading(patch)
+                if (saved.ok) {
+                  setActionMsg({ text: `Saved: ${formatReading(serviceLine, value)}.`, ok: true })
+                  setTimeout(() => setActionMsg(null), 2500)
+                }
+                return saved
+              }}
+            />
+          )
         )}
 
         <div className="flex flex-wrap gap-2">
