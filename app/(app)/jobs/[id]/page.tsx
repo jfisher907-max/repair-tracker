@@ -27,7 +27,7 @@ import {
   setCoreOutcome,
 } from '@/lib/cores'
 import JobPhotos from '@/components/JobPhotos'
-import JobInspection, { StartQuickCheck } from '@/components/JobInspection'
+import JobInspection, { StartInspection } from '@/components/JobInspection'
 import JobTimeCard from '@/components/JobTimeCard'
 import JobClockButton from '@/components/JobClockButton'
 import RecommendationList from '@/components/RecommendationList'
@@ -1604,7 +1604,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             <Link href={`/quotes/new?job=${id}`} className="btn btn-sm">
               + Quote extra work
             </Link>
-            {serviceLine !== 'aviation' && <StartQuickCheck jobId={id} customerName={customer?.name ?? null} />}
+            {/* Two kinds of report (0067, 0073): the pre-buy Quick Check, and the
+                Vehicle Inspection for a vehicle the shop looks after. */}
+            {serviceLine !== 'aviation' && <StartInspection jobId={id} customerName={customer?.name ?? null} pkg="quick" />}
+            {serviceLine !== 'aviation' && <StartInspection jobId={id} customerName={customer?.name ?? null} pkg="fleet" />}
           </div>
         )}
 
@@ -2954,7 +2957,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
         />
       </div>
 
-      {/* Pre-buy inspection (0067): automotive only for now. */}
+      {/* Inspection reports (0067, 0073): automotive only for now. */}
       {serviceLine !== 'aviation' && <JobInspection jobId={id} />}
 
       {/* Notes + danger zone */}

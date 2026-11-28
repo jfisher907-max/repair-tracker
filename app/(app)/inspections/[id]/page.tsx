@@ -5,12 +5,18 @@ import { use, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { formatDate } from '@/lib/date'
 import { centsToInput, formatCents, parseMoney } from '@/lib/money'
-import { TEMPLATES } from '@/lib/inspection-templates'
+import { templateFor } from '@/lib/inspection-templates'
+import { guessBodyStyle, stylesFor } from '@/lib/damage-chart'
+import DamageEditor from '@/components/DamageEditor'
+import WheelGauges from '@/components/WheelGauges'
 import {
   addItem,
   batteryRating,
+  damageRating,
+  findings,
   inspectionErrorWords,
   loadInspection,
+  padRating,
   RATINGS,
   removeItem,
   snapshotLabel,
@@ -19,10 +25,11 @@ import {
   updateInspection,
   updateItem,
   vehicleSnapshot,
-  VERDICTS,
-  type BatteryMeasure,
+  verdictsFor,
+  type DamageMeasure,
   type Inspection,
   type InspectionItem,
+  type ItemMeasure,
   type Rating,
   type TreadMeasure,
 } from '@/lib/inspections'
@@ -38,13 +45,26 @@ const RATING_STYLE: Record<Rating, { bg: string; fg: string }> = {
 const TIRES: (keyof TreadMeasure)[] = ['lf', 'rf', 'lr', 'rr', 'spare']
 const TIRE_LABEL: Record<keyof TreadMeasure, string> = { lf: 'LF', rf: 'RF', lr: 'LR', rr: 'RR', spare: 'Spare' }
 
+/** Brake pads are read at the four wheels; there is no spare. */
+const PAD_WHEELS: (keyof TreadMeasure)[] = ['lf', 'rf', 'lr', 'rr']
+
 function toInt(s: string): number | null {
   const n = parseInt(s.replace(/[^0-9]/g, ''), 10)
   return Number.isFinite(n) ? n : null
 }
 
+/** A pad reading in mm, to one decimal place ("6.5"); blank or not a number is no reading. */
+function toTenth(s: string): number | null {
+  const cleaned = s.replace(/[^0-9.]/g, '')
+  if (cleaned === '' || !/^\d*\.?\d*$/.test(cleaned)) return null
+  const n = Number(cleaned)
+  return Number.isFinite(n) ? Math.round(n * 10) / 10 : null
+}
+
 /**
- * Fill in a pre-buy inspection (0067) — phone-first: one tap per rating, a
+ * Fill in an inspection (0067; the Vehicle Inspection package, 0073) — the
+ * pre-buy Quick Check or the vehicle condition sheet, by the report's package.
+ * Phone-first: one tap per rating, a
  * note and a cost range where it matters, tire and battery numbers in quick
  * fields that suggest the rating. Items can be added or skipped while it is a
  * draft ("options to adjust things as necessary", owner 2026-10-05). Finalize
@@ -103,13 +123,17 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
   if (!ins) return <p style={{ color: 'var(--text3)' }}>Loading…</p>
 
   const draft = ins.status === 'draft'
+  /** The report's package decides its words and which fields it has. */
+  const tpl = templateFor(ins.package)
   const unrated = items.filter((i) => !i.rating)
+  // The damage chart is not a finding: it has its own part of the report.
+  const found = findings(items)
   const counts = {
-    attention: items.filter((i) => i.rating === 'attention').length,
-    watch: items.filter((i) => i.rating === 'watch').length,
-    notChecked: items.filter((i) => i.rating === 'not_checked').length,
+    attention: found.filter((i) => i.rating === 'attention').length,
+    watch: found.filter((i) => i.rating === 'watch').length,
+    notChecked: found.filter((i) => i.rating === 'not_checked').length,
   }
-  const suggested = suggestVerdict(items)
+  const suggested = suggestVerdict(items, ins.package)
   const reportUrl = typeof window === 'undefined' ? '' : `${window.location.origin}/r/${ins.public_token}`
 
   function patchLocal(itemId: string, patch: Partial<InspectionItem>) {
@@ -136,12 +160,18 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function saveMeasure(it: InspectionItem, measure: TreadMeasure & BatteryMeasure) {
-    const auto = it.measure_kind === 'tread' ? treadRating(measure) : batteryRating(measure)
+  async function saveMeasure(it: InspectionItem, measure: ItemMeasure) {
+    const auto =
+      it.measure_kind === 'tread' ? treadRating(measure) : it.measure_kind === 'pads' ? padRating(measure) : batteryRating(measure)
     // The numbers set the rating until the owner picks one by hand.
     const patch: Partial<InspectionItem> = { measure }
     if (auto && (!it.rating || it.rating === 'ok' || it.rating === 'watch' || it.rating === 'attention')) patch.rating = auto
     await saveItem(it.id, patch)
+  }
+
+  /** The damage chart rates itself: marks, "none found", or not looked at yet. */
+  async function saveDamage(it: InspectionItem, measure: DamageMeasure) {
+    await saveItem(it.id, { measure, rating: damageRating(measure) })
   }
 
   async function add(section: string) {
@@ -176,7 +206,13 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
   async function finalize() {
     setMsg(null)
     if (unrated.length > 0) {
-      setMsg(`Rate every item first — ${unrated.length} left. Use “Mark the rest Not checked” for anything you skipped.`)
+      // The chart has no rating buttons, so "rate it" would point at nothing.
+      const chartOnly = unrated.length === 1 && unrated[0].measure_kind === 'damage'
+      setMsg(
+        chartOnly
+          ? 'Body damage first: mark it on the chart, or tick “No body damage found”.'
+          : `Rate every item first — ${unrated.length} left. Use “Mark the rest Not checked” for anything you skipped.`,
+      )
       return
     }
     setBusy(true)
@@ -197,7 +233,7 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
 
   async function share() {
     try {
-      if (navigator.share) await navigator.share({ title: `Pre-purchase inspection ${ins!.report_number}`, url: reportUrl })
+      if (navigator.share) await navigator.share({ title: `${tpl.docType} ${ins!.report_number}`, url: reportUrl })
       else {
         await navigator.clipboard.writeText(reportUrl)
         setMsg('Link copied — text it to the customer ✓')
@@ -212,9 +248,9 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
       <div className="card space-y-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl">
-            Pre-buy {ins.report_number}{' '}
+            {tpl.short} {ins.report_number}{' '}
             <span className="text-base" style={{ color: 'var(--text3)' }}>
-              {TEMPLATES[ins.package].name}
+              {tpl.name}
             </span>
           </h1>
           <span className="chip">{draft ? 'In progress' : ins.status === 'final' ? 'Final' : 'Void'}</span>
@@ -298,15 +334,17 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
             onBlur={(e) => saveIns({ prepared_for: e.target.value.trim() || null })}
           />
         </label>
-        <label className="space-y-1">
-          <span className="label">Seller (name only)</span>
-          <input
-            className="input"
-            disabled={!draft}
-            defaultValue={ins.seller_name ?? ''}
-            onBlur={(e) => saveIns({ seller_name: e.target.value.trim() || null })}
-          />
-        </label>
+        {tpl.sellerField && (
+          <label className="space-y-1">
+            <span className="label">Seller (name only)</span>
+            <input
+              className="input"
+              disabled={!draft}
+              defaultValue={ins.seller_name ?? ''}
+              onBlur={(e) => saveIns({ seller_name: e.target.value.trim() || null })}
+            />
+          </label>
+        )}
         <label className="space-y-1">
           <span className="label">Odometer (miles)</span>
           <input
@@ -317,16 +355,18 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
             onBlur={(e) => saveIns({ odometer_miles: toInt(e.target.value) })}
           />
         </label>
-        <label className="space-y-1">
-          <span className="label">Open recalls (NHTSA, by VIN)</span>
-          <input
-            className="input"
-            disabled={!draft}
-            placeholder="e.g. None found as of today"
-            defaultValue={ins.recalls_note ?? ''}
-            onBlur={(e) => saveIns({ recalls_note: e.target.value.trim() || null })}
-          />
-        </label>
+        {tpl.recallsField && (
+          <label className="space-y-1">
+            <span className="label">Open recalls (NHTSA, by VIN)</span>
+            <input
+              className="input"
+              disabled={!draft}
+              placeholder="e.g. None found as of today"
+              defaultValue={ins.recalls_note ?? ''}
+              onBlur={(e) => saveIns({ recalls_note: e.target.value.trim() || null })}
+            />
+          </label>
+        )}
         <div className="space-y-1 sm:col-span-2">
           <span className="label">Road test</span>
           <div className="seg-track" role="group" aria-label="Road test">
@@ -379,6 +419,46 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
                 )}
               </div>
 
+              {/* The body damage chart (0073): pins on the picture, what each
+                  one is, and who was shown it. It rates itself. */}
+              {it.measure_kind === 'damage' && (
+                <DamageEditor
+                  measure={it.measure}
+                  suggested={guessBodyStyle(vehicle)}
+                  options={stylesFor(vehicle)}
+                  disabled={!draft}
+                  onChange={(m) => saveDamage(it, m)}
+                />
+              )}
+
+              {/* Brake pad life (0073): mm left at each wheel, the thinner pad. */}
+              {it.measure_kind === 'pads' && (
+                <>
+                  <div className="grid grid-cols-4 gap-2">
+                    {PAD_WHEELS.map((t) => (
+                      <label key={t} className="space-y-1 text-center">
+                        <span className="text-xs" style={{ color: 'var(--text3)' }}>
+                          {TIRE_LABEL[t]}
+                        </span>
+                        <input
+                          className="input text-center"
+                          inputMode="decimal"
+                          disabled={!draft}
+                          aria-label={`${TIRE_LABEL[t]} brake pad in millimetres`}
+                          defaultValue={it.measure?.[t] ?? ''}
+                          onBlur={(e) => saveMeasure(it, { ...(it.measure ?? {}), [t]: toTenth(e.target.value) })}
+                        />
+                      </label>
+                    ))}
+                    <span className="col-span-4 text-xs" style={{ color: 'var(--text3)' }}>
+                      In mm, the thinner pad at each wheel. 7+ OK · 4 to under 7 Watch · under 4 Needs attention (thinnest
+                      wheel).
+                    </span>
+                  </div>
+                  <WheelGauges kind="pads" measure={it.measure} />
+                </>
+              )}
+
               {it.measure_kind === 'tread' && (
                 <div className="grid grid-cols-5 gap-2">
                   {TIRES.map((t) => (
@@ -401,6 +481,9 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
                   </span>
                 </div>
               )}
+              {/* Tire life as the report will draw it. The pre-buy report
+                  prints tread as a line of numbers, so its page stays as it was. */}
+              {it.measure_kind === 'tread' && ins.package === 'fleet' && <WheelGauges kind="tread" measure={it.measure} />}
               {it.measure_kind === 'battery' && (
                 <div className="grid grid-cols-2 gap-2">
                   <label className="space-y-1">
@@ -428,27 +511,33 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
 
               {/* The rating keeps its own colour: the inline style overrides
                   .seg-item.on's gold, while the lit edge rides along. */}
-              <div className="seg-track seg-wrap" role="group" aria-label={`Rating for ${it.label}`}>
-                {RATINGS.map((r) => {
-                  const on = it.rating === r.value
-                  return (
-                    <button
-                      key={r.value}
-                      type="button"
-                      className={`seg-item ${on ? 'on' : ''}`}
-                      disabled={!draft}
-                      aria-pressed={on}
-                      title={r.meaning}
-                      style={on ? { background: RATING_STYLE[r.value].bg, color: RATING_STYLE[r.value].fg } : undefined}
-                      onClick={() => saveItem(it.id, { rating: on ? null : r.value })}
-                    >
-                      {r.label}
-                    </button>
-                  )
-                })}
-              </div>
+              {it.measure_kind !== 'damage' && (
+                <div className="seg-track seg-wrap" role="group" aria-label={`Rating for ${it.label}`}>
+                  {RATINGS.map((r) => {
+                    const on = it.rating === r.value
+                    return (
+                      <button
+                        key={r.value}
+                        type="button"
+                        className={`seg-item ${on ? 'on' : ''}`}
+                        disabled={!draft}
+                        aria-pressed={on}
+                        title={r.meaning}
+                        style={on ? { background: RATING_STYLE[r.value].bg, color: RATING_STYLE[r.value].fg } : undefined}
+                        onClick={() => saveItem(it.id, { rating: on ? null : r.value })}
+                      >
+                        {r.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
-              {(it.rating === 'watch' || it.rating === 'attention' || it.rating === 'not_checked' || it.note) && (
+              {/* The chart's own notes are on its marks; it gets this field
+                  only to say why it was not looked at. */}
+              {(it.measure_kind === 'damage'
+                ? it.rating === 'not_checked'
+                : it.rating === 'watch' || it.rating === 'attention' || it.rating === 'not_checked' || it.note) && (
                 <input
                   className="input"
                   disabled={!draft}
@@ -457,7 +546,7 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
                   onBlur={(e) => saveItem(it.id, { note: e.target.value.trim() || null })}
                 />
               )}
-              {ins.show_costs && (it.rating === 'watch' || it.rating === 'attention') && (
+              {ins.show_costs && it.measure_kind !== 'damage' && (it.rating === 'watch' || it.rating === 'attention') && (
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     className="input"
@@ -507,7 +596,7 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
             concerns found" onto three lines. The wrapping tray gives it the
             glass without the equal columns. */}
         <div className="seg-track seg-wrap" role="group" aria-label="Overall">
-          {VERDICTS.map((v) => {
+          {verdictsFor(ins.package).map((v) => {
             const on = (ins.verdict ?? suggested) === v.value
             return (
               <button
@@ -525,14 +614,16 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
         </div>
         {!ins.verdict && draft && (
           <p className="text-xs" style={{ color: 'var(--text3)' }}>
-            Suggested from the ratings. It describes what you found, never “buy” or “don’t buy”.
+            {tpl.package === 'quick'
+              ? 'Suggested from the ratings. It describes what you found, never “buy” or “don’t buy”.'
+              : 'Suggested from the ratings: anything that needs attention makes it “Needs attention now”. Pick another if that is wrong.'}
           </p>
         )}
         <textarea
           className="input"
           rows={3}
           disabled={!draft}
-          placeholder="A few words for the buyer (optional, prints at the top)"
+          placeholder={`A few words for the ${tpl.reader} (optional, prints at the top)`}
           defaultValue={ins.summary_note ?? ''}
           onBlur={(e) => saveIns({ summary_note: e.target.value.trim() || null })}
         />
@@ -543,7 +634,9 @@ export default function InspectionPage({ params }: { params: Promise<{ id: strin
             checked={ins.show_costs}
             onChange={(e) => saveIns({ show_costs: e.target.checked })}
           />
-          Show rough cost ranges on the report (turn off before it goes to a seller or bank)
+          {tpl.package === 'quick'
+            ? 'Show rough cost ranges on the report (turn off before it goes to a seller or bank)'
+            : 'Show rough cost ranges on the report'}
         </label>
         <label className="space-y-1">
           <span className="label">Inspected by</span>

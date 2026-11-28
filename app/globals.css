@@ -2878,6 +2878,160 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .doc-section-body { margin-top: 4px; font-size: 13px; color: var(--doc-muted); line-height: 1.55; white-space: pre-wrap; max-width: 44em; }
 .doc-section .doc-table { margin-top: 14px; }
 
+/* ---------------------------------------------------------------------------
+   The Vehicle Inspection (0073): the body damage chart and the pad and tire
+   gauges. Each is drawn once and used in two places, the owner's page (dark
+   glass) and the printed report (white paper), so the report shows exactly
+   what was entered. The drawing's lines take the text colour around them.
+   --------------------------------------------------------------------------- */
+.dmg-chart {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  margin-inline: auto;
+  /* The highlights are the content: a saved PDF keeps their colour. */
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.dmg-chart.is-live { cursor: crosshair; touch-action: manipulation; }
+.dmg-body { fill: currentColor; fill-opacity: 0.05; stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; }
+.dmg-glass { fill: currentColor; fill-opacity: 0.14; stroke: currentColor; stroke-width: 1; stroke-linejoin: round; }
+.dmg-line { fill: none; stroke: currentColor; stroke-opacity: 0.7; stroke-width: 1; stroke-linecap: round; }
+.dmg-lamp { fill: currentColor; fill-opacity: 0.32; stroke: currentColor; stroke-width: 0.8; }
+.dmg-tire { fill: currentColor; fill-opacity: 0.3; stroke: currentColor; stroke-width: 1.2; }
+.dmg-hub { fill: none; stroke: currentColor; stroke-width: 1; }
+.dmg-label {
+  fill: currentColor;
+  fill-opacity: 0.78;
+  font-family: var(--font-display), var(--font-body), sans-serif;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dmg-pin text { font-family: var(--font-body), sans-serif; }
+
+/* The owner's side: the chart in a nested panel, the "what is it?" choices,
+   and the list of highlights with a note each. */
+.dmg-edit { display: grid; gap: 10px; }
+.dmg-edit .dmg-chart {
+  padding: 8px;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--gs-line);
+  background: var(--gs-nest);
+  color: var(--text-heading);
+}
+.dmg-ask {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--wnt-radius-sm);
+  border: 1px solid var(--gs-line);
+  border-left: var(--edge-width) solid var(--status-stop-solid);
+  background: var(--gs-nest);
+}
+.dmg-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.dmg-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.dmg-row { display: flex; align-items: flex-start; gap: 8px; }
+.dmg-num,
+.dmg-doc-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #d92d20;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* On the report: the drawing beside its list on a wide screen and on paper,
+   stacked on a phone. */
+.doc-root .dmg-chart { max-width: 340px; color: var(--doc-ink); }
+.dmg-doc-grid { display: grid; gap: 16px; margin-top: 12px; }
+.dmg-doc-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--doc-ink); }
+.dmg-doc-list li { display: flex; align-items: flex-start; gap: 8px; }
+.dmg-doc-num { width: 20px; height: 20px; font-size: 11px; }
+.dmg-doc-ack { margin: 14px 0 0; font-size: 13px; color: var(--doc-ink); }
+/* A line to sign on the printed copy when nobody was named. */
+.dmg-doc-sign { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 34px; font-size: 11px; color: var(--doc-muted); }
+.dmg-doc-sign span { padding-top: 4px; border-top: 1px solid var(--doc-ink); }
+@media (min-width: 640px) {
+  .dmg-doc-grid { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; }
+}
+@media print {
+  .dmg-doc-grid { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; }
+}
+
+/* Brake pad life and tire life: one bar per wheel, laid out as the vehicle is. */
+.wg {
+  --wg-ok: var(--status-ok-solid);
+  --wg-watch: var(--status-wait-solid);
+  --wg-attention: var(--status-stop-solid);
+  --wg-track: rgba(255, 255, 255, 0.12);
+  --wg-tick: rgba(255, 255, 255, 0.55);
+  --wg-ink: var(--text-heading);
+  --wg-soft: var(--text-body);
+  display: grid;
+  gap: 8px;
+}
+.wg.is-paper {
+  --wg-ok: #1f7a4a;
+  --wg-watch: #b7791f;
+  --wg-attention: #b42318;
+  --wg-track: #e3e6ec;
+  --wg-tick: #10141c;
+  --wg-ink: var(--doc-ink);
+  --wg-soft: var(--doc-muted);
+  margin-top: 10px;
+}
+.wg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.wg-cell { --wg-color: var(--wg-track); min-width: 0; }
+.wg-cell[data-band='ok'] { --wg-color: var(--wg-ok); }
+.wg-cell[data-band='watch'] { --wg-color: var(--wg-watch); }
+.wg-cell[data-band='attention'] { --wg-color: var(--wg-attention); }
+.wg-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.wg-wheel { font-size: 12px; color: var(--wg-soft); }
+.wg-value { font-size: 15px; font-weight: 700; color: var(--wg-ink); white-space: nowrap; }
+.wg-bar {
+  position: relative;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 5px;
+  background: var(--wg-track);
+  overflow: hidden;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.wg-fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px; background: var(--wg-color); }
+/* The two limits, ruled on every bar so a short one can be read against them. */
+.wg-bar::before,
+.wg-bar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 1.5px;
+  background: var(--wg-tick);
+}
+.wg-bar::before { left: var(--wg-a); }
+.wg-bar::after { left: var(--wg-b); }
+.wg-word { margin-top: 3px; font-size: 11.5px; color: var(--wg-soft); }
+.wg-key { margin: 0; font-size: 11.5px; line-height: 16px; color: var(--wg-soft); }
+.wg-doc-pair { display: grid; gap: 24px; }
+@media (min-width: 640px) {
+  .wg-doc-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media print {
+  .wg-doc-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 700px) {
   .doc-brand { padding: 26px 24px 24px; }
   .doc-body { padding: 26px 24px 30px; }

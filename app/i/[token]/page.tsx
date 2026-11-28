@@ -210,7 +210,7 @@ export default function PublicInvoicePage({ params }: { params: Promise<{ token:
       {reportToken && (
         <div className="no-print px-4 py-3 text-center" style={{ background: '#f4f5f8' }}>
           <a href={`/r/${reportToken}`} className="font-semibold" style={{ color: '#1f4f73' }}>
-            View the pre-purchase inspection report →
+            View the inspection report →
           </a>
         </div>
       )}

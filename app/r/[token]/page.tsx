@@ -7,15 +7,18 @@ import { useDocumentTitle } from '@/lib/title'
 import { supabase } from '@/lib/supabase'
 import { formatCents } from '@/lib/money'
 import { formatDate } from '@/lib/date'
-import { TEMPLATES, type InspectionPackage, type MeasureKind } from '@/lib/inspection-templates'
+import DamageChart from '@/components/DamageChart'
+import WheelGauges from '@/components/WheelGauges'
+import { cleanMarks, markWords, styleOf } from '@/lib/damage-chart'
+import { templateFor, type InspectionPackage, type MeasureKind } from '@/lib/inspection-templates'
 import {
-  INSPECTION_DISCLAIMER,
+  disclaimerFor,
+  findings,
   RATING_LABEL,
   snapshotLabel,
-  VERDICT_LABEL,
-  type BatteryMeasure,
+  verdictLabel,
+  type ItemMeasure,
   type Rating,
-  type TreadMeasure,
   type Verdict,
   type VehicleSnapshot,
 } from '@/lib/inspections'
@@ -26,7 +29,7 @@ interface PublicItem {
   rating: Rating | null
   note: string | null
   measure_kind: MeasureKind | null
-  measure: (TreadMeasure & BatteryMeasure) | null
+  measure: ItemMeasure | null
   cost_low_cents: number | null
   cost_high_cents: number | null
 }
@@ -88,6 +91,12 @@ function measureText(it: PublicItem): string | null {
       .map((k) => `${k === 'spare' ? 'Spare' : k.toUpperCase()} ${m[k]}/32`)
     return parts.length ? parts.join(' · ') : null
   }
+  if (it.measure_kind === 'pads') {
+    const parts = (['lf', 'rf', 'lr', 'rr'] as const)
+      .filter((k) => typeof m[k] === 'number')
+      .map((k) => `${k.toUpperCase()} ${m[k]} mm`)
+    return parts.length ? parts.join(' · ') : null
+  }
   if (it.measure_kind === 'battery' && m.rated_cca && m.measured_cca != null) {
     return `${m.measured_cca} CCA measured vs ${m.rated_cca} rated (${Math.round((m.measured_cca / m.rated_cca) * 100)}%)`
   }
@@ -102,9 +111,16 @@ function costText(it: PublicItem): string | null {
 }
 
 /**
- * PUBLIC pre-purchase inspection report (0067) — token-keyed, read through
+ * PUBLIC inspection report (0067) — token-keyed, read through
  * get_public_inspection, which returns a report only while it is final and
  * its link is on. Same letterhead as quotes and invoices.
+ *
+ * Two kinds, by the report's package. The pre-purchase Quick Check prints as
+ * it always has. The Vehicle Inspection (0073) leads with the three things it
+ * was asked for: the body damage chart with who acknowledged it, brake pad
+ * life and tire life, each drawn; then the findings and the full checklist.
+ * Everything here arrives in the fields 0067's function already returns
+ * (package, and each item's measure), so the public function is unchanged.
  */
 export default function PublicInspectionPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params)
@@ -122,7 +138,7 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
     // The title is the saved PDF's filename, which may be emailed on:
     // "R001 Pre-Purchase Inspection — 2014 Subaru Outback".
     loaded
-      ? `${loaded.report_number} Pre-Purchase Inspection — ${snapshotLabel(loaded.vehicle) || loaded.business.name || BRAND_NAME}`
+      ? `${loaded.report_number} ${templateFor(loaded.package).docType} — ${snapshotLabel(loaded.vehicle) || loaded.business.name || BRAND_NAME}`
       : null,
   )
 
@@ -146,7 +162,15 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
     )
   }
 
-  const items = report.items.filter((i) => i.rating && i.rating !== 'na')
+  const template = templateFor(report.package)
+  /** The Vehicle Inspection; anything else prints as the pre-buy always has. */
+  const fleet = report.package === 'fleet'
+  // The damage chart is not a finding: it has its own part of the report.
+  const items = findings(report.items).filter((i) => i.rating && i.rating !== 'na')
+  const chart = report.items.find((i) => i.measure_kind === 'damage' && i.rating && i.rating !== 'na') ?? null
+  const marks = cleanMarks(chart?.measure?.marks)
+  const pads = items.find((i) => i.measure_kind === 'pads' && i.rating !== 'not_checked') ?? null
+  const tread = items.find((i) => i.measure_kind === 'tread' && i.rating !== 'not_checked') ?? null
   const attention = items.filter((i) => i.rating === 'attention')
   const watch = items.filter((i) => i.rating === 'watch')
   const notChecked = items.filter((i) => i.rating === 'not_checked')
@@ -158,8 +182,13 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
     if (last && last.section === it.section) last.items.push(it)
     else sections.push({ section: it.section, items: [it] })
   }
-  const template = TEMPLATES[report.package]
   const v = report.vehicle
+  const damageLine =
+    !chart || chart.rating === 'not_checked'
+      ? ''
+      : marks.length === 0
+        ? ' No body damage was found.'
+        : ` Body damage is marked in ${marks.length} place${marks.length === 1 ? '' : 's'} on the chart.`
 
   const counts = [
     `${attention.length} item${attention.length === 1 ? '' : 's'} that need${attention.length === 1 ? 's' : ''} attention`,
@@ -179,7 +208,14 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
       </div>
       <div className="doc-wrap insp-doc px-0 py-0 sm:px-4 sm:py-8">
       <div className="doc-root">
-        <DocBrand business={report.business} docType="Pre-Purchase Inspection" docRef={report.report_number} badge={template.name} />
+        {/* The badge names the package; the Vehicle Inspection's name IS its
+            document title, so a badge would only say it twice. */}
+        <DocBrand
+          business={report.business}
+          docType={template.docType}
+          docRef={report.report_number}
+          badge={template.name === template.docType ? null : template.name}
+        />
         <div className="doc-body">
           <dl className="doc-meta">
             {report.prepared_for && (
@@ -205,6 +241,13 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
                 <dd style={{ fontFamily: 'var(--font-mono, ui-monospace)', fontSize: '0.85em', whiteSpace: 'nowrap' }}>{v.vin}</dd>
               </div>
             )}
+            {/* A fleet knows its vehicles by plate. */}
+            {fleet && v?.plate && (
+              <div>
+                <dt>Plate</dt>
+                <dd>{v.plate}</dd>
+              </div>
+            )}
             {report.odometer_miles != null && (
               <div>
                 <dt>Odometer</dt>
@@ -225,12 +268,13 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
             <div className="doc-due-card" style={{ display: 'block' }}>
               <span className="doc-due-label">Overall</span>
               <div className="doc-due-amt" style={{ fontSize: 24, textAlign: 'left', marginTop: 4 }}>
-                {VERDICT_LABEL[report.verdict]}
+                {verdictLabel(report.package, report.verdict)}
               </div>
               <span className="doc-due-sub" style={{ fontSize: 13, lineHeight: 1.5 }}>
                 {report.odometer_miles != null
                   ? `At ${report.odometer_miles.toLocaleString('en-US')} miles we found ${counts}.`
                   : `We found ${counts}.`}
+                {fleet && damageLine}
                 {report.show_costs && low > 0 && ` Rough cost to fix the attention items: ${low === high ? formatCents(low) : `${formatCents(low)}–${formatCents(high)}`}.`}
                 {report.recalls_note && ` Open recalls: ${report.recalls_note}.`}
               </span>
@@ -240,6 +284,79 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
           {report.summary_note && (
             <div className="doc-section">
               <p className="doc-section-body">{report.summary_note}</p>
+            </div>
+          )}
+
+          {/* THE VEHICLE INSPECTION'S THREE ASKED-FOR PIECES (owner, 2026-11-27),
+              ahead of the checklist: the body damage chart on a drawing of the
+              vehicle's type, with who was shown it; brake pad life; tire life. */}
+          {fleet && chart && (
+            <div className="doc-section dmg-doc">
+              <h2 style={{ fontSize: 15, fontWeight: 700 }}>Body damage</h2>
+              {chart.rating === 'not_checked' ? (
+                <p className="doc-section-body">Not checked this visit{chart.note ? `: ${chart.note}` : '.'}</p>
+              ) : (
+                <>
+                  <p className="doc-section-sub">
+                    {marks.length === 0
+                      ? 'We looked the vehicle over and found no body damage.'
+                      : 'Each numbered highlight is a place where damage was found when we looked the vehicle over.'}
+                  </p>
+                  <div className="dmg-doc-grid">
+                    <DamageChart body={styleOf(chart.measure?.chart) ?? 'sedan'} marks={marks} />
+                    <div className="dmg-doc-side">
+                      {marks.length > 0 && (
+                        <ol className="dmg-doc-list">
+                          {marks.map((m, i) => (
+                            <li key={m.id}>
+                              <span className="dmg-doc-num">{i + 1}</span>
+                              <span>
+                                <b>{markWords(m)}</b>
+                                {m.note && <span className="doc-dim"> · {m.note}</span>}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      )}
+                      {/* Acknowledged in person and typed in by the shop, or a
+                          line to sign on the printed copy. */}
+                      {chart.measure?.ack_name ? (
+                        <p className="dmg-doc-ack">
+                          Shown to and acknowledged by <b>{chart.measure.ack_name}</b>
+                          {chart.measure.ack_at
+                            ? ` on ${new Date(chart.measure.ack_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`
+                            : ''}
+                          .
+                        </p>
+                      ) : (
+                        <div className="dmg-doc-sign">
+                          <span>Acknowledged by</span>
+                          <span>Date</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {fleet && (pads || tread) && (
+            <div className="doc-section">
+              <div className="wg-doc-pair">
+                {pads && (
+                  <div>
+                    <h2 style={{ fontSize: 15, fontWeight: 700 }}>Brake pad life</h2>
+                    <WheelGauges kind="pads" measure={pads.measure} paper />
+                  </div>
+                )}
+                {tread && (
+                  <div>
+                    <h2 style={{ fontSize: 15, fontWeight: 700 }}>Tire life</h2>
+                    <WheelGauges kind="tread" measure={tread.measure} paper />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -274,7 +391,11 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
                 </tbody>
               </table>
               {report.show_costs && (
-                <p className="doc-section-sub">Rough ranges for planning and negotiating, not a repair estimate.</p>
+                <p className="doc-section-sub">
+                  {fleet
+                    ? 'Rough ranges for planning, not a repair estimate.'
+                    : 'Rough ranges for planning and negotiating, not a repair estimate.'}
+                </p>
               )}
             </div>
           )}
@@ -318,7 +439,7 @@ export default function PublicInspectionPage({ params }: { params: Promise<{ tok
           </div>
 
           <footer className="doc-foot">
-            <p>{INSPECTION_DISCLAIMER}</p>
+            <p>{disclaimerFor(report.package)}</p>
             <p>
               {report.signed_by_name ? `Inspected by ${report.signed_by_name} · ` : ''}
               {formatDate(report.inspected_on)}
