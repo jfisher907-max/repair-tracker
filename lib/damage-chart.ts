@@ -150,6 +150,8 @@ export interface StyleGeometry {
   side: Cuts
   /** The roof edge on a side view: from x, to x, above y. */
   roof: [number, number, number]
+  /** Side view, where the drawing shows them: the headlight's and the tail light's box, [x0, y0, x1, y1]. */
+  sideLamps?: { head: [number, number, number, number]; tail: [number, number, number, number] }
   /** Front view, top to bottom: where the windshield, the hood and the lamp row end;
    *  the lamp row's middle (the grille) from x to x; the mirrors' y range and how far in they reach. */
   front: { glass: number; hood: number; lamps: number; grille: [number, number]; mirror: [number, number, number, number] }
@@ -170,12 +172,14 @@ const generalRear = (name: string) => ({ glass: 44, panel: 68, lamps: [32, 128, 
 /** The 2011-2020 Sienna: one body for both front ends. */
 const SIENNA: StyleGeometry = {
   wheels: [77, 256],
-  side: [[34, 'front bumper'], [106, 'front fender'], [165, 'front door'], [236, 'sliding door'], [310, 'quarter panel'], [Infinity, 'rear bumper']],
-  roof: [140, 300, 9],
-  front: { glass: 41, hood: 50, lamps: 62, grille: [54, 106], mirror: [34, 46, 27, 133] },
-  rear: { glass: 40, panel: 66, lamps: [54, 106, 52], name: 'Liftgate' },
-  top: [[30, 'Front bumper'], [79, 'Hood'], [137, 'Windshield'], [298, 'Roof'], [316, 'Rear window'], [Infinity, 'Rear bumper']],
-  mirrorX: 106,
+  // Stations measured off a side-on photograph, with the wheelbase as the ruler.
+  side: [[36, 'front bumper'], [100, 'front fender'], [166, 'front door'], [240, 'sliding door'], [300, 'quarter panel'], [Infinity, 'rear bumper']],
+  roof: [136, 300, 6.5],
+  sideLamps: { head: [36, 46, 60, 61], tail: [291, 35, 319, 47] },
+  front: { glass: 34.5, hood: 49, lamps: 58, grille: [56, 104], mirror: [28, 38, 27, 133] },
+  rear: { glass: 32.5, panel: 57, lamps: [52, 108, 43.5], name: 'Liftgate' },
+  top: [[30, 'Front bumper'], [86, 'Hood'], [137, 'Windshield'], [300, 'Roof'], [316, 'Rear window'], [Infinity, 'Rear bumper']],
+  mirrorX: 100,
 }
 
 export const GEOMETRY: Record<BodyStyle, StyleGeometry> = {
@@ -234,6 +238,9 @@ function sideZone(g: StyleGeometry, x: number, y: number): string {
   if (near(g.wheels[0], WHEEL_Y, 23)) return 'front wheel'
   if (near(g.wheels[1], WHEEL_Y, 23)) return 'rear wheel'
   if (y < g.roof[2] && x > g.roof[0] && x < g.roof[1]) return 'roof edge'
+  const inBox = (b: [number, number, number, number]) => x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]
+  if (g.sideLamps && inBox(g.sideLamps.head)) return 'headlight'
+  if (g.sideLamps && inBox(g.sideLamps.tail)) return 'tail light'
   return cut(g.side, x)
 }
 

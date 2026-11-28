@@ -37,24 +37,41 @@ interface SideArt {
   lamps: string
   /** The door mirror, where the drawing has one. */
   mirror?: string
+  /** Drawn on the left side only (the fuel door): the right side is the left's mirror image. */
+  leftOnly?: string
+  /** The wheel's rim, when the drawing shows one inside the tire. */
+  rim?: number
 }
 
 /**
- * The 2011-2020 Toyota Sienna from the side, front at x = 0, to scale: 300
- * units for its 5,090 mm (about 17 mm a unit), so the 3,030 mm wheelbase is
- * 179 units, the 1,750 mm roof is 103 above the ground line (y = 107), and a
- * 235/60R17 tire is 42 across. Its shape, from photographs of the van: a short
- * steep hood running straight into a long raked windshield, a small fixed
- * glass ahead of the front door, the door mirror on the door, one band of
- * glass that tapers up behind the sliding door, the sliding door's track under
- * that last window, tail lights that wrap round at the belt line, roof rails.
+ * The 2011-2020 Toyota Sienna from the side, front at x = 0.
+ *
+ * To scale: 300 units for its 5,090 mm (about 17 mm a unit), so the 3,030 mm
+ * wheelbase is 179 units, the 1,750 mm roof is 103 above the ground line
+ * (y = 107), and a 235/60R17 tire is 42 across.
+ *
+ * Its outline was measured, point by point, off a side-on photograph of the
+ * van (owner, 2026-11-27: "you're a bit off with the design and details"),
+ * using the wheelbase as the ruler: the nose and the short hood that runs
+ * straight into a long curved windshield; the roof; the raked liftgate under
+ * its spoiler; the glass as one band from the small fixed pane ahead of the
+ * front door to the point behind the last window, its lower edge rising to the
+ * rear; the front door's leading edge and the sliding door's trailing edge,
+ * each swept along its wheel arch; both handles either side of the centre
+ * pillar; the mirror on the door; the slim headlight along the hood edge; the
+ * tail light wrapped round the corner at the belt line; the fuel door (left
+ * side only). The line under the last window is the sliding door's track.
  */
 const SIENNA_SIDE: SideArt = {
-  body: 'M22 90V70Q22 63 30 61L79 45L135 8Q140 5 150 5H296Q306 5 309 12L317 44L320 62V90Q320 95 315 95H280.4A26 26 0 1 0 231.6 95H101.4A26 26 0 1 0 52.6 95H27Q22 95 22 90Z',
-  glass: 'M88 44L139 11H292Q302 11 306 22L302 31L240 41Z',
-  lines: 'M108 44V31M106 46V95M165 10V95M236 10V69M240 48L306 41M150 53h9M170 53h9M158 2.5H292',
-  lamps: 'M24 68L46 58L51 60L30 70ZM298 43L318 45L319 53L300 51Z',
-  mirror: 'M109 39h9a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2h-9z',
+  body: 'M22 80C21 74 22 68 26 62L34 56L57 46.8L85.5 34.5Q108 16 134.7 7.1Q144 5 153 4.6L190 3.5L280 4Q296 4.5 301.7 6.5L307.9 22.2L313.2 35.6L317 46Q319.5 54 319.5 62V69Q319 80 312 88L280.3 90A24.6 24.6 0 1 0 232.9 94.4H100.1A24.6 24.6 0 1 0 52.8 90.5H30Q24 88 22 80Z',
+  glass: 'M86 40.6Q108 22 135 10.3L165 7.1L242 6L284 9Q290 10.5 291.5 15L295.6 26.5Q295 31.5 289 34L242 36L98 42.5Z',
+  lines:
+    // Fixed pane, front door edge, centre pillar, sliding door edge, its track, the two handles.
+    'M98.5 31.5V42.4M97.6 42.6Q99 64 103.8 87L105 94.4M166.2 5.2V94.4M242.5 6V37Q241.5 60 234.2 80.3L231.4 89M244 38.2L291 36M148 46.2h14M168.5 45.6h14.5',
+  lamps: 'M36.5 56.5L57.5 48L58.5 51.2L42 59.6ZM292.6 40.5L300 37L314.2 36.5L316.8 45L299 44.5Z',
+  mirror: 'M104.5 28h6.5a2.2 2.2 0 0 1 2.2 2.2v3.6a2.2 2.2 0 0 1-2.2 2.2h-6.5Z',
+  leftOnly: 'M253 40h10.4a1.6 1.6 0 0 1 1.6 1.6v7.8a1.6 1.6 0 0 1-1.6 1.6H253a1.6 1.6 0 0 1-1.6-1.6v-7.8A1.6 1.6 0 0 1 253 40Z',
+  rim: 13.5,
 }
 
 /**
@@ -105,11 +122,12 @@ const TOP: Record<BodyStyle, { body: [number, number]; ws: [number, number]; rw:
   suv: { body: [22, 308], ws: [108, 134], rw: [286, 298], mirror: 110 },
   minivan: { body: [20, 314], ws: [80, 118], rw: [284, 302], mirror: 82 },
   pickup: { body: [8, 334], ws: [98, 120], rw: [206, 218], mirror: 100, bed: [226, 326] },
-  sienna11: { body: [20, 320], ws: [79, 135], rw: [300, 314], mirror: 108 },
-  sienna18: { body: [20, 320], ws: [79, 135], rw: [300, 314], mirror: 108 },
+  // The same stations as its side view: cowl, windshield top, liftgate glass.
+  sienna11: { body: [21, 320], ws: [86, 135], rw: [302, 314], mirror: 100 },
+  sienna18: { body: [21, 320], ws: [86, 135], rw: [302, 314], mirror: 100 },
 }
 
-function Side({ style }: { style: BodyStyle }) {
+function Side({ style, left }: { style: BodyStyle; left: boolean }) {
   const s = SIDE[style]
   const [front, rear] = GEOMETRY[style].wheels
   return (
@@ -119,10 +137,17 @@ function Side({ style }: { style: BodyStyle }) {
       <path className="dmg-line" d={s.lines} />
       <path className="dmg-lamp" d={s.lamps} />
       {s.mirror && <path className="dmg-body" d={s.mirror} />}
+      {left && s.leftOnly && <path className="dmg-line" d={s.leftOnly} />}
       <circle className="dmg-tire" cx={front} cy={WHEEL_Y} r="21" />
       <circle className="dmg-tire" cx={rear} cy={WHEEL_Y} r="21" />
-      <circle className="dmg-hub" cx={front} cy={WHEEL_Y} r="9" />
-      <circle className="dmg-hub" cx={rear} cy={WHEEL_Y} r="9" />
+      <circle className="dmg-hub" cx={front} cy={WHEEL_Y} r={s.rim ?? 9} />
+      <circle className="dmg-hub" cx={rear} cy={WHEEL_Y} r={s.rim ?? 9} />
+      {s.rim && (
+        <>
+          <circle className="dmg-hub" cx={front} cy={WHEEL_Y} r="3.5" />
+          <circle className="dmg-hub" cx={rear} cy={WHEEL_Y} r="3.5" />
+        </>
+      )}
     </>
   )
 }
@@ -163,59 +188,83 @@ function Rear() {
 
 /**
  * The Sienna end on, to scale: 110 units for its 1,990 mm (about 18 mm a
- * unit), so the roof is 97 above the ground line (y = 99). Narrower at the
- * roof than at the belt line, as the van is.
+ * unit), so the roof is 97 above the ground line (y = 99). Heights and widths
+ * were measured off front-on and rear-on photographs of the van and checked
+ * against the side view's own stations: windshield from 8 to 34, hood down to
+ * 50, the rear window down to 33 with the tail lights under its corners, the
+ * bumper top at 57. Narrower at the roof than at the belt line, as the van is.
  */
-const SIENNA_END_ON = 'M46 4Q80 0 114 4L128 40L135 46V84Q135 89 130 89H30Q25 89 25 84V46L32 40Z'
-const SIENNA_TIRES = 'M27 82h14v14a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3ZM119 82h14v14a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3Z'
+const SIENNA_END_ON = 'M44 5.5Q80 1.5 116 5.5L128 33Q133.5 36.5 135 42V78Q135 84 129 84H31Q25 84 25 78V42Q26.5 36.5 32 33Z'
+const SIENNA_TIRES = 'M26 80h13v16a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3ZM121 80h13v16a3 3 0 0 1-3 3h-7a3 3 0 0 1-3-3Z'
+const SIENNA_MIRRORS = 'M26 28.5h-9a2 2 0 0 0-2 2v4.5a2 2 0 0 0 2 2h10ZM134 28.5h9a2 2 0 0 1 2 2v4.5a2 2 0 0 1-2 2h-10Z'
 
 /**
- * The Sienna's front. 2018-2020: a slim upper grille with the badge and a
- * large lower grille that widens toward the road, fog lights in upright
- * pockets at the corners. 2011-2017: the grille sits between the headlights,
- * wider at the top, over a low slot with round fog lights.
+ * The Sienna's front. Both years: a tall, wide windshield over a short hood
+ * with two creases, headlights swept back from the grille.
+ * 2018-2020: slim headlights joined by a narrow slot with the badge; below it
+ * one large barred grille that widens toward the road and carries the plate,
+ * with an upright pocket at each corner.
+ * 2011-2017: a barred grille between the headlights, wider at the top, with
+ * the badge on its upper edge; the plate on the bumper below it; a low barred
+ * intake with a round fog light at each end.
  */
 function SiennaFront({ late }: { late: boolean }) {
   return (
     <>
       <path className="dmg-tire" d={SIENNA_TIRES} />
       <path className="dmg-body" d={SIENNA_END_ON} />
-      <path className="dmg-glass" d="M49 8Q80 5 111 8L123 40H37Z" />
-      <path className="dmg-line" d="M27 50Q80 44 133 50" />
-      <path className="dmg-lamp" d="M28 52L52 55L50 60L28 59ZM132 52L108 55L110 60L132 59Z" />
+      <path className="dmg-glass" d="M46.5 8Q80 5 113.5 8L126 34.5Q80 31.5 34 34.5Z" />
+      {/* The hood's leading edge and its two creases. */}
+      <path className="dmg-line" d="M29.5 46Q80 51.5 130.5 46M57 34L61 49.6M103 34L99 49.6" />
       {late ? (
         <>
-          <path className="dmg-line" d="M56 55H104L102 59H58Z" />
-          <path className="dmg-lamp" d="M50 64H110L118 82H42Z" />
-          <path className="dmg-line" d="M30 68h7v10h-7zM123 68h7v10h-7z" />
+          <path className="dmg-lamp" d="M27.5 46L55 50L56.5 54.5L33 54.5Q28.5 52 27.5 46ZM132.5 46L105 50L103.5 54.5L127 54.5Q131.5 52 132.5 46Z" />
+          <path className="dmg-line" d="M57.5 51.2H102.5V54.2H57.5Z" />
+          <path className="dmg-lamp" d="M58 59H102L114 81.5H46Z" />
+          <path className="dmg-line" d="M55.6 63.5H104.4M53.2 68H106.8M50.8 72.5H109.2M48.4 77H111.6" />
+          <rect className="dmg-body" x="69" y="62" width="22" height="7.5" rx="1" />
+          <path className="dmg-line" d="M28.5 63L38.5 61L41 77L30.5 78ZM131.5 63L121.5 61L119 77L129.5 78Z" />
+          <circle className="dmg-body" cx="80" cy="52.7" r="2.8" />
         </>
       ) : (
         <>
-          <path className="dmg-lamp" d="M54 52H106L101 62H59Z" />
-          <path className="dmg-line" d="M57 55.5H103M58.5 59H101.5M46 70H114V77H46Z" />
-          <circle className="dmg-line" cx="34" cy="73" r="3.5" />
-          <circle className="dmg-line" cx="126" cy="73" r="3.5" />
+          <path className="dmg-lamp" d="M27.5 45L52 48.5L54 57L33 56Q28 53 27.5 45ZM132.5 45L108 48.5L106 57L127 56Q132 53 132.5 45Z" />
+          <path className="dmg-lamp" d="M51 50H109L102 61H58Z" />
+          <path className="dmg-line" d="M52.9 53H107.1M54.8 56H105.2M56.7 59H103.3M50.5 75H109.5L107 82.5H53ZM51.4 77.5H108.6M52.2 80H107.8" />
+          <rect className="dmg-body" x="67.5" y="65.5" width="25" height="8" rx="1" />
+          <circle className="dmg-line" cx="34.3" cy="78" r="3.8" />
+          <circle className="dmg-line" cx="125.7" cy="78" r="3.8" />
+          <circle className="dmg-body" cx="80" cy="50.3" r="3" />
         </>
       )}
-      <circle className="dmg-hub" cx="80" cy={late ? 53 : 57} r="2.6" />
-      <path className="dmg-body" d="M17 36h8a2 2 0 0 1 2 2v6h-8a2 2 0 0 1-2-2ZM143 36h-8a2 2 0 0 0-2 2v6h8a2 2 0 0 0 2-2Z" />
+      <path className="dmg-body" d={SIENNA_MIRRORS} />
     </>
   )
 }
 
-/** The Sienna's rear: a wide window under a roof spoiler, tail lights that run across at the belt line. */
+/**
+ * The Sienna's rear: a wide window under the roof spoiler, its lower edge
+ * dipping in the middle, with the wiper; a tail light under each lower corner
+ * of the glass, running in from the body side to a point; the badge between
+ * the points; a trim bar over the plate; the bumper's step; a reflector low at
+ * each side.
+ */
 function SiennaRear() {
   return (
     <>
       <path className="dmg-tire" d={SIENNA_TIRES} />
       <path className="dmg-body" d={SIENNA_END_ON} />
-      <path className="dmg-glass" d="M49 9Q80 6 111 9L122 38H38Z" />
-      <path className="dmg-lamp" d="M26 42L52 44V50H27ZM134 42L108 44V50H133Z" />
-      <path className="dmg-line" d="M52 46H108M26 66H134M47 6.5Q80 3 113 6.5" />
-      <rect className="dmg-line" x="66" y="52" width="28" height="11" rx="2" />
-      <rect className="dmg-line" x="32" y="74" width="11" height="4" rx="1" />
-      <rect className="dmg-line" x="117" y="74" width="11" height="4" rx="1" />
-      <circle className="dmg-hub" cx="80" cy="42" r="2.6" />
+      <path className="dmg-glass" d="M46 8.5Q80 6 114 8.5L123.5 31Q80 36 36.5 31Z" />
+      <path className="dmg-lamp" d="M26 32.5L47 32L52 37.5L46 43L27 43.5ZM134 32.5L113 32L108 37.5L114 43L133 43.5Z" />
+      <path
+        className="dmg-line"
+        d="M46 5.7Q80 2.7 114 5.7M80 33L98 28.5M56 42.5H104V45H56ZM37.5 43.5L36 57M122.5 43.5L124 57M26 57H134M48 60H112"
+      />
+      <rect className="dmg-line" x="66" y="46.2" width="28" height="8.6" rx="1.5" />
+      <rect className="dmg-lamp" x="30" y="73.5" width="11" height="3" rx="1" />
+      <rect className="dmg-lamp" x="119" y="73.5" width="11" height="3" rx="1" />
+      <circle className="dmg-body" cx="80" cy="38.4" r="2.6" />
+      <path className="dmg-body" d={SIENNA_MIRRORS} />
     </>
   )
 }
@@ -241,7 +290,7 @@ function Top({ style }: { style: BodyStyle }) {
 
 function View({ view, style }: { view: ChartView; style: BodyStyle }) {
   const sienna = style === 'sienna11' || style === 'sienna18'
-  if (view === 'left' || view === 'right') return <Side style={style} />
+  if (view === 'left' || view === 'right') return <Side style={style} left={view === 'left'} />
   if (view === 'front') return sienna ? <SiennaFront late={style === 'sienna18'} /> : <Front />
   if (view === 'rear') return sienna ? <SiennaRear /> : <Rear />
   return <Top style={style} />

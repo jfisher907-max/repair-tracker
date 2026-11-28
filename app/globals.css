@@ -2952,7 +2952,7 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* On the report: the drawing beside its list on a wide screen and on paper,
    stacked on a phone. */
-.doc-root .dmg-chart { max-width: 340px; color: var(--doc-ink); }
+.doc-root .dmg-chart { max-width: 400px; color: var(--doc-ink); }
 .dmg-doc-grid { display: grid; gap: 16px; margin-top: 12px; }
 .dmg-doc-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; font-size: 13px; color: var(--doc-ink); }
 .dmg-doc-list li { display: flex; align-items: flex-start; gap: 8px; }
@@ -2962,10 +2962,10 @@ a.core-job-head:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .dmg-doc-sign { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-top: 34px; font-size: 11px; color: var(--doc-muted); }
 .dmg-doc-sign span { padding-top: 4px; border-top: 1px solid var(--doc-ink); }
 @media (min-width: 640px) {
-  .dmg-doc-grid { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; }
+  .dmg-doc-grid { grid-template-columns: minmax(0, 380px) minmax(0, 1fr); align-items: start; }
 }
 @media print {
-  .dmg-doc-grid { grid-template-columns: minmax(0, 300px) minmax(0, 1fr); align-items: start; }
+  .dmg-doc-grid { grid-template-columns: minmax(0, 360px) minmax(0, 1fr); align-items: start; }
 }
 
 /* Brake pad life and tire life: one bar per wheel, laid out as the vehicle is. */
